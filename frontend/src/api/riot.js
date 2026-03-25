@@ -10,3 +10,6 @@ export const getProfile = (puuid) =>
 
 export const analyzeSummoner = (puuid, gameName) =>
   api.get(`/analyze/${puuid}`, { params: { game_name: gameName } }).then((r) => r.data);
+
+export const getScoreboard = (matchId) =>
+  api.get(`/match/${matchId}/scoreboard`).then((r) => r.data);

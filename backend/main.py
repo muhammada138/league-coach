@@ -196,7 +196,8 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
         "stats across their last 5 ranked games, compared against the lobby average for each game. "
         "Identify 3-5 specific weaknesses based on where the player is consistently underperforming "
         "relative to their lobbies. Be direct, specific, and actionable. Reference the actual numbers. "
-        "Do not be generic. Format as a numbered list."
+        "Do not be generic. Keep each tip to 2-3 sentences maximum. Be direct, no fluff. "
+        "Format as a numbered list."
     )
 
     user_prompt = f"""Player: {game_name}
@@ -261,3 +262,29 @@ Per game breakdown:
         "coaching": coaching,
         "games": game_summaries,
     }
+
+
+@app.get("/match/{match_id}/scoreboard")
+async def get_scoreboard(match_id: str):
+    async with httpx.AsyncClient() as client:
+        data = await riot_get(
+            client,
+            f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{match_id}",
+        )
+    participants = sorted(data["info"]["participants"], key=lambda p: p["teamId"])
+    return [
+        {
+            "riotIdGameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown",
+            "championName": p["championName"],
+            "kills": p["kills"],
+            "deaths": p["deaths"],
+            "assists": p["assists"],
+            "totalMinionsKilled": p["totalMinionsKilled"],
+            "visionScore": p["visionScore"],
+            "totalDamageDealtToChampions": p["totalDamageDealtToChampions"],
+            "goldEarned": p["goldEarned"],
+            "win": p["win"],
+            "teamId": p["teamId"],
+        }
+        for p in participants
+    ]
