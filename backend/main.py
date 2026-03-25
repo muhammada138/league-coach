@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
+import asyncio
 import httpx
 import os
 from collections import Counter
@@ -50,30 +51,19 @@ async def get_summoner(game_name: str, tag_line: str):
 @app.get("/profile/{puuid}")
 async def get_profile(puuid: str):
     async with httpx.AsyncClient() as client:
-        summoner = await riot_get(
-            client,
-            f"https://{RIOT_REGION}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}",
-        )
-        summoner_id = summoner["id"]
-
-        entries = await riot_get(
-            client,
-            f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-summoner/{summoner_id}",
+        summoner, entries = await asyncio.gather(
+            riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"),
+            riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
         )
 
+    summoner_level = summoner.get("summonerLevel", 0)
     ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
+
     if ranked is None:
-        return {
-            "summonerId": summoner_id,
-            "tier": "UNRANKED",
-            "division": "",
-            "lp": 0,
-            "wins": 0,
-            "losses": 0,
-        }
+        return {"summonerLevel": summoner_level, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0}
 
     return {
-        "summonerId": summoner_id,
+        "summonerLevel": summoner_level,
         "tier": ranked["tier"],
         "division": ranked["rank"],
         "lp": ranked["leaguePoints"],
