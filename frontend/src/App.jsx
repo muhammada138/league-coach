@@ -7,13 +7,15 @@ import Dashboard from "./pages/Dashboard";
 export default function App() {
   return (
     <ThemeProvider>
-      <BrowserRouter>
-        <Navbar />
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-        </Routes>
-      </BrowserRouter>
+      <div className="min-h-screen bg-slate-50 dark:bg-[#05080f] transition-colors duration-300">
+        <BrowserRouter>
+          <Navbar />
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+          </Routes>
+        </BrowserRouter>
+      </div>
     </ThemeProvider>
   );
 }
