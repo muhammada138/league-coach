@@ -23,13 +23,22 @@ function computePerformanceScore(player, allPlayers) {
   const avgDmg = avg((p) => p.totalDamageDealtToChampions);
   const avgGold = avg((p) => p.goldEarned);
   const avgCS = avg((p) => p.totalMinionsKilled);
-  const pKDA = (player.kills + player.assists) / Math.max(player.deaths, 1);
-  const raw =
-    (pKDA / Math.max(avgKDA, 0.1)) * 30 +
-    (player.totalDamageDealtToChampions / Math.max(avgDmg, 1)) * 30 +
-    (player.goldEarned / Math.max(avgGold, 1)) * 20 +
-    (player.totalMinionsKilled / Math.max(avgCS, 1)) * 20;
-  return Math.min(10, Math.max(0, raw / 10)).toFixed(1);
+  const avgVis = avg((p) => p.visionScore);
+
+  const raw = (p) => {
+    const kda = (p.kills + p.assists) / Math.max(p.deaths, 1);
+    return (kda / Math.max(avgKDA, 0.1)) * 25 +
+           (p.totalDamageDealtToChampions / Math.max(avgDmg, 1)) * 25 +
+           (p.goldEarned / Math.max(avgGold, 1)) * 20 +
+           (p.totalMinionsKilled / Math.max(avgCS, 1)) * 15 +
+           (p.visionScore / Math.max(avgVis, 1)) * 15;
+  };
+
+  const myRaw = raw(player);
+  // rank = number of players with a higher raw score (0 = best in lobby)
+  const rank = allPlayers.filter((p) => raw(p) > myRaw).length;
+  const scoreTable = [100, 93, 83, 75, 72, 64, 61, 58, 49, 25];
+  return scoreTable[Math.min(rank, 9)];
 }
 
 // ── Loading ────────────────────────────────────────────────────────────────
@@ -177,9 +186,9 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName }) {
         const isMe = p.riotIdGameName === gameName;
         const scoreNum = parseFloat(p.score);
         const scoreColor =
-          scoreNum >= 7
+          scoreNum >= 79
             ? "text-emerald-500 dark:text-emerald-400"
-            : scoreNum >= 4.5
+            : scoreNum >= 50
             ? "text-[#c89b3c]"
             : "text-slate-400 dark:text-white/40";
         return (
