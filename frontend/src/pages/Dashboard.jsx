@@ -564,6 +564,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!puuid) { navigate("/"); return; }
+    // reset everything so stale data from the previous profile doesn't show
+    // while the new fetch is in flight
+    setLoading(true);
+    setProfile(null);
+    setAnalysis(null);
+    setError("");
+    setExpandedMatchId(null);
+    setScoreboard(null);
     Promise.all([getProfile(puuid), analyzeSummoner(puuid, gameName)])
       .then(([prof, anal]) => { setProfile(prof); setAnalysis(anal); })
       .catch(() => setError("Failed to load data. Check that the backend is running."))
