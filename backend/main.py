@@ -197,7 +197,11 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
         "Identify 3-5 specific weaknesses based on where the player is consistently underperforming "
         "relative to their lobbies. Be direct, specific, and actionable. Reference the actual numbers. "
         "Do not be generic. Keep each tip to 2-3 sentences maximum. Be direct, no fluff. "
-        "Format as a numbered list."
+        "IMPORTANT grouping rules — these are the same category, give at most ONE tip per group: "
+        "(1) Vision = vision score + wards placed + wards killed — pick whichever is worst, do not mention this group more than once. "
+        "(2) Combat = KDA + kills + deaths + assists — one tip only. "
+        "(3) Economy = CS per minute + gold earned — one tip only. "
+        "Order tips from highest to lowest impact on game outcomes. Format as a numbered list."
     )
 
     user_prompt = f"""Player: {game_name}

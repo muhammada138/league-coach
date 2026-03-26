@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
 
 export default function Navbar() {
@@ -7,10 +8,13 @@ export default function Navbar() {
       backdrop-blur-md
       border-b border-slate-200/80 dark:border-white/5
       transition-colors duration-300">
-      <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-        <span className="text-sm font-bold tracking-widest uppercase text-[#c89b3c]">
-          LoL Coach
-        </span>
+      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+        <Link
+          to="/"
+          className="text-sm font-bold tracking-widest uppercase text-[#c89b3c] hover:text-[#d4a94a] transition-colors duration-200"
+        >
+          Rift IQ
+        </Link>
         <ThemeToggle />
       </div>
     </nav>
