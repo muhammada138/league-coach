@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { getProfile, analyzeSummoner, getScoreboard } from "../api/riot";
+import { readSaved, writeSaved } from "../components/Navbar";
 
 const TIER_COLORS = {
   IRON: "text-slate-400",
@@ -126,8 +127,41 @@ function LPGraph({ games }) {
   );
 }
 
+// ── Star / save button ─────────────────────────────────────────────────────
+function StarButton({ gameName, tagLine, puuid }) {
+  const [saved, setSaved] = useState(() =>
+    readSaved().some((p) => p.puuid === puuid)
+  );
+
+  // nothing to save if we don't have a tagLine (shouldn't happen, but safe)
+  if (!tagLine || !puuid) return null;
+
+  const toggle = () => {
+    const current = readSaved();
+    if (saved) {
+      writeSaved(current.filter((p) => p.puuid !== puuid));
+      setSaved(false);
+    } else {
+      if (current.length >= 10) return;
+      writeSaved([...current, { gameName, tagLine, puuid }]);
+      setSaved(true);
+    }
+  };
+
+  return (
+    <button
+      onClick={toggle}
+      title={saved ? "Remove from saved" : "Save profile"}
+      className={`ml-1 flex-shrink-0 text-lg leading-none transition-colors duration-150
+        ${saved ? "text-[#c89b3c]" : "text-slate-300 dark:text-white/20 hover:text-[#c89b3c]"}`}
+    >
+      {saved ? "★" : "☆"}
+    </button>
+  );
+}
+
 // ── Profile Card ───────────────────────────────────────────────────────────
-function ProfileCard({ gameName, profile, games }) {
+function ProfileCard({ gameName, tagLine, puuid, profile, games }) {
   const totalGames = profile.wins + profile.losses;
   const wr = totalGames > 0 ? ((profile.wins / totalGames) * 100).toFixed(1) : "—";
   const tierColor = TIER_COLORS[profile.tier] ?? "text-slate-400";
@@ -141,9 +175,12 @@ function ProfileCard({ gameName, profile, games }) {
           <span className="text-2xl font-black text-[#c89b3c]">{gameName.charAt(0).toUpperCase()}</span>
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight leading-none mb-0.5 truncate">
-            {gameName}
-          </h2>
+          <div className="flex items-center gap-0.5 mb-0.5">
+            <h2 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight leading-none truncate">
+              {gameName}
+            </h2>
+            <StarButton gameName={gameName} tagLine={tagLine} puuid={puuid} />
+          </div>
           <p className="text-xs text-slate-400 dark:text-white/30 mb-2">Level {profile.summonerLevel}</p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className={`text-sm font-bold ${tierColor}`}>
@@ -514,7 +551,7 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas }) {
 export default function Dashboard() {
   const { state } = useLocation();
   const navigate = useNavigate();
-  const { puuid, gameName } = state ?? {};
+  const { puuid, gameName, tagLine } = state ?? {};
 
   const [profile, setProfile] = useState(null);
   const [analysis, setAnalysis] = useState(null);
@@ -571,7 +608,7 @@ export default function Dashboard() {
           {/* Left — profile + match history */}
           <div className="flex-1 min-w-0 space-y-4">
 
-            <ProfileCard gameName={gameName} profile={profile} games={analysis.games} />
+            <ProfileCard gameName={gameName} tagLine={tagLine} puuid={puuid} profile={profile} games={analysis.games} />
 
             <div>
               <SectionLabel>Match History</SectionLabel>
