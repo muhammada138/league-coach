@@ -19,7 +19,7 @@ export default function Home() {
     try {
       const data = await getSummoner(gameName.trim(), tagLine.trim());
       navigate("/dashboard", {
-        state: { puuid: data.puuid, gameName: data.gameName },
+        state: { puuid: data.puuid, gameName: data.gameName, tagLine: tagLine.trim() },
       });
     } catch (err) {
       const status = err.response?.status;
