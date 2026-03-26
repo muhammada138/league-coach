@@ -60,7 +60,6 @@ function ErrorScreen({ message, onRetry }) {
 
 // ── LP Trend Graph ─────────────────────────────────────────────────────────
 function LPGraph({ games }) {
-  // games[0] = most recent → reverse to oldest-first for the chart
   const ordered = [...games].reverse();
   const trend = [0];
   ordered.forEach((g) => {
@@ -80,7 +79,6 @@ function LPGraph({ games }) {
   const areaD = `${pathD} L ${toX(trend.length - 1).toFixed(1)} ${(padY + innerH).toFixed(1)} L ${toX(0).toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
   const lastDelta = trend[trend.length - 1];
   const lineColor = lastDelta >= 0 ? "#10b981" : "#ef4444";
-  const gradId = "lpGradFill";
 
   return (
     <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06]">
@@ -94,12 +92,12 @@ function LPGraph({ games }) {
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 52 }}>
         <defs>
-          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="lpGradFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={lineColor} stopOpacity="0.18" />
             <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
           </linearGradient>
         </defs>
-        <path d={areaD} fill={`url(#${gradId})`} />
+        <path d={areaD} fill="url(#lpGradFill)" />
         <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         {trend.map((v, i) => (
           <circle
@@ -248,7 +246,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName }) {
   const team100Won = scoreboard.find((p) => p.teamId === 100)?.win ?? true;
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto animate-slideDown">
       <table className="w-full min-w-[540px]">
         <thead>
           <tr className="border-b border-black/[0.07] dark:border-white/[0.07]">
@@ -295,16 +293,16 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
 
   return (
     <div
-      className={`rounded-xl overflow-hidden border transition-all duration-200
+      className={`rounded-xl overflow-hidden border transition-all duration-300
         ${game.win
           ? "border-emerald-200 dark:border-emerald-500/25"
           : "border-red-200 dark:border-red-500/25"
         }
-        ${isExpanded ? "ring-1 ring-[#c89b3c]/40" : ""}`}
+        ${isExpanded ? "ring-1 ring-[#c89b3c]/40 shadow-lg shadow-[#c89b3c]/5" : ""}`}
     >
       {/* Clickable header */}
       <div
-        className={`flex items-center gap-3 px-4 py-3 cursor-pointer select-none transition-colors
+        className={`flex items-center gap-3 px-4 py-3 cursor-pointer select-none transition-colors duration-200
           ${game.win
             ? "bg-emerald-50/70 dark:bg-emerald-950/25 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
             : "bg-red-50/70 dark:bg-red-950/25 hover:bg-red-50 dark:hover:bg-red-950/40"
@@ -364,8 +362,8 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
         </div>
 
         {/* Expand toggle */}
-        <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
-          isExpanded ? "bg-[#c89b3c]/20 text-[#c89b3c]" : "text-slate-400 dark:text-white/20"
+        <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 ${
+          isExpanded ? "bg-[#c89b3c]/20 text-[#c89b3c] rotate-0" : "text-slate-400 dark:text-white/20"
         }`}>
           <span className="text-[10px] font-bold">{isExpanded ? "▲" : "▼"}</span>
         </div>
@@ -387,58 +385,55 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
 
 // ── Stats Table ────────────────────────────────────────────────────────────
 const STAT_ROWS = [
-  { key: "kda",                         label: "KDA Ratio",     fmt: (v) => v.toFixed(2),                   invertDelta: false },
-  { key: "cspm",                        label: "CS per Minute", fmt: (v) => v.toFixed(2),                   invertDelta: false },
-  { key: "visionScore",                 label: "Vision Score",  fmt: (v) => v.toFixed(1),                   invertDelta: false },
-  { key: "totalDamageDealtToChampions", label: "Damage Dealt",  fmt: (v) => (v / 1000).toFixed(1) + "k",   invertDelta: false },
-  { key: "goldEarned",                  label: "Gold Earned",   fmt: (v) => (v / 1000).toFixed(1) + "k",   invertDelta: false },
-  { key: "wardsPlaced",                 label: "Wards Placed",  fmt: (v) => v.toFixed(1),                   invertDelta: false },
-  { key: "wardsKilled",                 label: "Wards Killed",  fmt: (v) => v.toFixed(1),                   invertDelta: false },
-  { key: "deaths",                      label: "Deaths",        fmt: (v) => v.toFixed(1),                   invertDelta: true  },
+  { key: "kda",                         label: "KDA Ratio",     fmt: (v) => v.toFixed(2),                 invertDelta: false },
+  { key: "cspm",                        label: "CS per Minute", fmt: (v) => v.toFixed(2),                 invertDelta: false },
+  { key: "visionScore",                 label: "Vision Score",  fmt: (v) => v.toFixed(1),                 invertDelta: false },
+  { key: "totalDamageDealtToChampions", label: "Damage Dealt",  fmt: (v) => (v / 1000).toFixed(1) + "k", invertDelta: false },
+  { key: "goldEarned",                  label: "Gold Earned",   fmt: (v) => (v / 1000).toFixed(1) + "k", invertDelta: false },
+  { key: "wardsPlaced",                 label: "Wards Placed",  fmt: (v) => v.toFixed(1),                 invertDelta: false },
+  { key: "wardsKilled",                 label: "Wards Killed",  fmt: (v) => v.toFixed(1),                 invertDelta: false },
+  { key: "deaths",                      label: "Deaths",        fmt: (v) => v.toFixed(1),                 invertDelta: true  },
 ];
 
-function StatsTable({ playerAverages, lobbyAverages, deltas }) {
+function StatsContent({ playerAverages, lobbyAverages, deltas }) {
   return (
-    <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-2xl shadow-sm dark:shadow-black/40 overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-slate-100 dark:border-white/[0.06]">
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">Stats vs Lobby Average</h3>
+    <div className="divide-y divide-slate-100 dark:divide-white/[0.04]">
+      <div className="grid grid-cols-4 px-5 py-2">
+        {["Stat", "You", "Lobby", "Δ"].map((h) => (
+          <span key={h} className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">{h}</span>
+        ))}
       </div>
-      <div className="divide-y divide-slate-100 dark:divide-white/[0.04]">
-        <div className="grid grid-cols-4 px-5 py-2">
-          {["Stat", "You", "Lobby", "Δ"].map((h) => (
-            <span key={h} className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">{h}</span>
-          ))}
-        </div>
-        {STAT_ROWS.map(({ key, label, fmt, invertDelta }) => {
-          const pVal = playerAverages[key];
-          const lVal = lobbyAverages[key];
-          const dVal = deltas[key];
-          if (pVal == null) return null;
-          const isPositive = invertDelta ? dVal < 0 : dVal > 0;
-          const deltaColor =
-            Math.abs(dVal) < 0.05
-              ? "text-slate-400 dark:text-white/30"
-              : isPositive
-              ? "text-emerald-500 dark:text-emerald-400"
-              : "text-red-500 dark:text-red-400";
-          return (
-            <div key={key} className="grid grid-cols-4 px-5 py-2.5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
-              <span className="text-xs text-slate-600 dark:text-white/60 font-medium">{label}</span>
-              <span className="text-xs font-semibold text-slate-900 dark:text-white">{fmt(pVal)}</span>
-              <span className="text-xs text-slate-400 dark:text-white/30">{fmt(lVal)}</span>
-              <span className={`text-xs font-semibold ${deltaColor}`}>
-                {dVal > 0 ? "+" : ""}{typeof dVal === "number" ? dVal.toFixed(2) : "—"}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      {STAT_ROWS.map(({ key, label, fmt, invertDelta }) => {
+        const pVal = playerAverages[key];
+        const lVal = lobbyAverages[key];
+        const dVal = deltas[key];
+        if (pVal == null) return null;
+        const isPositive = invertDelta ? dVal < 0 : dVal > 0;
+        const deltaColor =
+          Math.abs(dVal) < 0.05
+            ? "text-slate-400 dark:text-white/30"
+            : isPositive
+            ? "text-emerald-500 dark:text-emerald-400"
+            : "text-red-500 dark:text-red-400";
+        return (
+          <div key={key} className="grid grid-cols-4 px-5 py-2.5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+            <span className="text-xs text-slate-600 dark:text-white/60 font-medium">{label}</span>
+            <span className="text-xs font-semibold text-slate-900 dark:text-white">{fmt(pVal)}</span>
+            <span className="text-xs text-slate-400 dark:text-white/30">{fmt(lVal)}</span>
+            <span className={`text-xs font-semibold ${deltaColor}`}>
+              {dVal > 0 ? "+" : ""}{typeof dVal === "number" ? dVal.toFixed(2) : "—"}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// ── Coaching Panel ─────────────────────────────────────────────────────────
-function CoachingPanel({ coaching }) {
+// ── Right Panel (tabbed: Coaching | Stats) ─────────────────────────────────
+function RightPanel({ coaching, playerAverages, lobbyAverages, deltas }) {
+  const [tab, setTab] = useState("coaching");
+
   const tips = coaching
     .split(/\n+/)
     .map((l) => l.trim())
@@ -449,29 +444,57 @@ function CoachingPanel({ coaching }) {
 
   return (
     <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-2xl shadow-sm dark:shadow-black/40 flex flex-col">
-      <div className="px-5 py-4 border-b border-slate-100 dark:border-white/[0.06] flex items-center gap-2">
-        <span className="w-2 h-2 rounded-full bg-[#c89b3c] animate-pulse" />
-        <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-tight">AI Coaching Tips</h3>
+      {/* Tab bar */}
+      <div className="flex border-b border-slate-100 dark:border-white/[0.06]">
+        {[
+          { id: "coaching", label: "AI Coaching", dot: true },
+          { id: "stats",    label: "Stats",        dot: false },
+        ].map(({ id, label, dot }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-3.5 text-xs font-semibold tracking-wide transition-colors duration-150
+              ${tab === id
+                ? "text-slate-900 dark:text-white border-b-2 border-[#c89b3c] -mb-px"
+                : "text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/50"
+              }`}
+          >
+            {dot && tab === id && <span className="w-1.5 h-1.5 rounded-full bg-[#c89b3c] animate-pulse" />}
+            {label}
+          </button>
+        ))}
       </div>
-      <div className="p-5 space-y-4 flex-1">
-        {fallback ? (
-          <div className="text-sm text-slate-600 dark:text-white/60 leading-relaxed
-            [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white
-            [&_em]:italic [&_p]:mb-2 [&_p:last-child]:mb-0">
-            <ReactMarkdown>{coaching}</ReactMarkdown>
+
+      {/* Tab content */}
+      <div className="flex-1 animate-fadeIn" key={tab}>
+        {tab === "coaching" ? (
+          <div className="p-5 space-y-4">
+            {fallback ? (
+              <div className="text-sm text-slate-600 dark:text-white/60 leading-relaxed
+                [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white
+                [&_em]:italic [&_p]:mb-2 [&_p:last-child]:mb-0">
+                <ReactMarkdown>{coaching}</ReactMarkdown>
+              </div>
+            ) : (
+              tips.map((tip, i) => (
+                <div key={i} className="flex gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#c89b3c]/10 border border-[#c89b3c]/30 text-[#c89b3c] text-xs font-bold flex items-center justify-center mt-0.5">
+                    {i + 1}
+                  </span>
+                  <div className="text-sm text-slate-700 dark:text-white/70 leading-relaxed
+                    [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white [&_em]:italic">
+                    <ReactMarkdown>{tip}</ReactMarkdown>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         ) : (
-          tips.map((tip, i) => (
-            <div key={i} className="flex gap-3">
-              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#c89b3c]/10 border border-[#c89b3c]/30 text-[#c89b3c] text-xs font-bold flex items-center justify-center mt-0.5">
-                {i + 1}
-              </span>
-              <div className="text-sm text-slate-700 dark:text-white/70 leading-relaxed
-                [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white [&_em]:italic">
-                <ReactMarkdown>{tip}</ReactMarkdown>
-              </div>
-            </div>
-          ))
+          <StatsContent
+            playerAverages={playerAverages}
+            lobbyAverages={lobbyAverages}
+            deltas={deltas}
+          />
         )}
       </div>
     </div>
@@ -524,7 +547,7 @@ export default function Dashboard() {
   if (error) return <ErrorScreen message={error} onRetry={() => navigate("/")} />;
 
   return (
-    <div className="min-h-screen pt-20 pb-16 px-4">
+    <div className="min-h-screen pt-20 pb-16 px-4 animate-fadeIn">
       <div className="max-w-6xl mx-auto">
 
         <button
@@ -536,7 +559,7 @@ export default function Dashboard() {
 
         <div className="flex flex-col lg:flex-row gap-5 items-start">
 
-          {/* Left — profile + games + stats */}
+          {/* Left — profile + match history */}
           <div className="flex-1 min-w-0 space-y-4">
 
             <ProfileCard gameName={gameName} profile={profile} games={analysis.games} />
@@ -558,20 +581,16 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div>
-              <SectionLabel>Stats vs Lobby Average</SectionLabel>
-              <StatsTable
-                playerAverages={analysis.playerAverages}
-                lobbyAverages={analysis.lobbyAverages}
-                deltas={analysis.deltas}
-              />
-            </div>
-
           </div>
 
-          {/* Right — sticky coaching panel */}
+          {/* Right — sticky tabbed panel */}
           <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-20">
-            <CoachingPanel coaching={analysis.coaching} />
+            <RightPanel
+              coaching={analysis.coaching}
+              playerAverages={analysis.playerAverages}
+              lobbyAverages={analysis.lobbyAverages}
+              deltas={analysis.deltas}
+            />
           </div>
 
         </div>
