@@ -35,6 +35,51 @@ NUMERIC_STATS = [
 ]
 
 
+def _compute_perf_score(player: dict, all_players: list) -> int:
+    """Rank a player 0-100 relative to the 10-person lobby (mirrors frontend logic)."""
+    n = len(all_players) or 1
+    avg_kda  = sum((p.get("kills",0)+p.get("assists",0))/max(p.get("deaths",1),1) for p in all_players) / n
+    avg_dmg  = sum(p.get("totalDamageDealtToChampions",0) for p in all_players) / n
+    avg_gold = sum(p.get("goldEarned",0) for p in all_players) / n
+    avg_cs   = sum(p.get("totalMinionsKilled",0) for p in all_players) / n
+    avg_vis  = sum(p.get("visionScore",0) for p in all_players) / n
+
+    def raw(p):
+        kda = (p.get("kills",0)+p.get("assists",0)) / max(p.get("deaths",1), 1)
+        return (
+            (kda / max(avg_kda, 0.1)) * 25
+            + (p.get("totalDamageDealtToChampions",0) / max(avg_dmg, 1)) * 25
+            + (p.get("goldEarned",0) / max(avg_gold, 1)) * 20
+            + (p.get("totalMinionsKilled",0) / max(avg_cs, 1)) * 15
+            + (p.get("visionScore",0) / max(avg_vis, 1)) * 15
+        )
+
+    my_raw = raw(player)
+    rank = sum(1 for p in all_players if raw(p) > my_raw)
+    score_table = [100, 93, 83, 75, 72, 64, 61, 58, 49, 25]
+    return score_table[min(rank, 9)]
+
+
+def _compute_diffed_lane(all_players: list):
+    """Return the position label where the two opposing players had the biggest score gap."""
+    by_pos = {}
+    for p in all_players:
+        pos = p.get("teamPosition", "")
+        if pos and pos != "UNKNOWN":
+            by_pos.setdefault(pos, []).append(p)
+
+    max_diff, diffed = -1, None
+    for pos, players in by_pos.items():
+        if len(players) != 2:
+            continue
+        s1 = _compute_perf_score(players[0], all_players)
+        s2 = _compute_perf_score(players[1], all_players)
+        diff = abs(s1 - s2)
+        if diff > max_diff:
+            max_diff, diffed = diff, pos
+    return diffed
+
+
 async def riot_get(client: httpx.AsyncClient, url: str) -> dict:
     response = await client.get(url, headers=RIOT_HEADERS)
     if response.status_code != 200:
@@ -137,6 +182,9 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
             player_cspm = player_stats["totalMinionsKilled"] / minutes if minutes > 0 else 0
             lobby_cspm = lobby_avgs["totalMinionsKilled"] / minutes if minutes > 0 else 0
 
+            game_score = _compute_perf_score(player, participants)
+            game_diffed_lane = _compute_diffed_lane(participants)
+
             games.append({
                 "matchId": match_id,
                 "playerStats": player_stats,
@@ -144,6 +192,8 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
                 "deltas": deltas,
                 "playerCspm": round(player_cspm, 2),
                 "lobbyCspm": round(lobby_cspm, 2),
+                "score": game_score,
+                "diffedLane": game_diffed_lane,
             })
 
     if not games:
@@ -199,12 +249,12 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
     # 8. Build Groq prompt and call API
     system_prompt = (
         "You are a League of Legends coach giving direct, personal feedback to this specific player. "
-        "Always speak in second person — 'you', 'your', 'you're'. Talk like a real coach, not a report writer. "
+        "Always speak in second person: 'you', 'your', 'you're'. Talk like a real coach, not a report writer. "
         "Be blunt and human. No corporate filler like 'it appears', 'based on the data', or 'it seems'. "
         "Give 3-4 weaknesses where they are underperforming vs their lobby. "
         "Each tip: 1-2 sentences max. Lead with the problem, end with one concrete fix. "
         "Bold (**) every stat number and every key concept/stat name you mention so the player can scan quickly. "
-        "GROUPING RULES — one tip max per group: "
+        "GROUPING RULES, one tip max per group: "
         "(1) Vision = vision score + wards placed + wards killed. "
         "(2) Combat = KDA + kills + deaths + assists. "
         "(3) Economy = CS per minute + gold earned. "
@@ -253,12 +303,18 @@ Per game breakdown:
             "visionScore": ps["visionScore"],
             "win": ps["win"],
             "gameDuration": ps["gameDuration"],
+            "score": g["score"],
+            "diffedLane": g["diffedLane"],
         })
+
+    diffed_lanes = [g["diffedLane"] for g in game_summaries if g["diffedLane"]]
+    most_diffed_lane = Counter(diffed_lanes).most_common(1)[0][0] if diffed_lanes else None
 
     return {
         "gameName": game_name,
         "mostPlayedPosition": most_common_position,
         "winRate": win_rate,
+        "mostDiffedLane": most_diffed_lane,
         "playerAverages": {stat: round(player_avgs[stat], 2) for stat in NUMERIC_STATS} | {
             "cspm": round(player_cspm, 2),
             "kda": round(player_kda, 2),
@@ -293,7 +349,8 @@ async def get_history(puuid: str, start: int = 0, count: int = 10):
     games = []
     for match_id, match_data in zip(match_ids, match_datas):
         info = match_data["info"]
-        player = next((p for p in info["participants"] if p["puuid"] == puuid), None)
+        participants = info["participants"]
+        player = next((p for p in participants if p["puuid"] == puuid), None)
         if player is None:
             continue
         minutes = info["gameDuration"] / 60
@@ -309,6 +366,8 @@ async def get_history(puuid: str, start: int = 0, count: int = 10):
             "visionScore": player["visionScore"],
             "win": player["win"],
             "gameDuration": info["gameDuration"],
+            "score": _compute_perf_score(player, participants),
+            "diffedLane": _compute_diffed_lane(participants),
         })
     return games
 
@@ -357,7 +416,7 @@ async def ask_coach(body: AskRequest):
             "role": "system",
             "content": (
                 "You are a League of Legends coach talking directly to this player. "
-                "Always use second person — 'you', 'your'. Be casual, direct, and human. "
+                "Always use second person: 'you', 'your'. Be casual, direct, and human. "
                 "No filler phrases, no 'based on your data'. Bold (**) every number and key stat name you mention. "
                 "Keep replies to 2-3 sentences max.\n\n"
                 f"Player context:\n{body.context}"

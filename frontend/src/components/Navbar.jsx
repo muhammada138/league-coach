@@ -90,7 +90,7 @@ function NavSearch() {
           bg-slate-50 dark:bg-white/[0.04]
           ${expanded ? "w-44 sm:w-52" : "w-8 sm:w-40"}`}
       >
-        {/* search icon / spinner — clicking it focuses the input on mobile */}
+        {/* search icon / spinner - clicking it focuses the input on mobile */}
         <button
           type="submit"
           tabIndex={-1}
@@ -251,7 +251,7 @@ function SavedDropdown() {
                     <span className="text-slate-400 dark:text-white/30 font-normal">#{p.tagLine}</span>
                   </span>
 
-                  {/* remove button — only visible on hover */}
+                  {/* remove button - only visible on hover */}
                   <button
                     onClick={(e) => handleRemove(e, p.puuid)}
                     className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center

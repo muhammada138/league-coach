@@ -9,7 +9,7 @@ const HOW_IT_WORKS = [
   {
     n: "01",
     title: "Enter your Riot ID",
-    desc: "Type your game name and tag — any region works.",
+    desc: "Type your game name and tag. Any region works.",
   },
   {
     n: "02",
@@ -60,7 +60,7 @@ export default function Home() {
 
       {/* ── Background layers ─────────────────────────────────────────────── */}
 
-      {/* dot grid — light mode subtle, slightly more visible in dark */}
+      {/* dot grid - light mode subtle, slightly more visible in dark */}
       <div
         className="absolute inset-0 opacity-[0.025] dark:opacity-[0.045] pointer-events-none"
         style={{ backgroundImage: DOT_GRID, backgroundSize: "28px 28px" }}
@@ -102,7 +102,7 @@ export default function Home() {
             <span className="text-[#c89b3c]">Start climbing.</span>
           </h1>
           <p className="text-slate-500 dark:text-white/35 text-sm leading-relaxed max-w-sm mx-auto">
-            Enter your Riot ID and get coaching built from your actual numbers —
+            Enter your Riot ID and get coaching built from your actual numbers,
             compared against every player in your last 5 ranked lobbies.
           </p>
         </div>
