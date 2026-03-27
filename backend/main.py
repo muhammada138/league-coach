@@ -83,7 +83,7 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
         # 1. Fetch last 5 ranked match IDs
         match_ids = await riot_get(
             client,
-            f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=20&queue=420",
+            f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10&queue=420",
         )
 
         if not match_ids:
@@ -178,10 +178,9 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
     positions = [g["playerStats"]["teamPosition"] for g in games]
     most_common_position = Counter(positions).most_common(1)[0][0]
 
-    # Per-game breakdown for prompt — cap at 10 most recent games
-    ai_games = games[:10]
+    # Per-game breakdown for prompt
     game_breakdown_lines = []
-    for g in ai_games:
+    for g in games:
         ps = g["playerStats"]
         kda_str = f"{ps['kills']}/{ps['deaths']}/{ps['assists']}"
         result = "WIN" if ps["win"] else "LOSS"
@@ -214,7 +213,7 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
 
     user_prompt = f"""Player: {game_name}
 Most played role: {most_common_position}
-Win rate last 20 games: {win_rate}%
+Win rate last 10 games: {win_rate}%
 
 Player averages vs lobby averages:
 - KDA ratio: {fmt(player_kda)} vs {fmt(lobby_kda)} (delta: {delta_str(player_kda - lobby_kda)})
@@ -275,6 +274,43 @@ Per game breakdown:
         "coaching": coaching,
         "games": game_summaries,
     }
+
+
+@app.get("/history/{puuid}")
+async def get_history(puuid: str, start: int = 0, count: int = 10):
+    count = min(count, 10)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        match_ids = await riot_get(
+            client,
+            f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?start={start}&count={count}&queue=420",
+        )
+        if not match_ids:
+            return []
+        match_datas = await asyncio.gather(*[
+            riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
+            for mid in match_ids
+        ])
+    games = []
+    for match_id, match_data in zip(match_ids, match_datas):
+        info = match_data["info"]
+        player = next((p for p in info["participants"] if p["puuid"] == puuid), None)
+        if player is None:
+            continue
+        minutes = info["gameDuration"] / 60
+        cspm = round(player["totalMinionsKilled"] / minutes if minutes > 0 else 0, 2)
+        games.append({
+            "matchId": match_id,
+            "championName": player["championName"],
+            "teamPosition": player.get("teamPosition", "UNKNOWN"),
+            "kills": player["kills"],
+            "deaths": player["deaths"],
+            "assists": player["assists"],
+            "cspm": cspm,
+            "visionScore": player["visionScore"],
+            "win": player["win"],
+            "gameDuration": info["gameDuration"],
+        })
+    return games
 
 
 @app.get("/match/{match_id}/scoreboard")
