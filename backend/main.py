@@ -83,7 +83,7 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
         # 1. Fetch last 5 ranked match IDs
         match_ids = await riot_get(
             client,
-            f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue=420",
+            f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=20&queue=420",
         )
 
         if not match_ids:
@@ -178,9 +178,10 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
     positions = [g["playerStats"]["teamPosition"] for g in games]
     most_common_position = Counter(positions).most_common(1)[0][0]
 
-    # Per-game breakdown for prompt
+    # Per-game breakdown for prompt — cap at 10 most recent games
+    ai_games = games[:10]
     game_breakdown_lines = []
-    for g in games:
+    for g in ai_games:
         ps = g["playerStats"]
         kda_str = f"{ps['kills']}/{ps['deaths']}/{ps['assists']}"
         result = "WIN" if ps["win"] else "LOSS"

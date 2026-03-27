@@ -179,7 +179,7 @@ function LPGraph({ games }) {
     <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06]">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">
-          LP Trend · Last 5
+          LP Trend · Last {games.length}
         </span>
         <span className={`text-xs font-bold ${lastDelta >= 0 ? "text-emerald-500" : "text-red-400"}`}>
           {lastDelta >= 0 ? "+" : ""}{lastDelta} LP est.
@@ -205,7 +205,7 @@ function LPGraph({ games }) {
         ))}
       </svg>
       <div className="flex justify-between text-[10px] text-slate-400 dark:text-white/20 mt-0.5">
-        <span>5 games ago</span>
+        <span>{games.length} games ago</span>
         <span>Now</span>
       </div>
     </div>
