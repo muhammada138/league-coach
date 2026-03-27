@@ -13,6 +13,28 @@
 }
 
 @layer utilities {
-  .animate-fadeIn  { animation: fadeIn  0.25s ease-out both; }
-  .animate-slideDown { animation: slideDown 0.2s ease-out both; }
+  .animate-fadeIn    { animation: fadeIn    0.25s ease-out both; }
+  .animate-slideDown { animation: slideDown 0.2s  ease-out both; }
+
+  /* skeleton shimmer — light and dark flavors via bg gradient */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      theme('colors.slate.200') 0%,
+      theme('colors.slate.100') 50%,
+      theme('colors.slate.200') 100%
+    );
+    background-size: 400px 100%;
+    animation: theme('animation.shimmer');
+    border-radius: theme('borderRadius.lg');
+  }
+  .dark .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(255,255,255,0.04) 0%,
+      rgba(255,255,255,0.08) 50%,
+      rgba(255,255,255,0.04) 100%
+    );
+    background-size: 400px 100%;
+  }
 }
