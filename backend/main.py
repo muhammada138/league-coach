@@ -194,6 +194,14 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
                 for p in participants
                 if p.get("puuid") != puuid and p.get("teamId") == player_team_id
             ]
+            opponents = [
+                {
+                    "gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown",
+                    "puuid": p.get("puuid", ""),
+                }
+                for p in participants
+                if p.get("puuid") != puuid and p.get("teamId") != player_team_id
+            ]
 
             games.append({
                 "matchId": match_id,
@@ -205,6 +213,7 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
                 "score": game_score,
                 "diffedLane": game_diffed_lane,
                 "teammates": teammates,
+                "opponents": opponents,
             })
 
     if not games:
@@ -317,6 +326,7 @@ Per game breakdown:
             "score": g["score"],
             "diffedLane": g["diffedLane"],
             "teammates": g.get("teammates", []),
+            "opponents": g.get("opponents", []),
         })
 
     diffed_lanes = [g["diffedLane"] for g in game_summaries if g["diffedLane"]]
@@ -376,6 +386,14 @@ async def get_history(puuid: str, start: int = 0, count: int = 10):
             for p in participants
             if p.get("puuid") != puuid and p.get("teamId") == player_team_id
         ]
+        hist_opponents = [
+            {
+                "gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown",
+                "puuid": p.get("puuid", ""),
+            }
+            for p in participants
+            if p.get("puuid") != puuid and p.get("teamId") != player_team_id
+        ]
         games.append({
             "matchId": match_id,
             "championName": player["championName"],
@@ -390,6 +408,7 @@ async def get_history(puuid: str, start: int = 0, count: int = 10):
             "score": _compute_perf_score(player, participants),
             "diffedLane": _compute_diffed_lane(participants),
             "teammates": hist_teammates,
+            "opponents": hist_opponents,
         })
     return games
 
