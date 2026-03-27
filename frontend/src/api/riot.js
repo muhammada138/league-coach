@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const api = axios.create({ baseURL: "http://localhost:8000" });
+const api = axios.create({ baseURL: import.meta.env.VITE_API_URL });
 
 export const getSummoner = (gameName, tagLine) =>
   api.get(`/summoner/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`).then((r) => r.data);
