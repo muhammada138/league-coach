@@ -39,9 +39,10 @@ export default function Home() {
 
     try {
       const data = await getSummoner(gameName.trim(), tagLine.trim());
-      navigate("/dashboard", {
-        state: { puuid: data.puuid, gameName: data.gameName, tagLine: tagLine.trim() },
-      });
+      navigate(
+        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(tagLine.trim())}`,
+        { state: { puuid: data.puuid } }
+      );
     } catch (err) {
       const status = err.response?.status;
       setError(
