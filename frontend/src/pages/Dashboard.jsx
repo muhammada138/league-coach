@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { getProfile, analyzeSummoner, getScoreboard } from "../api/riot";
+import { getProfile, analyzeSummoner, getScoreboard, getSummoner, askCoach } from "../api/riot";
 import { readSaved, writeSaved } from "../components/Navbar";
 
 const TIER_COLORS = {
@@ -245,25 +245,65 @@ function StarButton({ gameName, tagLine, puuid }) {
   );
 }
 
+const TIER_EMBLEM = {
+  IRON: "Iron", BRONZE: "Bronze", SILVER: "Silver", GOLD: "Gold",
+  PLATINUM: "Platinum", EMERALD: "Emerald", DIAMOND: "Diamond",
+  MASTER: "Master", GRANDMASTER: "Grandmaster", CHALLENGER: "Challenger",
+};
+
 // ── Profile Card ───────────────────────────────────────────────────────────
-function ProfileCard({ gameName, tagLine, puuid, profile, games }) {
+function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion }) {
   const totalGames = profile.wins + profile.losses;
   const wr = totalGames > 0 ? ((profile.wins / totalGames) * 100).toFixed(1) : "—";
   const tierColor = TIER_COLORS[profile.tier] ?? "text-slate-400";
   const rankLabel =
     profile.tier === "UNRANKED" ? "Unranked" : `${profile.tier} ${profile.division}`;
+  const emblemName = TIER_EMBLEM[profile.tier];
+  const emblemUrl = emblemName
+    ? `https://ddragon.leagueoflegends.com/cdn/img/ranked-emblems/Emblem_${emblemName}.png`
+    : null;
+  const iconUrl = profile.profileIconId != null
+    ? `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/profileicon/${profile.profileIconId}.png`
+    : null;
+
+  const [iconFailed, setIconFailed] = useState(false);
 
   return (
     <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-2xl shadow-sm dark:shadow-black/40 p-5">
       <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-xl bg-[#c89b3c]/10 border border-[#c89b3c]/20 flex items-center justify-center flex-shrink-0">
-          <span className="text-2xl font-black text-[#c89b3c]">{gameName.charAt(0).toUpperCase()}</span>
+        {/* Profile icon with rank emblem badge */}
+        <div className="relative flex-shrink-0">
+          <div className="w-14 h-14 rounded-xl bg-[#c89b3c]/10 border border-[#c89b3c]/20 flex items-center justify-center overflow-hidden">
+            {iconUrl && !iconFailed ? (
+              <img
+                src={iconUrl}
+                alt="profile icon"
+                className="w-full h-full object-cover"
+                onError={() => setIconFailed(true)}
+              />
+            ) : (
+              <span className="text-2xl font-black text-[#c89b3c]">
+                {gameName.charAt(0).toUpperCase()}
+              </span>
+            )}
+          </div>
+          {emblemUrl && (
+            <img
+              src={emblemUrl}
+              alt={profile.tier}
+              className="absolute -bottom-1.5 -right-1.5 w-7 h-7 object-contain drop-shadow-sm"
+              onError={(e) => { e.target.style.display = "none"; }}
+            />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-0.5 mb-0.5">
             <h2 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight leading-none truncate">
               {gameName}
             </h2>
+            <span className="text-xs text-slate-400 dark:text-white/25 font-normal ml-1 flex-shrink-0">
+              #{tagLine}
+            </span>
             <StarButton gameName={gameName} tagLine={tagLine} puuid={puuid} />
           </div>
           <p className="text-xs text-slate-400 dark:text-white/30 mb-2">Level {profile.summonerLevel}</p>
@@ -561,9 +601,63 @@ function StatsContent({ playerAverages, lobbyAverages, deltas }) {
   );
 }
 
+// ── Summary Strip ───────────────────────────────────────────────────────────
+function SummaryStrip({ analysis }) {
+  const wins  = analysis.games.filter((g) => g.win).length;
+  const losses = analysis.games.length - wins;
+  const items = [
+    {
+      label: "Win Rate",
+      value: `${analysis.winRate}%`,
+      sub: `${wins}W · ${losses}L`,
+      positive: analysis.winRate >= 50,
+    },
+    {
+      label: "Avg KDA",
+      value: analysis.playerAverages.kda.toFixed(2),
+      sub: `Lobby ${analysis.lobbyAverages.kda.toFixed(2)}`,
+      positive: analysis.deltas.kda >= 0,
+    },
+    {
+      label: "CS / min",
+      value: analysis.playerAverages.cspm.toFixed(2),
+      sub: `Lobby ${analysis.lobbyAverages.cspm.toFixed(2)}`,
+      positive: analysis.deltas.cspm >= 0,
+    },
+    {
+      label: "Vision",
+      value: analysis.playerAverages.visionScore.toFixed(1),
+      sub: `Lobby ${analysis.lobbyAverages.visionScore.toFixed(1)}`,
+      positive: analysis.deltas.visionScore >= 0,
+    },
+  ];
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {items.map(({ label, value, sub, positive }) => (
+        <div
+          key={label}
+          className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-xl p-3 text-center"
+        >
+          <div className={`text-xl font-black tabular-nums ${positive ? "text-emerald-500" : "text-red-400"}`}>
+            {value}
+          </div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mt-0.5">
+            {label}
+          </div>
+          <div className="text-[10px] text-slate-400 dark:text-white/20 mt-0.5">{sub}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Right Panel (tabbed: Coaching | Stats) ─────────────────────────────────
-function RightPanel({ coaching, playerAverages, lobbyAverages, deltas }) {
+function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerContext }) {
   const [tab, setTab] = useState("coaching");
+  const [chatInput, setChatInput] = useState("");
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef(null);
 
   const tips = coaching
     .split(/\n+/)
@@ -572,6 +666,29 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas }) {
     .map((l) => l.replace(/^\d+[\.\)]\s*/, "").trim());
 
   const fallback = tips.length === 0;
+
+  const handleAsk = async (e) => {
+    e.preventDefault();
+    const q = chatInput.trim();
+    if (!q || chatLoading) return;
+    const userMsg = { role: "user", content: q };
+    const next = [...chatHistory, userMsg];
+    setChatHistory(next);
+    setChatInput("");
+    setChatLoading(true);
+    try {
+      const { answer } = await askCoach(q, playerContext, chatHistory);
+      setChatHistory([...next, { role: "assistant", content: answer }]);
+    } catch {
+      setChatHistory([...next, { role: "assistant", content: "Sorry, something went wrong. Try again." }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatHistory, chatLoading]);
 
   return (
     <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-2xl shadow-sm dark:shadow-black/40 flex flex-col">
@@ -599,26 +716,88 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas }) {
       {/* Tab content */}
       <div className="flex-1 animate-fadeIn" key={tab}>
         {tab === "coaching" ? (
-          <div className="p-5 space-y-4">
-            {fallback ? (
-              <div className="text-sm text-slate-600 dark:text-white/60 leading-relaxed
-                [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white
-                [&_em]:italic [&_p]:mb-2 [&_p:last-child]:mb-0">
-                <ReactMarkdown>{coaching}</ReactMarkdown>
-              </div>
-            ) : (
-              tips.map((tip, i) => (
-                <div key={i} className="flex gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#c89b3c]/10 border border-[#c89b3c]/30 text-[#c89b3c] text-xs font-bold flex items-center justify-center mt-0.5">
-                    {i + 1}
-                  </span>
-                  <div className="text-sm text-slate-700 dark:text-white/70 leading-relaxed
-                    [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white [&_em]:italic">
-                    <ReactMarkdown>{tip}</ReactMarkdown>
-                  </div>
+          <div className="flex flex-col">
+            {/* Tips */}
+            <div className="p-5 space-y-4">
+              {fallback ? (
+                <div className="text-sm text-slate-600 dark:text-white/60 leading-relaxed
+                  [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white
+                  [&_em]:italic [&_p]:mb-2 [&_p:last-child]:mb-0">
+                  <ReactMarkdown>{coaching}</ReactMarkdown>
                 </div>
-              ))
-            )}
+              ) : (
+                tips.map((tip, i) => (
+                  <div key={i} className="flex gap-3">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#c89b3c]/10 border border-[#c89b3c]/30 text-[#c89b3c] text-xs font-bold flex items-center justify-center mt-0.5">
+                      {i + 1}
+                    </span>
+                    <div className="text-sm text-slate-700 dark:text-white/70 leading-relaxed
+                      [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white [&_em]:italic">
+                      <ReactMarkdown>{tip}</ReactMarkdown>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Chat */}
+            <div className="border-t border-slate-100 dark:border-white/[0.06]">
+              {chatHistory.length > 0 && (
+                <div className="px-4 pt-4 pb-2 space-y-3 max-h-72 overflow-y-auto">
+                  {chatHistory.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      {msg.role === "assistant" && (
+                        <span className="w-5 h-5 rounded-full bg-[#c89b3c]/15 border border-[#c89b3c]/30 text-[#c89b3c] text-[9px] font-black flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
+                          AI
+                        </span>
+                      )}
+                      <div className={`max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed
+                        ${msg.role === "user"
+                          ? "bg-[#c89b3c]/10 dark:bg-[#c89b3c]/15 text-slate-800 dark:text-white/80 rounded-tr-sm"
+                          : "bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-white/70 rounded-tl-sm"
+                        }`}>
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    </div>
+                  ))}
+                  {chatLoading && (
+                    <div className="flex justify-start">
+                      <span className="w-5 h-5 rounded-full bg-[#c89b3c]/15 border border-[#c89b3c]/30 text-[#c89b3c] text-[9px] font-black flex items-center justify-center flex-shrink-0 mr-2 mt-0.5">
+                        AI
+                      </span>
+                      <div className="bg-slate-100 dark:bg-white/[0.06] rounded-xl rounded-tl-sm px-3 py-2.5 flex items-center gap-1">
+                        {[0, 1, 2].map((d) => (
+                          <span key={d} className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-white/30 animate-pulse" style={{ animationDelay: `${d * 150}ms` }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+              )}
+
+              {/* Input */}
+              <form onSubmit={handleAsk} className="p-3">
+                <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-white/[0.03] px-3 py-2 focus-within:border-[#c89b3c]/50 transition-colors">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ask about your gameplay..."
+                    className="flex-1 text-xs bg-transparent text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-white/20 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!chatInput.trim() || chatLoading}
+                    className="flex-shrink-0 w-6 h-6 rounded-lg bg-[#c89b3c] disabled:opacity-30 flex items-center justify-center transition-opacity"
+                  >
+                    <svg className="w-3 h-3 text-[#1a1000]" viewBox="0 0 12 12" fill="none">
+                      <path d="M1 6h10M6 1l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         ) : (
           <StatsContent
@@ -634,34 +813,56 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas }) {
 
 // ── Main Dashboard ─────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const { gameName: rawGameName, tagLine: rawTagLine } = useParams();
+  const gameName = rawGameName ? decodeURIComponent(rawGameName) : "";
+  const tagLine  = rawTagLine  ? decodeURIComponent(rawTagLine)  : "";
+
   const { state } = useLocation();
   const navigate = useNavigate();
-  const { puuid, gameName, tagLine } = state ?? {};
 
+  const [resolvedPuuid, setResolvedPuuid] = useState(state?.puuid ?? null);
   const [profile, setProfile] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [ddVersion, setDdVersion] = useState("14.24.1");
 
   const [expandedMatchId, setExpandedMatchId] = useState(null);
   const [scoreboard, setScoreboard] = useState(null);
   const [scoreboardLoading, setScoreboardLoading] = useState(false);
 
   useEffect(() => {
-    if (!puuid) { navigate("/"); return; }
-    // reset everything so stale data from the previous profile doesn't show
-    // while the new fetch is in flight
+    if (!gameName || !tagLine) { navigate("/"); return; }
     setLoading(true);
     setProfile(null);
     setAnalysis(null);
     setError("");
     setExpandedMatchId(null);
     setScoreboard(null);
-    Promise.all([getProfile(puuid), analyzeSummoner(puuid, gameName)])
-      .then(([prof, anal]) => { setProfile(prof); setAnalysis(anal); })
+
+    const puuidHint = state?.puuid;
+    const run = async () => {
+      const [versions, puuidResolved] = await Promise.all([
+        fetch("https://ddragon.leagueoflegends.com/api/versions.json")
+          .then((r) => r.json())
+          .catch(() => ["14.24.1"]),
+        puuidHint
+          ? Promise.resolve(puuidHint)
+          : getSummoner(gameName, tagLine).then((d) => d.puuid),
+      ]);
+      setDdVersion(versions[0]);
+      setResolvedPuuid(puuidResolved);
+      const [prof, anal] = await Promise.all([
+        getProfile(puuidResolved),
+        analyzeSummoner(puuidResolved, gameName),
+      ]);
+      setProfile(prof);
+      setAnalysis(anal);
+    };
+    run()
       .catch(() => setError("Failed to load data. Check that the backend is running."))
       .finally(() => setLoading(false));
-  }, [puuid, gameName, navigate]);
+  }, [gameName, tagLine]);
 
   const handleToggleGame = async (matchId) => {
     if (expandedMatchId === matchId) {
@@ -701,7 +902,9 @@ export default function Dashboard() {
           {/* Left — profile + match history */}
           <div className="flex-1 min-w-0 space-y-4">
 
-            <ProfileCard gameName={gameName} tagLine={tagLine} puuid={puuid} profile={profile} games={analysis.games} />
+            <ProfileCard gameName={gameName} tagLine={tagLine} puuid={resolvedPuuid} profile={profile} games={analysis.games} ddVersion={ddVersion} />
+
+            <SummaryStrip analysis={analysis} />
 
             <div>
               <SectionLabel>Match History</SectionLabel>
@@ -729,6 +932,16 @@ export default function Dashboard() {
               playerAverages={analysis.playerAverages}
               lobbyAverages={analysis.lobbyAverages}
               deltas={analysis.deltas}
+              playerContext={[
+                `Player: ${gameName}`,
+                `Role: ${analysis.mostPlayedPosition}`,
+                `Win rate (last 5): ${analysis.winRate}%`,
+                `Avg KDA: ${analysis.playerAverages.kda.toFixed(2)} (lobby: ${analysis.lobbyAverages.kda.toFixed(2)})`,
+                `CS/min: ${analysis.playerAverages.cspm.toFixed(2)} (lobby: ${analysis.lobbyAverages.cspm.toFixed(2)})`,
+                `Vision: ${analysis.playerAverages.visionScore.toFixed(1)} (lobby: ${analysis.lobbyAverages.visionScore.toFixed(1)})`,
+                `Damage: ${(analysis.playerAverages.totalDamageDealtToChampions/1000).toFixed(1)}k (lobby: ${(analysis.lobbyAverages.totalDamageDealtToChampions/1000).toFixed(1)}k)`,
+                `Gold: ${(analysis.playerAverages.goldEarned/1000).toFixed(1)}k (lobby: ${(analysis.lobbyAverages.goldEarned/1000).toFixed(1)}k)`,
+              ].join("\n")}
             />
           </div>
 
