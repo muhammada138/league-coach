@@ -54,9 +54,10 @@ function NavSearch() {
       const data = await getSummoner(parsed.gameName, parsed.tagLine);
       setQuery("");
       inputRef.current?.blur();
-      navigate("/dashboard", {
-        state: { puuid: data.puuid, gameName: data.gameName, tagLine: parsed.tagLine },
-      });
+      navigate(
+        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(parsed.tagLine)}`,
+        { state: { puuid: data.puuid } }
+      );
     } catch (err) {
       setError(err.response?.status === 404 ? "Summoner not found" : "Something went wrong");
     } finally {
@@ -168,15 +169,17 @@ function SavedDropdown() {
       // fresh lookup to get canonical casing + confirm account still exists
       const data = await getSummoner(p.gameName, p.tagLine);
       setOpen(false);
-      navigate("/dashboard", {
-        state: { puuid: data.puuid, gameName: data.gameName, tagLine: p.tagLine },
-      });
+      navigate(
+        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(p.tagLine)}`,
+        { state: { puuid: data.puuid } }
+      );
     } catch {
       // fall back to cached puuid if the API is down
       setOpen(false);
-      navigate("/dashboard", {
-        state: { puuid: p.puuid, gameName: p.gameName, tagLine: p.tagLine },
-      });
+      navigate(
+        `/player/${encodeURIComponent(p.gameName)}/${encodeURIComponent(p.tagLine)}`,
+        { state: { puuid: p.puuid } }
+      );
     } finally {
       setLoadingId(null);
     }

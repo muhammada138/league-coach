@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
+from pydantic import BaseModel
+from typing import List
 import asyncio
 import httpx
 import os
@@ -59,11 +61,14 @@ async def get_profile(puuid: str):
     summoner_level = summoner.get("summonerLevel", 0)
     ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
 
+    profile_icon_id = summoner.get("profileIconId", 0)
+
     if ranked is None:
-        return {"summonerLevel": summoner_level, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0}
+        return {"summonerLevel": summoner_level, "profileIconId": profile_icon_id, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0}
 
     return {
         "summonerLevel": summoner_level,
+        "profileIconId": profile_icon_id,
         "tier": ranked["tier"],
         "division": ranked["rank"],
         "lp": ranked["leaguePoints"],
@@ -84,13 +89,14 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
         if not match_ids:
             raise HTTPException(status_code=404, detail="No ranked matches found")
 
-        # 2. Fetch full match data for each match
+        # 2. Fetch all match data in parallel
+        match_datas = await asyncio.gather(*[
+            riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
+            for mid in match_ids
+        ])
+
         games = []
-        for match_id in match_ids:
-            match_data = await riot_get(
-                client,
-                f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{match_id}",
-            )
+        for match_id, match_data in zip(match_ids, match_datas):
             info = match_data["info"]
             participants = info["participants"]
             game_duration = info["gameDuration"]
@@ -221,7 +227,8 @@ Per game breakdown:
 {game_breakdown}"""
 
     groq_client = Groq(api_key=GROQ_API_KEY)
-    completion = groq_client.chat.completions.create(
+    completion = await asyncio.to_thread(
+        groq_client.chat.completions.create,
         model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": system_prompt},
@@ -292,3 +299,38 @@ async def get_scoreboard(match_id: str):
         }
         for p in participants
     ]
+
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class AskRequest(BaseModel):
+    question: str
+    context: str
+    history: List[ChatMessage] = []
+
+
+@app.post("/ask")
+async def ask_coach(body: AskRequest):
+    groq_client = Groq(api_key=GROQ_API_KEY)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a professional League of Legends coach with access to a player's recent stats. "
+                "Answer questions specifically based on their data. Be concise, direct, and actionable. "
+                "Reference specific numbers when relevant. Keep responses to 3-4 sentences max.\n\n"
+                f"Player context:\n{body.context}"
+            ),
+        },
+        *[{"role": m.role, "content": m.content} for m in body.history],
+        {"role": "user", "content": body.question},
+    ]
+    completion = await asyncio.to_thread(
+        groq_client.chat.completions.create,
+        model="llama-3.3-70b-versatile",
+        messages=messages,
+        max_tokens=300,
+    )
+    return {"answer": completion.choices[0].message.content}

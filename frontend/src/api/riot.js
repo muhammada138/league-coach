@@ -13,3 +13,6 @@ export const analyzeSummoner = (puuid, gameName) =>
 
 export const getScoreboard = (matchId) =>
   api.get(`/match/${matchId}/scoreboard`).then((r) => r.data);
+
+export const askCoach = (question, context, history) =>
+  api.post("/ask", { question, context, history }).then((r) => r.data);

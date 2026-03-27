@@ -12,7 +12,7 @@ export default function App() {
           <Navbar />
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/player/:gameName/:tagLine" element={<Dashboard />} />
           </Routes>
         </BrowserRouter>
       </div>
