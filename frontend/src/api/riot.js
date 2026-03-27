@@ -19,3 +19,6 @@ export const getScoreboard = (matchId) =>
 
 export const askCoach = (question, context, history) =>
   api.post("/ask", { question, context, history }).then((r) => r.data);
+
+export const getLiveGame = (puuid) =>
+  api.get(`/live/${puuid}`).then((r) => r.data);
