@@ -199,21 +199,22 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
 
     # 8. Build Groq prompt and call API
     system_prompt = (
-        "You are a professional League of Legends coach. You will be given a player's aggregated "
-        "stats across their last 5 ranked games, compared against the lobby average for each game. "
-        "Identify 3-5 specific weaknesses based on where the player is consistently underperforming "
-        "relative to their lobbies. Be direct, specific, and actionable. Reference the actual numbers. "
-        "Do not be generic. Keep each tip to 2-3 sentences maximum. Be direct, no fluff. "
-        "IMPORTANT grouping rules — these are the same category, give at most ONE tip per group: "
-        "(1) Vision = vision score + wards placed + wards killed — pick whichever is worst, do not mention this group more than once. "
-        "(2) Combat = KDA + kills + deaths + assists — one tip only. "
-        "(3) Economy = CS per minute + gold earned — one tip only. "
-        "Order tips from highest to lowest impact on game outcomes. Format as a numbered list."
+        "You are a League of Legends coach giving direct, personal feedback to this specific player. "
+        "Always speak in second person — 'you', 'your', 'you're'. Talk like a real coach, not a report writer. "
+        "Be blunt and human. No corporate filler like 'it appears', 'based on the data', or 'it seems'. "
+        "Give 3-4 weaknesses where they are underperforming vs their lobby. "
+        "Each tip: 1-2 sentences max. Lead with the problem, end with one concrete fix. "
+        "Bold (**) every stat number and every key concept/stat name you mention so the player can scan quickly. "
+        "GROUPING RULES — one tip max per group: "
+        "(1) Vision = vision score + wards placed + wards killed. "
+        "(2) Combat = KDA + kills + deaths + assists. "
+        "(3) Economy = CS per minute + gold earned. "
+        "Order by highest impact first. Format as a numbered list. No intro sentence, go straight to tip 1."
     )
 
     user_prompt = f"""Player: {game_name}
 Most played role: {most_common_position}
-Win rate last 5 games: {win_rate}%
+Win rate last 20 games: {win_rate}%
 
 Player averages vs lobby averages:
 - KDA ratio: {fmt(player_kda)} vs {fmt(lobby_kda)} (delta: {delta_str(player_kda - lobby_kda)})
@@ -319,9 +320,10 @@ async def ask_coach(body: AskRequest):
         {
             "role": "system",
             "content": (
-                "You are a professional League of Legends coach with access to a player's recent stats. "
-                "Answer questions specifically based on their data. Be concise, direct, and actionable. "
-                "Reference specific numbers when relevant. Keep responses to 3-4 sentences max.\n\n"
+                "You are a League of Legends coach talking directly to this player. "
+                "Always use second person — 'you', 'your'. Be casual, direct, and human. "
+                "No filler phrases, no 'based on your data'. Bold (**) every number and key stat name you mention. "
+                "Keep replies to 2-3 sentences max.\n\n"
                 f"Player context:\n{body.context}"
             ),
         },
