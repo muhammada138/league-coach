@@ -42,17 +42,102 @@ function computePerformanceScore(player, allPlayers) {
   return scoreTable[Math.min(rank, 9)];
 }
 
-// ── Loading ────────────────────────────────────────────────────────────────
-function LoadingScreen() {
+// ── Skeleton loading ────────────────────────────────────────────────────────
+function Sk({ className = "" }) {
+  return <div className={`skeleton ${className}`} />;
+}
+
+function SkeletonDashboard() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-5 pt-14">
-      <div className="relative w-14 h-14">
-        <div className="absolute inset-0 rounded-full border-2 border-[#c89b3c]/20" />
-        <div className="absolute inset-0 rounded-full border-2 border-t-[#c89b3c] animate-spin" />
+    <div className="min-h-screen pt-20 pb-16 px-4 animate-fadeIn">
+      <div className="max-w-6xl mx-auto">
+        <Sk className="h-3.5 w-20 mb-5" />
+
+        <div className="flex flex-col lg:flex-row gap-5 items-start">
+          {/* Left column */}
+          <div className="flex-1 min-w-0 space-y-4">
+
+            {/* Profile card */}
+            <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-2xl p-5">
+              <div className="flex items-center gap-4">
+                <Sk className="w-14 h-14 rounded-xl flex-shrink-0" />
+                <div className="flex-1 space-y-2.5">
+                  <Sk className="h-5 w-36" />
+                  <Sk className="h-3 w-14" />
+                  <Sk className="h-4 w-52" />
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06]">
+                <div className="flex justify-between mb-2">
+                  <Sk className="h-2.5 w-20" />
+                  <Sk className="h-2.5 w-14" />
+                </div>
+                <Sk className="h-[52px] w-full" />
+                <div className="flex justify-between mt-1.5">
+                  <Sk className="h-2 w-16" />
+                  <Sk className="h-2 w-6" />
+                </div>
+              </div>
+            </div>
+
+            {/* Match rows */}
+            <div>
+              <Sk className="h-2.5 w-24 mb-2" />
+              <div className="space-y-2">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="rounded-xl overflow-hidden border border-slate-200 dark:border-white/[0.07]">
+                    <div className="flex items-center gap-3 px-4 py-3 bg-slate-50/50 dark:bg-white/[0.01]">
+                      <Sk className="w-1 h-12 rounded-full flex-shrink-0" />
+                      <Sk className="w-12 h-12 rounded-lg flex-shrink-0" />
+                      <div className="w-36 flex-shrink-0 space-y-1.5">
+                        <Sk className="h-4 w-28" />
+                        <Sk className="h-3 w-20" />
+                      </div>
+                      <div className="flex-1 flex items-center gap-5">
+                        <div className="space-y-1.5">
+                          <Sk className="h-4 w-16" />
+                          <Sk className="h-2.5 w-12" />
+                        </div>
+                        <div className="hidden sm:block space-y-1.5">
+                          <Sk className="h-4 w-10" />
+                          <Sk className="h-2.5 w-8" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right panel */}
+          <div className="w-full lg:w-80 xl:w-96 flex-shrink-0">
+            <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-2xl overflow-hidden">
+              <div className="flex border-b border-slate-100 dark:border-white/[0.06]">
+                <div className="flex-1 py-3.5 px-4 flex items-center justify-center">
+                  <Sk className="h-3.5 w-20" />
+                </div>
+                <div className="w-px bg-slate-100 dark:bg-white/[0.06]" />
+                <div className="flex-1 py-3.5 px-4 flex items-center justify-center">
+                  <Sk className="h-3.5 w-12" />
+                </div>
+              </div>
+              <div className="p-5 space-y-5">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="flex gap-3">
+                    <Sk className="w-6 h-6 rounded-full flex-shrink-0" />
+                    <div className="flex-1 space-y-2">
+                      <Sk className="h-3.5 w-full" />
+                      <Sk className={`h-3.5 ${i % 2 === 0 ? "w-4/5" : "w-3/5"}`} />
+                      <Sk className={`h-3.5 ${i % 3 === 0 ? "w-3/5" : "w-2/3"}`} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <p className="text-slate-500 dark:text-white/40 text-sm font-medium tracking-wide animate-pulse">
-        Analyzing your last 5 games...
-      </p>
     </div>
   );
 }
@@ -597,7 +682,7 @@ export default function Dashboard() {
     }
   };
 
-  if (loading) return <LoadingScreen />;
+  if (loading) return <SkeletonDashboard />;
   if (error) return <ErrorScreen message={error} onRetry={() => navigate("/")} />;
 
   return (
