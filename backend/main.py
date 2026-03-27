@@ -185,6 +185,16 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
             game_score = _compute_perf_score(player, participants)
             game_diffed_lane = _compute_diffed_lane(participants)
 
+            player_team_id = player.get("teamId")
+            teammates = [
+                {
+                    "gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown",
+                    "puuid": p.get("puuid", ""),
+                }
+                for p in participants
+                if p.get("puuid") != puuid and p.get("teamId") == player_team_id
+            ]
+
             games.append({
                 "matchId": match_id,
                 "playerStats": player_stats,
@@ -194,6 +204,7 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
                 "lobbyCspm": round(lobby_cspm, 2),
                 "score": game_score,
                 "diffedLane": game_diffed_lane,
+                "teammates": teammates,
             })
 
     if not games:
@@ -305,6 +316,7 @@ Per game breakdown:
             "gameDuration": ps["gameDuration"],
             "score": g["score"],
             "diffedLane": g["diffedLane"],
+            "teammates": g.get("teammates", []),
         })
 
     diffed_lanes = [g["diffedLane"] for g in game_summaries if g["diffedLane"]]
@@ -355,6 +367,15 @@ async def get_history(puuid: str, start: int = 0, count: int = 10):
             continue
         minutes = info["gameDuration"] / 60
         cspm = round(player["totalMinionsKilled"] / minutes if minutes > 0 else 0, 2)
+        player_team_id = player.get("teamId")
+        hist_teammates = [
+            {
+                "gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown",
+                "puuid": p.get("puuid", ""),
+            }
+            for p in participants
+            if p.get("puuid") != puuid and p.get("teamId") == player_team_id
+        ]
         games.append({
             "matchId": match_id,
             "championName": player["championName"],
@@ -368,6 +389,7 @@ async def get_history(puuid: str, start: int = 0, count: int = 10):
             "gameDuration": info["gameDuration"],
             "score": _compute_perf_score(player, participants),
             "diffedLane": _compute_diffed_lane(participants),
+            "teammates": hist_teammates,
         })
     return games
 
@@ -396,6 +418,37 @@ async def get_scoreboard(match_id: str):
         }
         for p in participants
     ]
+
+
+@app.get("/live/{puuid}")
+async def get_live_game(puuid: str):
+    url = f"https://{RIOT_REGION}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{puuid}"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=RIOT_HEADERS)
+        if response.status_code == 404:
+            return {"inGame": False}
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        data = response.json()
+
+    participants = data.get("participants", [])
+    return {
+        "inGame": True,
+        "gameId": data.get("gameId"),
+        "gameMode": data.get("gameMode", ""),
+        "queueId": data.get("gameQueueConfigId", 0),
+        "gameLength": data.get("gameLength", 0),
+        "participants": [
+            {
+                "puuid": p.get("puuid", ""),
+                "summonerName": (p.get("riotId") or p.get("summonerName") or "Unknown").split("#")[0],
+                "tagLine": ((p.get("riotId") or "#")).split("#")[-1],
+                "championId": p.get("championId", 0),
+                "teamId": p.get("teamId", 0),
+            }
+            for p in participants
+        ],
+    }
 
 
 class ChatMessage(BaseModel):
