@@ -245,6 +245,23 @@ function StarButton({ gameName, tagLine, puuid }) {
   );
 }
 
+const LANE_META = {
+  TOP:     { abbr: "TOP", color: "text-blue-400",   bg: "bg-blue-400/10",   border: "border-blue-400/25"   },
+  JUNGLE:  { abbr: "JGL", color: "text-green-400",  bg: "bg-green-400/10",  border: "border-green-400/25"  },
+  MIDDLE:  { abbr: "MID", color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/25" },
+  BOTTOM:  { abbr: "BOT", color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/25" },
+  UTILITY: { abbr: "SUP", color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/25" },
+};
+
+function LaneIcon({ lane }) {
+  const m = LANE_META[lane] ?? { abbr: lane ?? "?", color: "text-slate-400", bg: "bg-slate-400/10", border: "border-slate-400/25" };
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase tracking-wide flex-shrink-0 ${m.color} ${m.bg} ${m.border}`}>
+      {m.abbr}
+    </span>
+  );
+}
+
 const TIER_EMBLEM = {
   IRON: "Iron", BRONZE: "Bronze", SILVER: "Silver", GOLD: "Gold",
   PLATINUM: "Platinum", EMERALD: "Emerald", DIAMOND: "Diamond",
@@ -254,7 +271,7 @@ const TIER_EMBLEM = {
 // ── Profile Card ───────────────────────────────────────────────────────────
 function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion }) {
   const totalGames = profile.wins + profile.losses;
-  const wr = totalGames > 0 ? ((profile.wins / totalGames) * 100).toFixed(1) : "—";
+  const wr = totalGames > 0 ? ((profile.wins / totalGames) * 100).toFixed(1) : "-";
   const tierColor = TIER_COLORS[profile.tier] ?? "text-slate-400";
   const rankLabel =
     profile.tier === "UNRANKED" ? "Unranked" : `${profile.tier} ${profile.division}`;
@@ -340,7 +357,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName }) {
             : "bg-red-50 dark:bg-red-950/50 text-red-500 dark:text-red-400"
         }`}>
           <span className="text-[10px] font-bold uppercase tracking-widest">
-            {teamLabel} — {isWin ? "Victory" : "Defeat"}
+            {teamLabel}: {isWin ? "Victory" : "Defeat"}
           </span>
         </td>
       </tr>
@@ -461,6 +478,11 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
   const secs = String(game.gameDuration % 60).padStart(2, "0");
   const imgSrc = `https://ddragon.leagueoflegends.com/cdn/14.24.1/img/champion/${game.championName}.png`;
   const kda = ((game.kills + game.assists) / Math.max(game.deaths, 1)).toFixed(2);
+  const scoreColor = game.score >= 79
+    ? "text-emerald-500 dark:text-emerald-400"
+    : game.score >= 50
+    ? "text-[#c89b3c]"
+    : "text-slate-400 dark:text-white/40";
 
   return (
     <div
@@ -503,8 +525,16 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
               {game.win ? "W" : "L"}
             </span>
           </div>
-          <div className="text-[11px] text-slate-400 dark:text-white/30 mt-0.5">
-            {game.teamPosition || "—"} · {mins}:{secs}
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-[11px] text-slate-400 dark:text-white/30">
+              {game.teamPosition || "-"} · {mins}:{secs}
+            </span>
+            {game.diffedLane && (
+              <span className="flex items-center gap-0.5">
+                <LaneIcon lane={game.diffedLane} />
+                <span className="text-[10px] text-slate-400 dark:text-white/30">Diff</span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -531,6 +561,14 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
             <div className="text-[10px] text-slate-400 dark:text-white/25 uppercase tracking-wide">Vision</div>
           </div>
         </div>
+
+        {/* Score */}
+        {game.score != null && (
+          <div className="hidden sm:flex flex-col items-center flex-shrink-0">
+            <span className={`text-sm font-black tabular-nums ${scoreColor}`}>{game.score}</span>
+            <span className="text-[10px] text-slate-400 dark:text-white/25 uppercase tracking-wide">Score</span>
+          </div>
+        )}
 
         {/* Expand toggle */}
         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 ${
@@ -592,7 +630,7 @@ function StatsContent({ playerAverages, lobbyAverages, deltas }) {
             <span className="text-xs font-semibold text-slate-900 dark:text-white">{fmt(pVal)}</span>
             <span className="text-xs text-slate-400 dark:text-white/30">{fmt(lVal)}</span>
             <span className={`text-xs font-semibold ${deltaColor}`}>
-              {dVal > 0 ? "+" : ""}{typeof dVal === "number" ? dVal.toFixed(2) : "—"}
+              {dVal > 0 ? "+" : ""}{typeof dVal === "number" ? dVal.toFixed(2) : "-"}
             </span>
           </div>
         );
@@ -691,9 +729,9 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
   }, [chatHistory, chatLoading]);
 
   return (
-    <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-2xl shadow-sm dark:shadow-black/40 flex flex-col">
+    <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-2xl shadow-sm dark:shadow-black/40 flex flex-col lg:max-h-[calc(100vh-5.5rem)] lg:overflow-hidden">
       {/* Tab bar */}
-      <div className="flex border-b border-slate-100 dark:border-white/[0.06]">
+      <div className="flex border-b border-slate-100 dark:border-white/[0.06] flex-shrink-0">
         {[
           { id: "coaching", label: "AI Coaching", dot: true },
           { id: "stats",    label: "Stats",        dot: false },
@@ -714,11 +752,11 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 animate-fadeIn" key={tab}>
+      <div className="lg:flex-1 lg:min-h-0 lg:flex lg:flex-col animate-fadeIn" key={tab}>
         {tab === "coaching" ? (
-          <div className="flex flex-col">
+          <div className="flex flex-col lg:flex-1 lg:min-h-0 lg:overflow-hidden">
             {/* Tips */}
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
               {fallback ? (
                 <div className="text-sm text-slate-600 dark:text-white/60 leading-relaxed
                   [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white
@@ -741,7 +779,7 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
             </div>
 
             {/* Chat */}
-            <div className="border-t border-slate-100 dark:border-white/[0.06]">
+            <div className="border-t border-slate-100 dark:border-white/[0.06] flex-shrink-0">
               {chatHistory.length > 0 && (
                 <div className="px-4 pt-4 pb-2 space-y-3 max-h-72 overflow-y-auto">
                   {chatHistory.map((msg, i) => (
@@ -800,11 +838,13 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
             </div>
           </div>
         ) : (
-          <StatsContent
-            playerAverages={playerAverages}
-            lobbyAverages={lobbyAverages}
-            deltas={deltas}
-          />
+          <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+            <StatsContent
+              playerAverages={playerAverages}
+              lobbyAverages={lobbyAverages}
+              deltas={deltas}
+            />
+          </div>
         )}
       </div>
     </div>
@@ -892,7 +932,7 @@ export default function Dashboard() {
       setExtraGames((prev) => [...prev, ...newGames]);
       if (newGames.length < count) setHasMore(false);
     } catch {
-      // silently fail — button stays visible for retry
+      // silently fail - button stays visible for retry
     } finally {
       setLoadingMore(false);
     }
@@ -950,12 +990,27 @@ export default function Dashboard() {
 
         <div className="flex flex-col lg:flex-row gap-5 items-start">
 
-          {/* Left — profile + match history */}
+          {/* Left - profile + match history */}
           <div className="flex-1 min-w-0 space-y-4">
 
             <ProfileCard gameName={gameName} tagLine={tagLine} puuid={resolvedPuuid} profile={profile} games={analysis.games} ddVersion={ddVersion} />
 
             <SummaryStrip analysis={analysis} />
+
+            {analysis.mostDiffedLane && (() => {
+              const m = LANE_META[analysis.mostDiffedLane] ?? { abbr: analysis.mostDiffedLane, color: "text-slate-400", bg: "bg-slate-400/10", border: "border-slate-400/25" };
+              return (
+                <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${m.bg} ${m.border}`}>
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-black border flex-shrink-0 ${m.color} ${m.bg} ${m.border}`}>
+                    {m.abbr}
+                  </div>
+                  <div className="min-w-0">
+                    <div className={`text-sm font-bold ${m.color}`}>{m.abbr} was most diffed</div>
+                    <div className="text-[11px] text-slate-400 dark:text-white/30">biggest score gap across your recent games</div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {(() => {
               const allGames = [...analysis.games, ...extraGames];
@@ -1004,7 +1059,7 @@ export default function Dashboard() {
 
           </div>
 
-          {/* Right — sticky tabbed panel */}
+          {/* Right - sticky tabbed panel */}
           <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-20">
             <RightPanel
               coaching={analysis.coaching}
