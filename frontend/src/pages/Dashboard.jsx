@@ -660,10 +660,10 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
   const chatEndRef = useRef(null);
 
   const tips = coaching
-    .split(/\n+/)
-    .map((l) => l.trim())
-    .filter((l) => /^\d+[\.\)]/.test(l))
-    .map((l) => l.replace(/^\d+[\.\)]\s*/, "").trim());
+    .split(/\n(?=\d+[\.\)])/g)
+    .map((s) => s.trim())
+    .filter((s) => /^\d+[\.\)]/.test(s))
+    .map((s) => s.replace(/^\d+[\.\)]\s*/, "").trim());
 
   const fallback = tips.length === 0;
 
@@ -824,12 +824,32 @@ export default function Dashboard() {
   const [profile, setProfile] = useState(null);
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [ddVersion, setDdVersion] = useState("14.24.1");
 
   const [expandedMatchId, setExpandedMatchId] = useState(null);
   const [scoreboard, setScoreboard] = useState(null);
   const [scoreboardLoading, setScoreboardLoading] = useState(false);
+
+  const doFetch = async (puuidHint) => {
+    const [versions, puuidResolved] = await Promise.all([
+      fetch("https://ddragon.leagueoflegends.com/api/versions.json")
+        .then((r) => r.json())
+        .catch(() => ["14.24.1"]),
+      puuidHint
+        ? Promise.resolve(puuidHint)
+        : getSummoner(gameName, tagLine).then((d) => d.puuid),
+    ]);
+    setDdVersion(versions[0]);
+    setResolvedPuuid(puuidResolved);
+    const [prof, anal] = await Promise.all([
+      getProfile(puuidResolved),
+      analyzeSummoner(puuidResolved, gameName),
+    ]);
+    setProfile(prof);
+    setAnalysis(anal);
+  };
 
   useEffect(() => {
     if (!gameName || !tagLine) { navigate("/"); return; }
@@ -839,30 +859,20 @@ export default function Dashboard() {
     setError("");
     setExpandedMatchId(null);
     setScoreboard(null);
-
-    const puuidHint = state?.puuid;
-    const run = async () => {
-      const [versions, puuidResolved] = await Promise.all([
-        fetch("https://ddragon.leagueoflegends.com/api/versions.json")
-          .then((r) => r.json())
-          .catch(() => ["14.24.1"]),
-        puuidHint
-          ? Promise.resolve(puuidHint)
-          : getSummoner(gameName, tagLine).then((d) => d.puuid),
-      ]);
-      setDdVersion(versions[0]);
-      setResolvedPuuid(puuidResolved);
-      const [prof, anal] = await Promise.all([
-        getProfile(puuidResolved),
-        analyzeSummoner(puuidResolved, gameName),
-      ]);
-      setProfile(prof);
-      setAnalysis(anal);
-    };
-    run()
+    doFetch(state?.puuid)
       .catch(() => setError("Failed to load data. Check that the backend is running."))
       .finally(() => setLoading(false));
   }, [gameName, tagLine]);
+
+  const handleRefresh = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setExpandedMatchId(null);
+    setScoreboard(null);
+    doFetch(resolvedPuuid)
+      .catch(() => setError("Failed to refresh."))
+      .finally(() => setRefreshing(false));
+  };
 
   const handleToggleGame = async (matchId) => {
     if (expandedMatchId === matchId) {
@@ -890,12 +900,29 @@ export default function Dashboard() {
     <div className="min-h-screen pt-20 pb-16 px-4 animate-fadeIn">
       <div className="max-w-6xl mx-auto">
 
-        <button
-          onClick={() => navigate("/")}
-          className="text-xs font-semibold text-slate-400 dark:text-white/30 hover:text-[#c89b3c] dark:hover:text-[#c89b3c] transition-colors flex items-center gap-1 mb-4"
-        >
-          ← Search Again
-        </button>
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={() => navigate("/")}
+            className="text-xs font-semibold text-slate-400 dark:text-white/30 hover:text-[#c89b3c] dark:hover:text-[#c89b3c] transition-colors flex items-center gap-1"
+          >
+            ← Search Again
+          </button>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 dark:text-white/30 hover:text-[#c89b3c] dark:hover:text-[#c89b3c] disabled:opacity-50 transition-colors"
+          >
+            {refreshing ? (
+              <span className="w-3.5 h-3.5 rounded-full border-[1.5px] border-slate-300 dark:border-white/20 border-t-[#c89b3c] animate-spin block" />
+            ) : (
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5c1.55 0 2.95.64 3.96 1.66" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M11.5 1.5v3h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
 
         <div className="flex flex-col lg:flex-row gap-5 items-start">
 
