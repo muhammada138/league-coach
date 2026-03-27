@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { getProfile, analyzeSummoner, getScoreboard, getSummoner, askCoach } from "../api/riot";
+import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach } from "../api/riot";
 import { readSaved, writeSaved } from "../components/Navbar";
 
 const TIER_COLORS = {
@@ -832,6 +832,11 @@ export default function Dashboard() {
   const [scoreboard, setScoreboard] = useState(null);
   const [scoreboardLoading, setScoreboardLoading] = useState(false);
 
+  const MAX_GAMES = 40;
+  const [extraGames, setExtraGames] = useState([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
   const doFetch = async (puuidHint) => {
     const [versions, puuidResolved] = await Promise.all([
       fetch("https://ddragon.leagueoflegends.com/api/versions.json")
@@ -849,6 +854,8 @@ export default function Dashboard() {
     ]);
     setProfile(prof);
     setAnalysis(anal);
+    setExtraGames([]);
+    setHasMore(true);
   };
 
   useEffect(() => {
@@ -872,6 +879,23 @@ export default function Dashboard() {
     doFetch(resolvedPuuid)
       .catch(() => setError("Failed to refresh."))
       .finally(() => setRefreshing(false));
+  };
+
+  const handleLoadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const start = analysis.games.length + extraGames.length;
+      const remaining = MAX_GAMES - start;
+      const count = Math.min(10, remaining);
+      const newGames = await getHistory(resolvedPuuid, start, count);
+      setExtraGames((prev) => [...prev, ...newGames]);
+      if (newGames.length < count) setHasMore(false);
+    } catch {
+      // silently fail — button stays visible for retry
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   const handleToggleGame = async (matchId) => {
@@ -933,22 +957,50 @@ export default function Dashboard() {
 
             <SummaryStrip analysis={analysis} />
 
-            <div>
-              <SectionLabel>Match History</SectionLabel>
-              <div className="space-y-2">
-                {analysis.games.map((game) => (
-                  <GameRow
-                    key={game.matchId}
-                    game={game}
-                    isExpanded={expandedMatchId === game.matchId}
-                    onToggle={() => handleToggleGame(game.matchId)}
-                    scoreboard={expandedMatchId === game.matchId ? scoreboard : null}
-                    scoreboardLoading={expandedMatchId === game.matchId && scoreboardLoading}
-                    gameName={gameName}
-                  />
-                ))}
-              </div>
-            </div>
+            {(() => {
+              const allGames = [...analysis.games, ...extraGames];
+              const canLoadMore = hasMore && allGames.length < MAX_GAMES;
+              return (
+                <div>
+                  <SectionLabel>Match History</SectionLabel>
+                  <div className="space-y-2">
+                    {allGames.map((game) => (
+                      <GameRow
+                        key={game.matchId}
+                        game={game}
+                        isExpanded={expandedMatchId === game.matchId}
+                        onToggle={() => handleToggleGame(game.matchId)}
+                        scoreboard={expandedMatchId === game.matchId ? scoreboard : null}
+                        scoreboardLoading={expandedMatchId === game.matchId && scoreboardLoading}
+                        gameName={gameName}
+                      />
+                    ))}
+                  </div>
+                  {canLoadMore && (
+                    <button
+                      onClick={handleLoadMore}
+                      disabled={loadingMore}
+                      className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl
+                        border border-slate-200 dark:border-white/[0.07]
+                        bg-white dark:bg-white/[0.02]
+                        text-xs font-semibold text-slate-400 dark:text-white/30
+                        hover:text-[#c89b3c] hover:border-[#c89b3c]/30
+                        disabled:opacity-50 transition-colors"
+                    >
+                      {loadingMore ? (
+                        <span className="w-3.5 h-3.5 rounded-full border-[1.5px] border-slate-300 dark:border-white/20 border-t-[#c89b3c] animate-spin block" />
+                      ) : null}
+                      {loadingMore ? "Loading…" : `Load more · ${allGames.length} / ${MAX_GAMES}`}
+                    </button>
+                  )}
+                  {!canLoadMore && allGames.length >= MAX_GAMES && (
+                    <p className="mt-3 text-center text-[11px] text-slate-300 dark:text-white/20">
+                      Showing max {MAX_GAMES} games
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
 
           </div>
 
