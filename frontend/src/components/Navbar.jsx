@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
 import { getSummoner } from "../api/riot";
 
-// ── localStorage helpers (used by both the dropdown here and the star in ProfileCard) ──
+// ── localStorage helpers ─────────────────────────────────────────────────────
 export const SAVED_KEY = "savedProfiles";
 
 export function readSaved() {
@@ -18,7 +18,24 @@ export function writeSaved(profiles) {
   localStorage.setItem(SAVED_KEY, JSON.stringify(profiles));
 }
 
-// "Faker #KR1", "Faker#KR1", "faker # kr1" → { gameName, tagLine } or null
+const HISTORY_KEY = "searchHistory";
+
+function readSearchHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveSearchHistory(entry) {
+  const history = readSearchHistory().filter(
+    (h) => h.toLowerCase() !== entry.toLowerCase()
+  );
+  localStorage.setItem(HISTORY_KEY, JSON.stringify([entry, ...history].slice(0, 8)));
+}
+
+// "Faker #KR1", "Faker#KR1" → { gameName, tagLine } or null
 function parseRiotId(raw) {
   const match = raw.trim().match(/^(.+?)\s*#\s*(.+)$/);
   if (!match) return null;
@@ -27,23 +44,48 @@ function parseRiotId(raw) {
   return gameName && tagLine ? { gameName, tagLine } : null;
 }
 
-// ── Navbar search bar ────────────────────────────────────────────────────────
+// ── Profile avatar (icon image or letter fallback) ───────────────────────────
+function ProfileAvatar({ profile }) {
+  const [failed, setFailed] = useState(false);
+  if (!profile.profileIconId || failed) {
+    return (
+      <span className="w-6 h-6 rounded-md bg-[#c89b3c]/10 border border-[#c89b3c]/20 text-[#c89b3c] text-[10px] font-black flex items-center justify-center flex-shrink-0">
+        {profile.gameName.charAt(0).toUpperCase()}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={`https://ddragon.leagueoflegends.com/cdn/14.24.1/img/profileicon/${profile.profileIconId}.png`}
+      alt=""
+      className="w-6 h-6 rounded-md object-cover flex-shrink-0"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
+// ── Navbar search bar ────────────────────────────────────────────────────────
 function NavSearch() {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [history, setHistory] = useState([]);
   const inputRef = useRef(null);
   const blurTimer = useRef(null);
   const navigate = useNavigate();
 
-  // collapsed = just the icon; expanded = icon + input visible
   const expanded = focused || query.length > 0;
+  const showHistory = focused && query.length === 0 && history.length > 0 && !error;
 
-  const handleSubmit = async (e) => {
+  useEffect(() => {
+    if (focused) setHistory(readSearchHistory());
+  }, [focused]);
+
+  const handleSubmit = async (e, prefill) => {
     e?.preventDefault();
-    const parsed = parseRiotId(query);
+    const raw = prefill ?? query;
+    const parsed = parseRiotId(raw);
     if (!parsed) {
       setError("Format: Name#TAG");
       return;
@@ -52,6 +94,7 @@ function NavSearch() {
     setLoading(true);
     try {
       const data = await getSummoner(parsed.gameName, parsed.tagLine);
+      saveSearchHistory(raw);
       setQuery("");
       inputRef.current?.blur();
       navigate(
@@ -65,8 +108,11 @@ function NavSearch() {
     }
   };
 
-  // slight blur delay so clicking the submit button doesn't collapse the bar
-  // before the click event fires
+  const handleHistoryClick = (item) => {
+    setQuery(item);
+    handleSubmit(null, item);
+  };
+
   const handleBlur = () => {
     blurTimer.current = setTimeout(() => setFocused(false), 150);
   };
@@ -90,7 +136,6 @@ function NavSearch() {
           bg-slate-50 dark:bg-white/[0.04]
           ${expanded ? "w-44 sm:w-52" : "w-8 sm:w-40"}`}
       >
-        {/* search icon / spinner - clicking it focuses the input on mobile */}
         <button
           type="submit"
           tabIndex={-1}
@@ -126,6 +171,49 @@ function NavSearch() {
         />
       </div>
 
+      {/* Search history dropdown */}
+      {showHistory && (
+        <div className="absolute top-full left-0 mt-1.5 w-52 z-50
+          bg-white dark:bg-[#0b0f1a]
+          border border-slate-200 dark:border-white/[0.08]
+          rounded-xl shadow-xl dark:shadow-black/60
+          overflow-hidden animate-fadeIn">
+          <div className="px-3 py-2 border-b border-slate-100 dark:border-white/[0.06]">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25">
+              Recent
+            </span>
+          </div>
+          <div className="py-1">
+            {history.map((item) => {
+              const hashIdx = item.indexOf("#");
+              const name = hashIdx > -1 ? item.slice(0, hashIdx) : item;
+              const tag = hashIdx > -1 ? item.slice(hashIdx + 1) : "";
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleHistoryClick(item)}
+                  className="w-full text-left px-3 py-2 text-xs
+                    hover:bg-slate-50 dark:hover:bg-white/[0.04]
+                    text-slate-700 dark:text-white/70 transition-colors flex items-center gap-1.5"
+                >
+                  <svg className="w-3 h-3 text-slate-300 dark:text-white/20 flex-shrink-0" viewBox="0 0 12 12" fill="none">
+                    <path d="M6 1v5l3 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.3"/>
+                  </svg>
+                  <span className="truncate">
+                    {name}
+                    {tag && <span className="text-slate-400 dark:text-white/30">#{tag}</span>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Error tooltip */}
       {error && (
         <div className="absolute top-full mt-1.5 left-0 z-50
           bg-white dark:bg-[#0d1117]
@@ -140,20 +228,17 @@ function NavSearch() {
 }
 
 // ── Saved profiles dropdown ──────────────────────────────────────────────────
-
 function SavedDropdown() {
   const [open, setOpen] = useState(false);
   const [profiles, setProfiles] = useState([]);
-  const [loadingId, setLoadingId] = useState(null); // puuid of profile being loaded
+  const [loadingId, setLoadingId] = useState(null);
   const wrapperRef = useRef(null);
   const navigate = useNavigate();
 
-  // re-read localStorage every time the dropdown opens
   useEffect(() => {
     if (open) setProfiles(readSaved());
   }, [open]);
 
-  // close on outside click
   useEffect(() => {
     if (!open) return;
     const onMouseDown = (e) => {
@@ -166,7 +251,6 @@ function SavedDropdown() {
   const handleNavigate = async (p) => {
     setLoadingId(p.puuid);
     try {
-      // fresh lookup to get canonical casing + confirm account still exists
       const data = await getSummoner(p.gameName, p.tagLine);
       setOpen(false);
       navigate(
@@ -174,7 +258,6 @@ function SavedDropdown() {
         { state: { puuid: data.puuid } }
       );
     } catch {
-      // fall back to cached puuid if the API is down
       setOpen(false);
       navigate(
         `/player/${encodeURIComponent(p.gameName)}/${encodeURIComponent(p.tagLine)}`,
@@ -202,7 +285,6 @@ function SavedDropdown() {
             : "bg-slate-50 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 text-slate-500 dark:text-white/40 hover:text-[#c89b3c] hover:border-[#c89b3c]/30"
           }`}
       >
-        {/* star icon */}
         <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
           <path d="M8 1.5l1.75 3.55 3.92.57-2.84 2.77.67 3.9L8 10.35l-3.5 1.84.67-3.9L2.33 5.62l3.92-.57L8 1.5z" />
         </svg>
@@ -235,15 +317,12 @@ function SavedDropdown() {
                   className="group flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer
                     hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors"
                 >
-                  {/* avatar letter */}
                   {loadingId === p.puuid ? (
                     <span className="w-6 h-6 flex-shrink-0 flex items-center justify-center">
                       <span className="w-3.5 h-3.5 rounded-full border-[1.5px] border-slate-300 dark:border-white/20 border-t-[#c89b3c] animate-spin block" />
                     </span>
                   ) : (
-                    <span className="w-6 h-6 rounded-md bg-[#c89b3c]/10 border border-[#c89b3c]/20 text-[#c89b3c] text-[10px] font-black flex items-center justify-center flex-shrink-0">
-                      {p.gameName.charAt(0).toUpperCase()}
-                    </span>
+                    <ProfileAvatar profile={p} />
                   )}
 
                   <span className="flex-1 min-w-0 text-xs font-semibold text-slate-700 dark:text-white/70 truncate">
@@ -251,7 +330,6 @@ function SavedDropdown() {
                     <span className="text-slate-400 dark:text-white/30 font-normal">#{p.tagLine}</span>
                   </span>
 
-                  {/* remove button - only visible on hover */}
                   <button
                     onClick={(e) => handleRemove(e, p.puuid)}
                     className="flex-shrink-0 w-5 h-5 rounded flex items-center justify-center
@@ -274,7 +352,6 @@ function SavedDropdown() {
 }
 
 // ── Navbar ───────────────────────────────────────────────────────────────────
-
 export default function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50
