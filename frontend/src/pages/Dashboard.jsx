@@ -46,17 +46,28 @@ function computePerformanceScore(player, allPlayers) {
 
   // Lane Performance (vs lane opponent)
   let laneScore = 0.0;
+  let opp = null;
   if (lane && lane !== "UNKNOWN") {
-    const opp = allPlayers.find(
+    opp = allPlayers.find(
       (p) => p.teamPosition === lane && p.teamId !== player.teamId
     );
-    if (opp) {
-      const goldDiff = (player.goldEarned ?? 0) - (opp.goldEarned ?? 0);
-      const xpDiff   = (player.champExperience ?? 0) - (opp.champExperience ?? 0);
-      const maxCsAdv = ch.maxCsAdvantageOnLaneOpponent ?? 0;
-      const rawLane  = goldDiff * 0.0015 + xpDiff * 0.0011 + maxCsAdv * 0.08;
-      laneScore = Math.max(-5.0, Math.min(10.0, rawLane));
+  }
+  
+  if (!opp) {
+    const myLane = player.lane;
+    if (myLane && myLane !== "NONE") {
+      opp = allPlayers.find(
+        (p) => p.lane === myLane && p.teamId !== player.teamId
+      );
     }
+  }
+
+  if (opp) {
+    const goldDiff = (player.goldEarned ?? 0) - (opp.goldEarned ?? 0);
+    const xpDiff   = (player.champExperience ?? 0) - (opp.champExperience ?? 0);
+    const maxCsAdv = ch.maxCsAdvantageOnLaneOpponent ?? 0;
+    const rawLane  = goldDiff * 0.0015 + xpDiff * 0.0011 + maxCsAdv * 0.08;
+    laneScore = Math.max(-5.0, Math.min(10.0, rawLane));
   }
 
   // Objectives
