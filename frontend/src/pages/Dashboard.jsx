@@ -311,15 +311,15 @@ function LPGraph({ games, profile, puuid }) {
           const label = game ? `${lp} LP · ${game.win ? "W" : "L"}` : `${lp} LP`;
           const cx = toX(hoveredIdx);
           const cy = toY(lp);
-          const tw = label.length * 5.4 + 10;
-          const th = 15;
+          const tw = label.length * 7 + 14;
+          const th = 20;
           const tx = Math.min(Math.max(cx - tw / 2, 2), W - tw - 2);
           const ty = Math.max(cy - th - 7, 2);
           return (
             <g style={{ pointerEvents: "none" }}>
               <rect x={tx} y={ty} width={tw} height={th} rx={3} ry={3} fill="#0f172a" fillOpacity={0.93} />
-              <text x={tx + tw / 2} y={ty + 10.5} textAnchor="middle" fill="white"
-                style={{ fontSize: "8px", fontWeight: 700, fontFamily: "inherit" }}>
+              <text x={tx + tw / 2} y={ty + 14} textAnchor="middle" fill="white"
+                style={{ fontSize: "11px", fontWeight: 700, fontFamily: "inherit" }}>
                 {label}
               </text>
             </g>
@@ -557,6 +557,7 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
 
 // ── Expanded Scoreboard ────────────────────────────────────────────────────
 function TeamScoreRows({ players, isWin, teamLabel, gameName }) {
+  const navigate = useNavigate();
   return (
     <>
       <tr>
@@ -597,11 +598,18 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName }) {
                   onError={(e) => { e.target.style.display = "none"; }}
                   className="w-6 h-6 rounded object-cover border border-slate-200 dark:border-white/10 flex-shrink-0"
                 />
-                <span className={`font-semibold truncate max-w-[110px] text-xs ${
-                  isMe ? "text-[#c89b3c]" : "text-slate-700 dark:text-white/70"
-                }`}>
+                <button
+                  onClick={() => p.puuid && p.riotIdTagline && navigate(
+                    `/player/${encodeURIComponent(p.riotIdGameName)}/${encodeURIComponent(p.riotIdTagline)}`,
+                    { state: { puuid: p.puuid } }
+                  )}
+                  disabled={!p.puuid || !p.riotIdTagline}
+                  className={`font-semibold truncate max-w-[110px] text-xs text-left
+                    ${isMe ? "text-[#c89b3c]" : "text-slate-700 dark:text-white/70"}
+                    ${p.puuid && p.riotIdTagline ? "hover:underline hover:text-[#c89b3c] cursor-pointer" : "cursor-default"}`}
+                >
                   {isMe && "★ "}{p.riotIdGameName || "Unknown"}
-                </span>
+                </button>
               </div>
             </td>
             <td className="px-3 py-2.5 text-center text-slate-700 dark:text-white/70 font-medium whitespace-nowrap text-xs">
@@ -724,7 +732,7 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
 
         {/* Champion + result */}
         <div className="w-36 flex-shrink-0 min-w-0">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-bold text-slate-900 dark:text-white text-sm truncate">{game.championName}</span>
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
               game.win
@@ -733,6 +741,16 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
             }`}>
               {game.win ? "W" : "L"}
             </span>
+            {game.mvpAce === "MVP" && (
+              <span className="text-[10px] font-black px-1.5 py-0.5 rounded flex-shrink-0 bg-yellow-400/15 text-yellow-400 border border-yellow-400/30">
+                MVP
+              </span>
+            )}
+            {game.mvpAce === "ACE" && (
+              <span className="text-[10px] font-black px-1.5 py-0.5 rounded flex-shrink-0 bg-orange-500/15 text-orange-400 border border-orange-400/30">
+                ACE
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className="text-[11px] text-slate-400 dark:text-white/30">
@@ -1122,6 +1140,11 @@ export default function Dashboard() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
+  const [queueTab, setQueueTab] = useState("ranked");
+  const [tabGames, setTabGames] = useState({ flex: null, draft: null });
+  const [tabHasMore, setTabHasMore] = useState({ flex: true, draft: true });
+  const [tabLoadingMore, setTabLoadingMore] = useState(false);
+
   const doFetch = async (puuidHint) => {
     const [versions, puuidResolved] = await Promise.all([
       fetch("https://ddragon.leagueoflegends.com/api/versions.json")
@@ -1141,10 +1164,14 @@ export default function Dashboard() {
     setAnalysis(anal);
     setExtraGames([]);
     setHasMore(true);
+    setQueueTab("ranked");
+    setTabGames({ flex: null, draft: null });
+    setTabHasMore({ flex: true, draft: true });
   };
 
   useEffect(() => {
     if (!gameName || !tagLine) { navigate("/"); return; }
+    window.scrollTo(0, 0);
     setLoading(true);
     setProfile(null);
     setAnalysis(null);
@@ -1169,19 +1196,55 @@ export default function Dashboard() {
   };
 
   const handleLoadMore = async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const start = analysis.games.length + extraGames.length;
-      const remaining = MAX_GAMES - start;
-      const count = Math.min(10, remaining);
-      const newGames = await getHistory(resolvedPuuid, start, count);
-      setExtraGames((prev) => [...prev, ...newGames]);
-      if (newGames.length < count) setHasMore(false);
-    } catch {
-      // silently fail - button stays visible for retry
-    } finally {
-      setLoadingMore(false);
+    if (queueTab === "ranked") {
+      if (loadingMore || !hasMore) return;
+      setLoadingMore(true);
+      try {
+        const start = analysis.games.length + extraGames.length;
+        const remaining = MAX_GAMES - start;
+        const count = Math.min(10, remaining);
+        const newGames = await getHistory(resolvedPuuid, start, count, 420);
+        setExtraGames((prev) => [...prev, ...newGames]);
+        if (newGames.length < count) setHasMore(false);
+      } catch {
+        // silently fail
+      } finally {
+        setLoadingMore(false);
+      }
+    } else {
+      if (tabLoadingMore || !tabHasMore[queueTab]) return;
+      const queueNum = queueTab === "flex" ? 440 : 400;
+      const currentGames = tabGames[queueTab] ?? [];
+      setTabLoadingMore(true);
+      try {
+        const start = currentGames.length;
+        const remaining = MAX_GAMES - start;
+        const count = Math.min(10, remaining);
+        const newGames = await getHistory(resolvedPuuid, start, count, queueNum);
+        setTabGames((prev) => ({ ...prev, [queueTab]: [...currentGames, ...newGames] }));
+        if (newGames.length < count) setTabHasMore((prev) => ({ ...prev, [queueTab]: false }));
+      } catch {
+        // silently fail
+      } finally {
+        setTabLoadingMore(false);
+      }
+    }
+  };
+
+  const handleQueueTabChange = async (tabId) => {
+    setQueueTab(tabId);
+    if (tabId !== "ranked" && tabGames[tabId] === null) {
+      const queueNum = tabId === "flex" ? 440 : 400;
+      setTabLoadingMore(true);
+      try {
+        const games = await getHistory(resolvedPuuid, 0, 10, queueNum);
+        setTabGames((prev) => ({ ...prev, [tabId]: games }));
+        if (games.length < 10) setTabHasMore((prev) => ({ ...prev, [tabId]: false }));
+      } catch {
+        setTabGames((prev) => ({ ...prev, [tabId]: [] }));
+      } finally {
+        setTabLoadingMore(false);
+      }
     }
   };
 
@@ -1304,28 +1367,64 @@ export default function Dashboard() {
             })()}
 
             {(() => {
-              const allGames = [...analysis.games, ...extraGames];
-              const canLoadMore = hasMore && allGames.length < MAX_GAMES;
+              const allRankedGames = [...analysis.games, ...extraGames];
+              const currentGames = queueTab === "ranked" ? allRankedGames : (tabGames[queueTab] ?? []);
+              const currentLoading = queueTab === "ranked" ? loadingMore : tabLoadingMore;
+              const currentHasMore = queueTab === "ranked"
+                ? hasMore && allRankedGames.length < MAX_GAMES
+                : tabHasMore[queueTab] && currentGames.length < MAX_GAMES;
+              const isInitialTabLoad = queueTab !== "ranked" && tabGames[queueTab] === null && tabLoadingMore;
+              const QUEUE_TAB_OPTIONS = [
+                { id: "ranked", label: "Solo/Duo" },
+                { id: "flex",   label: "Flex" },
+                { id: "draft",  label: "Draft" },
+              ];
               return (
                 <div>
                   <SectionLabel>Match History</SectionLabel>
-                  <div className="space-y-2">
-                    {allGames.map((game) => (
-                      <GameRow
-                        key={game.matchId}
-                        game={game}
-                        isExpanded={expandedMatchId === game.matchId}
-                        onToggle={() => handleToggleGame(game.matchId)}
-                        scoreboard={expandedMatchId === game.matchId ? scoreboard : null}
-                        scoreboardLoading={expandedMatchId === game.matchId && scoreboardLoading}
-                        gameName={gameName}
-                      />
+                  <div className="flex gap-1 mb-3">
+                    {QUEUE_TAB_OPTIONS.map(({ id, label }) => (
+                      <button
+                        key={id}
+                        onClick={() => handleQueueTabChange(id)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
+                          ${queueTab === id
+                            ? "bg-[#c89b3c]/15 text-[#c89b3c] border border-[#c89b3c]/30"
+                            : "text-slate-400 dark:text-white/30 border border-transparent hover:border-slate-200 dark:hover:border-white/10 hover:text-slate-600 dark:hover:text-white/50"
+                          }`}
+                      >
+                        {label}
+                      </button>
                     ))}
                   </div>
-                  {canLoadMore && (
+                  {isInitialTabLoad ? (
+                    <div className="flex items-center justify-center py-8 gap-3">
+                      <div className="w-4 h-4 rounded-full border-2 border-t-[#c89b3c] border-[#c89b3c]/20 animate-spin" />
+                      <span className="text-sm text-slate-400 dark:text-white/30">Loading…</span>
+                    </div>
+                  ) : currentGames.length === 0 ? (
+                    <div className="py-8 text-center text-sm text-slate-400 dark:text-white/30">
+                      No {queueTab === "flex" ? "Flex Ranked" : "Normal Draft"} games found
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {currentGames.map((game) => (
+                        <GameRow
+                          key={game.matchId}
+                          game={game}
+                          isExpanded={expandedMatchId === game.matchId}
+                          onToggle={() => handleToggleGame(game.matchId)}
+                          scoreboard={expandedMatchId === game.matchId ? scoreboard : null}
+                          scoreboardLoading={expandedMatchId === game.matchId && scoreboardLoading}
+                          gameName={gameName}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {!isInitialTabLoad && currentHasMore && currentGames.length > 0 && (
                     <button
                       onClick={handleLoadMore}
-                      disabled={loadingMore}
+                      disabled={currentLoading}
                       className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl
                         border border-slate-200 dark:border-white/[0.07]
                         bg-white dark:bg-white/[0.02]
@@ -1333,13 +1432,13 @@ export default function Dashboard() {
                         hover:text-[#c89b3c] hover:border-[#c89b3c]/30
                         disabled:opacity-50 transition-colors"
                     >
-                      {loadingMore ? (
+                      {currentLoading ? (
                         <span className="w-3.5 h-3.5 rounded-full border-[1.5px] border-slate-300 dark:border-white/20 border-t-[#c89b3c] animate-spin block" />
                       ) : null}
-                      {loadingMore ? "Loading…" : `Load more · ${allGames.length} / ${MAX_GAMES}`}
+                      {currentLoading ? "Loading…" : `Load more · ${currentGames.length} / ${MAX_GAMES}`}
                     </button>
                   )}
-                  {!canLoadMore && allGames.length >= MAX_GAMES && (
+                  {!isInitialTabLoad && !currentHasMore && currentGames.length >= MAX_GAMES && (
                     <p className="mt-3 text-center text-[11px] text-slate-300 dark:text-white/20">
                       Showing max {MAX_GAMES} games
                     </p>
