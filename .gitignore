@@ -31,3 +31,6 @@ Thumbs.db
 node_modules/
 .next/
 dist/
+
+# Docs / specs
+docs/
