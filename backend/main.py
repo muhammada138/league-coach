@@ -101,9 +101,9 @@ def _compute_perf_score(player: dict, all_players: list) -> float:
     turret_plates = ch.get("turretPlatesTaken",         0) or 0
     solo_kills    = ch.get("soloKills",                 0) or 0
 
-    if lane in ("TOP", "MIDDLE"):
+    if lane_mins > 0 and lane in ("TOP", "MIDDLE"):
         cs10_score = (lane_mins - 54.0) * 0.35
-    elif lane == "BOTTOM":
+    elif lane_mins > 0 and lane == "BOTTOM":
         cs10_score = (lane_mins - 51.0) * 0.37
     else:
         cs10_score = 0.0
@@ -119,7 +119,15 @@ def _compute_perf_score(player: dict, all_players: list) -> float:
     else:
         solo_score = 0.0
 
-    role_specific = cs10_score + plates_score + solo_score
+    turret_takedowns = ch.get("turretTakedowns", 0) or 0
+    if lane == "TOP":
+        takedown_score = turret_takedowns * 0.85
+    elif lane in ("MIDDLE", "BOTTOM"):
+        takedown_score = turret_takedowns * 0.75
+    else:
+        takedown_score = 0.0
+
+    role_specific = cs10_score + plates_score + solo_score + takedown_score
 
     # ── WIN / LOSS ────────────────────────────────────────────────────────────
     win_loss = 3.0 if player.get("win", False) else -3.0
@@ -541,6 +549,7 @@ async def get_scoreboard(match_id: str):
                     "killParticipation", "teamDamagePercentage", "damageTakenOnTeamPercentage",
                     "laneMinionsFirst10Minutes", "turretPlatesTaken", "soloKills",
                     "maxCsAdvantageOnLaneOpponent", "riftHeraldKills", "voidMonsterKill",
+                    "turretTakedowns",
                 )
             },
         }
