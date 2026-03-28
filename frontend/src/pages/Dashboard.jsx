@@ -90,21 +90,16 @@ function computePerformanceScore(player, allPlayers) {
   let soloScore = 0.0;
   if (lane === "BOTTOM")      soloScore = soloKills * 1.50;
   else if (lane === "MIDDLE") soloScore = soloKills * 0.85;
-  else if (lane === "TOP")    soloScore = soloKills * 0.75;
+  else                        soloScore = soloKills * 0.75; // TOP, JUNGLE, UTILITY
 
-  const turretTakedowns = ch.turretTakedowns ?? 0;
-  let takedownScore = 0.0;
-  if (lane === "TOP")                             takedownScore = turretTakedowns * 0.85;
-  else if (lane === "MIDDLE" || lane === "BOTTOM") takedownScore = turretTakedowns * 0.75;
-
-  const roleSpecific = cs10Score + platesScore + soloScore + takedownScore;
+  const roleSpecific = Math.min(20.0, cs10Score + platesScore + soloScore);
 
   // Win/Loss
   const winLoss = player.win ? 3.0 : -3.0;
 
   // Total
   const total = base + globalScore + laneScore + objScore + teamScore + kdaScore + roleSpecific + winLoss;
-  return Math.round(Math.max(0, Math.min(100, total)) * 100) / 100;
+  return Math.round(Math.max(0, Math.min(100, total)));
 }
 
 // LP series anchored to current LP, working backwards through games.
@@ -725,6 +720,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName }) {
 
 // ── Horizontal Game Row ────────────────────────────────────────────────────
 function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, gameName }) {
+  const isRemake = game.gameDuration < 210;
   const mins = Math.floor(game.gameDuration / 60);
   const secs = String(game.gameDuration % 60).padStart(2, "0");
   const imgSrc = `https://ddragon.leagueoflegends.com/cdn/14.24.1/img/champion/${game.championName}.png`;
@@ -735,26 +731,33 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
     ? "text-[#c89b3c]"
     : "text-slate-400 dark:text-white/40";
 
+  const borderClass = isRemake
+    ? "border-slate-300 dark:border-white/10"
+    : game.win
+    ? "border-emerald-200 dark:border-emerald-500/25"
+    : "border-red-200 dark:border-red-500/25";
+
+  const bgClass = isRemake
+    ? "bg-slate-100/70 dark:bg-slate-800/20 hover:bg-slate-100 dark:hover:bg-slate-800/30"
+    : game.win
+    ? "bg-emerald-50/70 dark:bg-emerald-950/25 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+    : "bg-red-50/70 dark:bg-red-950/25 hover:bg-red-50 dark:hover:bg-red-950/40";
+
+  const accentClass = isRemake ? "bg-slate-400/50" : game.win ? "bg-emerald-400" : "bg-red-400";
+
   return (
     <div
       className={`rounded-xl overflow-hidden border transition-all duration-300
-        ${game.win
-          ? "border-emerald-200 dark:border-emerald-500/25"
-          : "border-red-200 dark:border-red-500/25"
-        }
+        ${borderClass}
         ${isExpanded ? "ring-1 ring-[#c89b3c]/40 shadow-lg shadow-[#c89b3c]/5" : ""}`}
     >
       {/* Clickable header */}
       <div
-        className={`flex items-center gap-3 px-4 py-3 cursor-pointer select-none transition-colors duration-200
-          ${game.win
-            ? "bg-emerald-50/70 dark:bg-emerald-950/25 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-            : "bg-red-50/70 dark:bg-red-950/25 hover:bg-red-50 dark:hover:bg-red-950/40"
-          }`}
+        className={`flex items-center gap-3 px-4 py-3 cursor-pointer select-none transition-colors duration-200 ${bgClass}`}
         onClick={onToggle}
       >
         {/* Left accent bar */}
-        <div className={`w-1 h-12 rounded-full flex-shrink-0 ${game.win ? "bg-emerald-400" : "bg-red-400"}`} />
+        <div className={`w-1 h-12 rounded-full flex-shrink-0 ${accentClass}`} />
 
         {/* Champion icon */}
         <img
@@ -768,19 +771,25 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
         <div className="w-36 flex-shrink-0 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-bold text-slate-900 dark:text-white text-sm truncate">{game.championName}</span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
-              game.win
-                ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-                : "bg-red-100 dark:bg-red-500/20 text-red-500 dark:text-red-400"
-            }`}>
-              {game.win ? "W" : "L"}
-            </span>
-            {game.mvpAce === "MVP" && (
+            {isRemake ? (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-white/40">
+                Remake
+              </span>
+            ) : (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
+                game.win
+                  ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                  : "bg-red-100 dark:bg-red-500/20 text-red-500 dark:text-red-400"
+              }`}>
+                {game.win ? "W" : "L"}
+              </span>
+            )}
+            {!isRemake && game.mvpAce === "MVP" && (
               <span className="text-[10px] font-black px-1.5 py-0.5 rounded flex-shrink-0 bg-yellow-400/15 text-yellow-400 border border-yellow-400/30">
                 MVP
               </span>
             )}
-            {game.mvpAce === "ACE" && (
+            {!isRemake && game.mvpAce === "ACE" && (
               <span className="text-[10px] font-black px-1.5 py-0.5 rounded flex-shrink-0 bg-orange-500/15 text-orange-400 border border-orange-400/30">
                 ACE
               </span>
@@ -824,9 +833,9 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
         </div>
 
         {/* Score */}
-        {game.score != null && (
+        {!isRemake && game.score != null && (
           <div className="flex flex-col items-center flex-shrink-0">
-            <span className={`text-sm font-black tabular-nums ${scoreColor}`}>{game.score}</span>
+            <span className={`text-sm font-black tabular-nums ${scoreColor}`}>{Math.round(game.score)}</span>
             <span className="text-[10px] text-slate-400 dark:text-white/25 uppercase tracking-wide">Score</span>
           </div>
         )}
@@ -842,7 +851,9 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
       {/* Expanded scoreboard */}
       {isExpanded && (
         <div className={`border-t ${
-          game.win
+          isRemake
+            ? "border-slate-200 dark:border-white/10 bg-slate-50/20 dark:bg-slate-800/10"
+            : game.win
             ? "border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10"
             : "border-red-200 dark:border-red-500/20 bg-red-50/20 dark:bg-red-950/10"
         }`}>
