@@ -19,58 +19,87 @@ const TIER_COLORS = {
 };
 
 function computePerformanceScore(player, allPlayers) {
-  const n = allPlayers.length || 1;
-  const avg = (fn) => allPlayers.reduce((s, p) => s + fn(p), 0) / n;
-  const avgKDA  = avg((p) => (p.kills + p.assists) / Math.max(p.deaths, 1));
-  const avgDmg  = avg((p) => p.totalDamageDealtToChampions);
-  const avgGold = avg((p) => p.goldEarned);
-  const avgCS   = avg((p) => p.totalMinionsKilled);
-  const avgVis  = avg((p) => p.visionScore);
-  const avgKP   = avg((p) => {
-    const tk = allPlayers.filter((x) => x.teamId === p.teamId).reduce((s, x) => s + x.kills, 0);
-    return (p.kills + p.assists) / Math.max(tk, 1);
-  });
+  const ch   = player.challenges || {};
+  const lane = player.teamPosition || "MIDDLE";
 
-  const raw = (p) => {
-    const kda = (p.kills + p.assists) / Math.max(p.deaths, 1);
-    const tk  = allPlayers.filter((x) => x.teamId === p.teamId).reduce((s, x) => s + x.kills, 0);
-    const pkp = (p.kills + p.assists) / Math.max(tk, 1);
-    // Support detection: very low CS means weight vision & KP more
-    if (p.totalMinionsKilled < 50) {
-      return (kda / Math.max(avgKDA, 0.1)) * 0.12
-           + (p.totalDamageDealtToChampions / Math.max(avgDmg, 1)) * 0.10
-           + (p.goldEarned / Math.max(avgGold, 1)) * 0.10
-           + (p.totalMinionsKilled / Math.max(avgCS, 1)) * 0.05
-           + (p.visionScore / Math.max(avgVis, 1)) * 0.38
-           + (pkp / Math.max(avgKP, 0.01)) * 0.25;
-    }
-    return (kda / Math.max(avgKDA, 0.1)) * 0.20
-         + (p.totalDamageDealtToChampions / Math.max(avgDmg, 1)) * 0.25
-         + (p.goldEarned / Math.max(avgGold, 1)) * 0.15
-         + (p.totalMinionsKilled / Math.max(avgCS, 1)) * 0.15
-         + (p.visionScore / Math.max(avgVis, 1)) * 0.10
-         + (pkp / Math.max(avgKP, 0.01)) * 0.15;
-  };
+  // Base
+  const base = 15.0;
 
-  const myRaw   = raw(player);
-  const myTeam  = allPlayers.filter((p) => p.teamId === player.teamId);
-  const teamN   = Math.max(myTeam.length - 1, 1);
-  const teamRank = myTeam.filter((p) => raw(p) > myRaw).length; // 0 = best
-  const teamPct  = 1 - teamRank / teamN;                        // 1 = best, 0 = worst
+  // Global
+  const gpm  = ch.goldPerMinute        ?? 0;
+  const dpm  = ch.damagePerMinute      ?? 0;
+  const vspm = ch.visionScorePerMinute ?? 0;
+  const globalScore = (gpm + 60) * 0.008 + (dpm - 24.6) * 0.007 + vspm * 2.0;
 
-  if (player.win) return Math.round(58 + teamPct * 42);
-
-  // Losers: score on a global lobby percentile curve — no ceiling cap.
-  // Best loser (rank #1 in whole lobby) can reach 100.
-  const lobbyPos = allPlayers.filter((p) => raw(p) < myRaw).length;
-  const lobbyPct = lobbyPos / (allPlayers.length - 1); // 0 = worst in game, 1 = best
-  if (lobbyPct <= 0.5) {
-    // Bottom half of lobby: 8–42
-    return Math.round(8 + lobbyPct * 68);
+  // KDA (role-dependent)
+  const kills   = player.kills   ?? 0;
+  const deaths  = player.deaths  ?? 0;
+  const assists = player.assists ?? 0;
+  let kdaScore;
+  if (lane === "TOP") {
+    kdaScore = kills * 0.80 + assists * 0.80 + deaths * -1.50;
+  } else if (lane === "UTILITY") {
+    kdaScore = kills * 0.85 + assists * 0.90 + deaths * -1.25;
+  } else {
+    kdaScore = kills * 0.75 + assists * 0.75 + deaths * -1.50;
   }
-  // Top half: 42–100 (slightly compressed curve so ~0.8 pct ≈ 70, ~1.0 pct = 100)
-  const excess = (lobbyPct - 0.5) * 2; // 0→1
-  return Math.round(42 + Math.pow(excess, 1.2) * 58);
+
+  // Lane Performance (vs lane opponent)
+  let laneScore = 0.0;
+  if (lane && lane !== "UNKNOWN") {
+    const opp = allPlayers.find(
+      (p) => p.teamPosition === lane && p.teamId !== player.teamId
+    );
+    if (opp) {
+      const goldDiff = (player.goldEarned ?? 0) - (opp.goldEarned ?? 0);
+      const xpDiff   = (player.champExperience ?? 0) - (opp.champExperience ?? 0);
+      const maxCsAdv = ch.maxCsAdvantageOnLaneOpponent ?? 0;
+      const rawLane  = goldDiff * 0.0015 + xpDiff * 0.0011 + maxCsAdv * 0.08;
+      laneScore = Math.max(-5.0, Math.min(10.0, rawLane));
+    }
+  }
+
+  // Objectives
+  const riftHeralds = ch.riftHeraldKills ?? 0;
+  const dragons     = player.dragonKills ?? 0;
+  const barons      = player.baronKills  ?? 0;
+  const horde       = ch.voidMonsterKill ?? 0;
+  const objDmg      = player.damageDealtToObjectives ?? 0;
+  const objScore    = riftHeralds * 3.0 + dragons * 2.1 + barons * 2.0 + horde * 0.5 + objDmg * 0.00024;
+
+  // Team (Riot challenges values are 0-1; convert to 0-100 for the formula)
+  const kpPct       = (ch.killParticipation          ?? 0) * 100;
+  const teamDmgPct  = (ch.teamDamagePercentage        ?? 0) * 100;
+  const dmgTakenPct = (ch.damageTakenOnTeamPercentage ?? 0) * 100;
+  const teamScore   = (kpPct - 25) * 0.14 + teamDmgPct * 0.09 + dmgTakenPct * 0.07;
+
+  // Role-Specific Mastery
+  const laneMins     = ch.laneMinionsFirst10Minutes ?? 0;
+  const turretPlates = ch.turretPlatesTaken         ?? 0;
+  const soloKills    = ch.soloKills                 ?? 0;
+
+  let cs10Score = 0.0;
+  if (lane === "TOP" || lane === "MIDDLE") {
+    cs10Score = (laneMins - 54.0) * 0.35;
+  } else if (lane === "BOTTOM") {
+    cs10Score = (laneMins - 51.0) * 0.37;
+  }
+
+  const platesScore = 2.25 + turretPlates * 1.50;
+
+  let soloScore = 0.0;
+  if (lane === "BOTTOM")      soloScore = soloKills * 1.50;
+  else if (lane === "MIDDLE") soloScore = soloKills * 0.85;
+  else if (lane === "TOP")    soloScore = soloKills * 0.75;
+
+  const roleSpecific = cs10Score + platesScore + soloScore;
+
+  // Win/Loss
+  const winLoss = player.win ? 3.0 : -3.0;
+
+  // Total
+  const total = base + globalScore + laneScore + objScore + teamScore + kdaScore + roleSpecific + winLoss;
+  return Math.round(Math.max(0, Math.min(100, total)) * 100) / 100;
 }
 
 // LP series anchored to current LP, working backwards through games.
