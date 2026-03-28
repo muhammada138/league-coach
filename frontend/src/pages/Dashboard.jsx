@@ -19,27 +19,55 @@ const TIER_COLORS = {
 };
 
 function computePerformanceScore(player, allPlayers) {
-  const avg = (fn) => allPlayers.reduce((s, p) => s + fn(p), 0) / allPlayers.length;
-  const avgKDA = avg((p) => (p.kills + p.assists) / Math.max(p.deaths, 1));
-  const avgDmg = avg((p) => p.totalDamageDealtToChampions);
+  const n = allPlayers.length || 1;
+  const avg = (fn) => allPlayers.reduce((s, p) => s + fn(p), 0) / n;
+  const avgKDA  = avg((p) => (p.kills + p.assists) / Math.max(p.deaths, 1));
+  const avgDmg  = avg((p) => p.totalDamageDealtToChampions);
   const avgGold = avg((p) => p.goldEarned);
-  const avgCS = avg((p) => p.totalMinionsKilled);
-  const avgVis = avg((p) => p.visionScore);
+  const avgCS   = avg((p) => p.totalMinionsKilled);
+  const avgVis  = avg((p) => p.visionScore);
+  const avgKP   = avg((p) => {
+    const tk = allPlayers.filter((x) => x.teamId === p.teamId).reduce((s, x) => s + x.kills, 0);
+    return (p.kills + p.assists) / Math.max(tk, 1);
+  });
 
   const raw = (p) => {
     const kda = (p.kills + p.assists) / Math.max(p.deaths, 1);
-    return (kda / Math.max(avgKDA, 0.1)) * 25 +
-           (p.totalDamageDealtToChampions / Math.max(avgDmg, 1)) * 25 +
-           (p.goldEarned / Math.max(avgGold, 1)) * 20 +
-           (p.totalMinionsKilled / Math.max(avgCS, 1)) * 15 +
-           (p.visionScore / Math.max(avgVis, 1)) * 15;
+    const tk  = allPlayers.filter((x) => x.teamId === p.teamId).reduce((s, x) => s + x.kills, 0);
+    const pkp = (p.kills + p.assists) / Math.max(tk, 1);
+    // Support detection: very low CS means weight vision & KP more
+    if (p.totalMinionsKilled < 50) {
+      return (kda / Math.max(avgKDA, 0.1)) * 0.12
+           + (p.totalDamageDealtToChampions / Math.max(avgDmg, 1)) * 0.10
+           + (p.goldEarned / Math.max(avgGold, 1)) * 0.10
+           + (p.totalMinionsKilled / Math.max(avgCS, 1)) * 0.05
+           + (p.visionScore / Math.max(avgVis, 1)) * 0.38
+           + (pkp / Math.max(avgKP, 0.01)) * 0.25;
+    }
+    return (kda / Math.max(avgKDA, 0.1)) * 0.20
+         + (p.totalDamageDealtToChampions / Math.max(avgDmg, 1)) * 0.25
+         + (p.goldEarned / Math.max(avgGold, 1)) * 0.15
+         + (p.totalMinionsKilled / Math.max(avgCS, 1)) * 0.15
+         + (p.visionScore / Math.max(avgVis, 1)) * 0.10
+         + (pkp / Math.max(avgKP, 0.01)) * 0.15;
   };
 
-  const myRaw = raw(player);
-  // rank = number of players with a higher raw score (0 = best in lobby)
-  const rank = allPlayers.filter((p) => raw(p) > myRaw).length;
-  const scoreTable = [100, 93, 83, 75, 72, 64, 61, 58, 49, 25];
-  return scoreTable[Math.min(rank, 9)];
+  const myRaw   = raw(player);
+  const myTeam  = allPlayers.filter((p) => p.teamId === player.teamId);
+  const teamN   = Math.max(myTeam.length - 1, 1);
+  const teamRank = myTeam.filter((p) => raw(p) > myRaw).length; // 0 = best
+  const teamPct  = 1 - teamRank / teamN;                        // 1 = best, 0 = worst
+
+  if (player.win) return Math.round(58 + teamPct * 42);
+
+  let base = Math.round(8 + teamPct * 32);
+  const enemyTeam    = allPlayers.filter((p) => p.teamId !== player.teamId);
+  const avgEnemyRaw  = enemyTeam.reduce((s, p) => s + raw(p), 0) / Math.max(enemyTeam.length, 1);
+  if (myRaw > avgEnemyRaw) {
+    const over  = (myRaw - avgEnemyRaw) / Math.max(avgEnemyRaw, 0.01);
+    base = Math.min(55, Math.round(base + Math.min(22, over * 30)));
+  }
+  return base;
 }
 
 // LP series anchored to current LP, working backwards through games.
@@ -253,15 +281,24 @@ function LPGraph({ games, profile, puuid }) {
         <path d={areaD} fill="url(#lpGradFill)" />
         <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         {series.map((v, i) => {
-          const cx = toX(i).toFixed(1);
-          const cy = toY(v).toFixed(1);
+          const cx = toX(i);
+          const cy = toY(v);
           const game = i > 0 ? ordered[i - 1] : null;
+          const dotColor = i === 0 ? "#475569" : game?.win ? "#10b981" : "#ef4444";
+          const hovered = hoveredIdx === i;
           return (
-            <g key={i}>
-              <circle cx={cx} cy={cy} r="2.8" fill={i === 0 ? "#475569" : game?.win ? "#10b981" : "#ef4444"} />
-              <circle cx={cx} cy={cy} r="7" fill="transparent"
-                onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)}
-                style={{ cursor: "default" }} />
+            <g key={i} transform={`translate(${cx.toFixed(1)},${cy.toFixed(1)})`}
+              onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)}>
+              {/* glow ring */}
+              <circle r="5" fill={dotColor}
+                style={{ opacity: hovered ? 0.22 : 0, transformBox: "fill-box", transformOrigin: "center",
+                  transform: hovered ? "scale(1)" : "scale(0.3)", transition: "opacity 0.18s, transform 0.18s" }} />
+              {/* main dot */}
+              <circle r="3" fill={dotColor}
+                style={{ transformBox: "fill-box", transformOrigin: "center",
+                  transform: hovered ? "scale(1.55)" : "scale(1)", transition: "transform 0.18s ease" }} />
+              {/* hit area */}
+              <circle r="8" fill="transparent" style={{ cursor: "default" }} />
             </g>
           );
         })}
@@ -271,14 +308,18 @@ function LPGraph({ games, profile, puuid }) {
           const label = game ? `${lp} LP · ${game.win ? "W" : "L"}` : `${lp} LP`;
           const cx = toX(hoveredIdx);
           const cy = toY(lp);
-          const tx = Math.min(Math.max(cx - 22, 0), W - 44);
-          const ty = Math.max(cy - 22, 0);
+          const tw = label.length * 5.4 + 10;
+          const th = 15;
+          const tx = Math.min(Math.max(cx - tw / 2, 2), W - tw - 2);
+          const ty = Math.max(cy - th - 7, 2);
           return (
-            <foreignObject x={tx} y={ty} width="44" height="18">
-              <div xmlns="http://www.w3.org/1999/xhtml" style={{ fontSize: 9, fontWeight: 700, background: "#0f172a", color: "#fff", borderRadius: 4, padding: "2px 4px", whiteSpace: "nowrap", pointerEvents: "none" }}>
+            <g style={{ pointerEvents: "none" }}>
+              <rect x={tx} y={ty} width={tw} height={th} rx={3} ry={3} fill="#0f172a" fillOpacity={0.93} />
+              <text x={tx + tw / 2} y={ty + 10.5} textAnchor="middle" fill="white"
+                style={{ fontSize: "8px", fontWeight: 700, fontFamily: "inherit" }}>
                 {label}
-              </div>
-            </foreignObject>
+              </text>
+            </g>
           );
         })()}
       </svg>
@@ -692,7 +733,7 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
           </div>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className="text-[11px] text-slate-400 dark:text-white/30">
-              {game.teamPosition || "-"} · {mins}:{secs}
+              <span className="font-bold">{game.teamPosition || "-"}</span> · {mins}:{secs}
             </span>
             {game.diffedLane && (
               <span className="flex items-center gap-0.5 flex-shrink-0">
@@ -832,7 +873,7 @@ function SummaryStrip({ analysis }) {
 // ── Teammates Content ───────────────────────────────────────────────────────
 function TeammatesContent({ games }) {
   const [tab, setTab] = useState("with");
-  const rows = aggregateTeammates(games, tab);
+  const rows = aggregateTeammates(games, tab).filter((r) => r.games > 1);
   return (
     <div className="flex flex-col h-full">
       <div className="flex border-b border-slate-100 dark:border-white/[0.06] flex-shrink-0 mx-5 mb-1 mt-3">
@@ -850,7 +891,7 @@ function TeammatesContent({ games }) {
       {rows.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <p className="text-xs text-slate-400 dark:text-white/25 text-center px-5">
-            No data — load more games to see {tab === "with" ? "teammates" : "opponents"}.
+            No repeat {tab === "with" ? "teammates" : "opponents"} yet — load more games to find patterns.
           </p>
         </div>
       ) : (
@@ -949,8 +990,8 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
       <div className="lg:flex-1 lg:min-h-0 lg:flex lg:flex-col animate-fadeIn" key={tab}>
         {tab === "coaching" ? (
           <div className="flex flex-col lg:flex-1 lg:min-h-0 lg:overflow-hidden">
-            {/* Tips */}
-            <div className="p-5 space-y-4 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+            {/* Single unified scroll area: tips + chat together */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
               {fallback ? (
                 <div className="text-sm text-slate-600 dark:text-white/60 leading-relaxed
                   [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white
@@ -970,12 +1011,9 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
                   </div>
                 ))
               )}
-            </div>
 
-            {/* Chat */}
-            <div className="border-t border-slate-100 dark:border-white/[0.06] flex-shrink-0">
               {chatHistory.length > 0 && (
-                <div className="px-4 pt-4 pb-2 space-y-3 max-h-72 overflow-y-auto">
+                <div className="border-t border-slate-100 dark:border-white/[0.06] pt-4 space-y-3">
                   {chatHistory.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                       {msg.role === "assistant" && (
@@ -1007,8 +1045,10 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
                 </div>
               )}
               <div ref={chatEndRef} />
+            </div>
 
-              {/* Input */}
+            {/* Fixed input bar */}
+            <div className="border-t border-slate-100 dark:border-white/[0.06] flex-shrink-0">
               <form onSubmit={handleAsk} className="p-3">
                 <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-white/[0.03] px-3 py-2 focus-within:border-[#c89b3c]/50 transition-colors">
                   <input
