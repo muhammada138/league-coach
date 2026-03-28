@@ -599,10 +599,15 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
 @app.get("/match/{match_id}/scoreboard")
 async def get_scoreboard(match_id: str):
     async with httpx.AsyncClient() as client:
-        data = await riot_get(
-            client,
-            f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{match_id}",
-        )
+        match_data_task = riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{match_id}")
+        timeline_task = get_match_timeline(client, match_id)
+        results = await asyncio.gather(match_data_task, timeline_task, return_exceptions=True)
+        
+    if isinstance(results[0], Exception):
+        raise HTTPException(status_code=404, detail="Match not found")
+        
+    data = results[0]
+    timeline = results[1] if not isinstance(results[1], Exception) else None
     participants = sorted(data["info"]["participants"], key=lambda p: p["teamId"])
     return [
         {
