@@ -97,27 +97,65 @@ def _compute_perf_score(player: dict, all_players: list) -> float:
     team_score    = (kp_pct - 25) * 0.14 + team_dmg_pct * 0.09 + dmg_taken_pct * 0.07
 
     # ── ROLE-SPECIFIC MASTERY ─────────────────────────────────────────────────
-    lane_mins     = ch.get("laneMinionsFirst10Minutes", 0) or 0
-    turret_plates = ch.get("turretPlatesTaken",         0) or 0
-    solo_kills    = ch.get("soloKills",                 0) or 0
+    if lane in ("TOP", "MIDDLE", "BOTTOM"):
+        # Branch A: Laners
+        lane_mins     = ch.get("laneMinionsFirst10Minutes", 0) or 0
+        turret_plates = ch.get("turretPlatesTaken",         0) or 0
+        solo_kills    = ch.get("soloKills",                 0) or 0
+        turret_tds    = ch.get("turretTakedowns",           0) or 0
 
-    if lane_mins > 0 and lane in ("TOP", "MIDDLE"):
-        cs10_score = (lane_mins - 54.0) * 0.35
-    elif lane_mins > 0 and lane == "BOTTOM":
-        cs10_score = (lane_mins - 51.0) * 0.37
-    else:
-        cs10_score = 0.0
+        if lane_mins > 0 and lane in ("TOP", "MIDDLE"):
+            cs10_score = (lane_mins - 54.0) * 0.35
+        elif lane_mins > 0:  # BOTTOM
+            cs10_score = (lane_mins - 51.0) * 0.37
+        else:
+            cs10_score = 0.0
 
-    plates_score = 2.25 + turret_plates * 1.50
+        plates_score = 2.25 + turret_plates * 1.50
 
-    if lane == "BOTTOM":
-        solo_score = solo_kills * 1.50
-    elif lane == "MIDDLE":
-        solo_score = solo_kills * 0.85
-    else:  # TOP, JUNGLE, UTILITY
-        solo_score = solo_kills * 0.75
+        if lane == "BOTTOM":
+            solo_score = solo_kills * 1.50
+        elif lane == "MIDDLE":
+            solo_score = solo_kills * 0.85
+        else:  # TOP
+            solo_score = solo_kills * 0.75
 
-    role_specific = min(20.0, cs10_score + plates_score + solo_score)
+        td_score = turret_tds * 0.85 if lane == "TOP" else turret_tds * 0.75
+
+        role_specific = min(20.0, cs10_score + plates_score + solo_score + td_score)
+
+    elif lane == "JUNGLE":
+        # Branch B: Jungle
+        init_crab    = ch.get("initialCrabCount",        0) or 0
+        scuttle_crab = ch.get("scuttleCrabKills",        0) or 0
+        jungle_cs10  = ch.get("jungleCsBefore10Minutes", 0) or 0
+        enemy_jg     = ch.get("enemyJungleMonsterKills", 0) or 0
+        pick_kill    = ch.get("pickKillWithAlly",        0) or 0
+
+        role_specific = min(20.0,
+            init_crab    * 1.50
+            + scuttle_crab * 0.45
+            + jungle_cs10  * 0.067
+            + enemy_jg     * 0.50
+            + pick_kill    * 0.275
+        )
+
+    else:  # UTILITY
+        # Branch C: Support
+        support_quest = ch.get("completeSupportQuestInTime", 0) or 0
+        stealth_wards = ch.get("stealthWardsPlaced",         0) or 0
+        control_wards = ch.get("controlWardsPlaced",         0) or 0
+        ward_tds      = ch.get("wardTakedowns",              0) or 0
+        pick_kill     = ch.get("pickKillWithAlly",           0) or 0
+
+        quest_score = 1.50 if support_quest else -3.0
+        role_specific = min(20.0,
+            quest_score
+            + stealth_wards * 0.17
+            + control_wards * 0.58
+            + ward_tds      * 0.42
+            + pick_kill     * 0.22
+        )
 
     # ── WIN / LOSS ────────────────────────────────────────────────────────────
     win_loss = 3.0 if player.get("win", False) else -3.0
@@ -535,10 +573,21 @@ async def get_scoreboard(match_id: str):
             "challenges": {
                 k: (p.get("challenges") or {}).get(k, 0)
                 for k in (
+                    # Shared / Global
                     "goldPerMinute", "damagePerMinute", "visionScorePerMinute",
                     "killParticipation", "teamDamagePercentage", "damageTakenOnTeamPercentage",
-                    "laneMinionsFirst10Minutes", "turretPlatesTaken", "soloKills",
-                    "maxCsAdvantageOnLaneOpponent", "riftHeraldKills", "voidMonsterKill",
+                    # Lane perf
+                    "maxCsAdvantageOnLaneOpponent",
+                    # Objectives
+                    "riftHeraldKills", "voidMonsterKill",
+                    # Laner mastery
+                    "laneMinionsFirst10Minutes", "turretPlatesTaken", "soloKills", "turretTakedowns",
+                    # Jungle mastery
+                    "initialCrabCount", "scuttleCrabKills", "jungleCsBefore10Minutes",
+                    "enemyJungleMonsterKills", "pickKillWithAlly",
+                    # Support mastery
+                    "completeSupportQuestInTime", "stealthWardsPlaced", "controlWardsPlaced",
+                    "wardTakedowns",
                 )
             },
         }

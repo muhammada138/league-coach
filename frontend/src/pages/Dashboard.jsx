@@ -74,25 +74,61 @@ function computePerformanceScore(player, allPlayers) {
   const teamScore   = (kpPct - 25) * 0.14 + teamDmgPct * 0.09 + dmgTakenPct * 0.07;
 
   // Role-Specific Mastery
-  const laneMins     = ch.laneMinionsFirst10Minutes ?? 0;
-  const turretPlates = ch.turretPlatesTaken         ?? 0;
-  const soloKills    = ch.soloKills                 ?? 0;
+  let roleSpecific;
+  if (lane === "TOP" || lane === "MIDDLE" || lane === "BOTTOM") {
+    // Branch A: Laners
+    const laneMins     = ch.laneMinionsFirst10Minutes ?? 0;
+    const turretPlates = ch.turretPlatesTaken         ?? 0;
+    const soloKills    = ch.soloKills                 ?? 0;
+    const turretTds    = ch.turretTakedowns           ?? 0;
 
-  let cs10Score = 0.0;
-  if (laneMins > 0 && (lane === "TOP" || lane === "MIDDLE")) {
-    cs10Score = (laneMins - 54.0) * 0.35;
-  } else if (laneMins > 0 && lane === "BOTTOM") {
-    cs10Score = (laneMins - 51.0) * 0.37;
+    let cs10Score = 0.0;
+    if (laneMins > 0 && (lane === "TOP" || lane === "MIDDLE")) {
+      cs10Score = (laneMins - 54.0) * 0.35;
+    } else if (laneMins > 0) { // BOTTOM
+      cs10Score = (laneMins - 51.0) * 0.37;
+    }
+    const platesScore = 2.25 + turretPlates * 1.50;
+    const soloScore = lane === "BOTTOM" ? soloKills * 1.50
+                    : lane === "MIDDLE" ? soloKills * 0.85
+                    : /* TOP */           soloKills * 0.75;
+    const tdScore = lane === "TOP" ? turretTds * 0.85 : turretTds * 0.75;
+
+    roleSpecific = Math.min(20.0, cs10Score + platesScore + soloScore + tdScore);
+
+  } else if (lane === "JUNGLE") {
+    // Branch B: Jungle
+    const initCrab   = ch.initialCrabCount        ?? 0;
+    const scuttle    = ch.scuttleCrabKills         ?? 0;
+    const jungleCs10 = ch.jungleCsBefore10Minutes  ?? 0;
+    const enemyJg    = ch.enemyJungleMonsterKills  ?? 0;
+    const pickKill   = ch.pickKillWithAlly         ?? 0;
+
+    roleSpecific = Math.min(20.0,
+      initCrab   * 1.50
+      + scuttle    * 0.45
+      + jungleCs10 * 0.067
+      + enemyJg    * 0.50
+      + pickKill   * 0.275
+    );
+
+  } else {
+    // Branch C: Support (UTILITY)
+    const supportQuest = ch.completeSupportQuestInTime ?? 0;
+    const stealthWards = ch.stealthWardsPlaced         ?? 0;
+    const controlWards = ch.controlWardsPlaced         ?? 0;
+    const wardTds      = ch.wardTakedowns              ?? 0;
+    const pickKill     = ch.pickKillWithAlly           ?? 0;
+
+    const questScore = supportQuest ? 1.50 : -3.0;
+    roleSpecific = Math.min(20.0,
+      questScore
+      + stealthWards * 0.17
+      + controlWards * 0.58
+      + wardTds      * 0.42
+      + pickKill     * 0.22
+    );
   }
-
-  const platesScore = 2.25 + turretPlates * 1.50;
-
-  let soloScore = 0.0;
-  if (lane === "BOTTOM")      soloScore = soloKills * 1.50;
-  else if (lane === "MIDDLE") soloScore = soloKills * 0.85;
-  else                        soloScore = soloKills * 0.75; // TOP, JUNGLE, UTILITY
-
-  const roleSpecific = Math.min(20.0, cs10Score + platesScore + soloScore);
 
   // Win/Loss
   const winLoss = player.win ? 3.0 : -3.0;
