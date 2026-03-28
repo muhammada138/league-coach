@@ -60,14 +60,17 @@ function computePerformanceScore(player, allPlayers) {
 
   if (player.win) return Math.round(58 + teamPct * 42);
 
-  let base = Math.round(8 + teamPct * 32);
-  const enemyTeam    = allPlayers.filter((p) => p.teamId !== player.teamId);
-  const avgEnemyRaw  = enemyTeam.reduce((s, p) => s + raw(p), 0) / Math.max(enemyTeam.length, 1);
-  if (myRaw > avgEnemyRaw) {
-    const over  = (myRaw - avgEnemyRaw) / Math.max(avgEnemyRaw, 0.01);
-    base = Math.min(55, Math.round(base + Math.min(22, over * 30)));
+  // Losers: score on a global lobby percentile curve — no ceiling cap.
+  // Best loser (rank #1 in whole lobby) can reach 100.
+  const lobbyPos = allPlayers.filter((p) => raw(p) < myRaw).length;
+  const lobbyPct = lobbyPos / (allPlayers.length - 1); // 0 = worst in game, 1 = best
+  if (lobbyPct <= 0.5) {
+    // Bottom half of lobby: 8–42
+    return Math.round(8 + lobbyPct * 68);
   }
-  return base;
+  // Top half: 42–100 (slightly compressed curve so ~0.8 pct ≈ 70, ~1.0 pct = 100)
+  const excess = (lobbyPct - 0.5) * 2; // 0→1
+  return Math.round(42 + Math.pow(excess, 1.2) * 58);
 }
 
 // LP series anchored to current LP, working backwards through games.

@@ -86,14 +86,16 @@ def _compute_perf_score(player: dict, all_players: list) -> int:
     if is_win:
         return round(58 + team_pct * 42)
 
-    base = round(8 + team_pct * 32)
-    # Bonus if outperforming the avg enemy even while losing
-    enemy_team = [p for p in all_players if p.get("teamId") != player_team_id]
-    avg_enemy  = sum(raw(p) for p in enemy_team) / max(len(enemy_team), 1)
-    if my_raw > avg_enemy:
-        over = (my_raw - avg_enemy) / max(avg_enemy, 0.01)
-        base = min(55, round(base + min(22, over * 30)))
-    return base
+    # Losers: global lobby percentile curve — no ceiling cap.
+    # Best loser (rank #1 in whole game) can reach 100.
+    lobby_pos = sum(1 for p in all_players if raw(p) < my_raw)
+    lobby_pct = lobby_pos / max(len(all_players) - 1, 1)  # 0 = worst, 1 = best
+
+    if lobby_pct <= 0.5:
+        return round(8 + lobby_pct * 68)           # 8–42
+
+    excess = (lobby_pct - 0.5) * 2                # 0→1
+    return round(42 + (excess ** 1.2) * 58)        # 42–100
 
 
 def _compute_diffed_lane(all_players: list):
