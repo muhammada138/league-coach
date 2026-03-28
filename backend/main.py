@@ -207,20 +207,31 @@ def _compute_diffed_lane(all_players: list, timeline: dict = None):
     return diffed
 
 
+# Create a semaphore to limit concurrent requests to the Riot API (prevents 429 Too Many Requests)
+api_semaphore = asyncio.Semaphore(15)
+
 async def riot_get(client: httpx.AsyncClient, url: str) -> dict:
-    response = await client.get(url, headers=RIOT_HEADERS)
-    if response.status_code != 200:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    async with api_semaphore:
+        response = await client.get(url, headers=RIOT_HEADERS)
+        if response.status_code == 429:
+            await asyncio.sleep(1.2)
+            response = await client.get(url, headers=RIOT_HEADERS)
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return response.json()
     
     
 async def get_match_timeline(client: httpx.AsyncClient, match_id: str) -> dict:
     """Helper to fetch the match-timeline-v5 data for a specific match gracefully."""
     url = f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline"
     try:
-        response = await client.get(url, headers=RIOT_HEADERS)
-        if response.status_code == 200:
-            return response.json()
+        async with api_semaphore:
+            response = await client.get(url, headers=RIOT_HEADERS)
+            if response.status_code == 429:
+                await asyncio.sleep(1.2)
+                response = await client.get(url, headers=RIOT_HEADERS)
+            if response.status_code == 200:
+                return response.json()
     except Exception:
         pass
     return None
