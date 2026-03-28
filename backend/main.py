@@ -164,13 +164,20 @@ async def get_profile(puuid: str):
 async def analyze(puuid: str, game_name: str = "Summoner"):
     async with httpx.AsyncClient(timeout=30.0) as client:
         # 1. Fetch last 5 ranked match IDs
-        match_ids = await riot_get(
-            client,
-            f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10&queue=420",
-        )
+        match_ids = []
+        queue_used = 420
+        for try_queue in [420, 440, 400]:
+            ids = await riot_get(
+                client,
+                f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10&queue={try_queue}",
+            )
+            if ids:
+                match_ids = ids
+                queue_used = try_queue
+                break
 
         if not match_ids:
-            raise HTTPException(status_code=404, detail="No ranked matches found")
+            raise HTTPException(status_code=404, detail="No matches found")
 
         # 2. Fetch all match data in parallel
         match_datas = await asyncio.gather(*[
@@ -220,8 +227,14 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
             player_cspm = player_stats["totalMinionsKilled"] / minutes if minutes > 0 else 0
             lobby_cspm = lobby_avgs["totalMinionsKilled"] / minutes if minutes > 0 else 0
 
-            game_score = _compute_perf_score(player, participants)
+            all_player_scores = [(p, _compute_perf_score(p, participants)) for p in participants]
+            game_score = next(s for p, s in all_player_scores if p.get("puuid") == puuid)
             game_diffed_lane = _compute_diffed_lane(participants)
+            winning_scores = [(p, s) for p, s in all_player_scores if p.get("win")]
+            losing_scores  = [(p, s) for p, s in all_player_scores if not p.get("win")]
+            mvp_puuid_g = max(winning_scores, key=lambda x: x[1])[0].get("puuid") if winning_scores else None
+            ace_puuid_g = max(losing_scores,  key=lambda x: x[1])[0].get("puuid") if losing_scores  else None
+            mvp_ace = "MVP" if puuid == mvp_puuid_g else ("ACE" if puuid == ace_puuid_g else None)
 
             player_team_id = player.get("teamId")
             teammates = [
@@ -250,6 +263,7 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
                 "lobbyCspm": round(lobby_cspm, 2),
                 "score": game_score,
                 "diffedLane": game_diffed_lane,
+                "mvpAce": mvp_ace,
                 "teammates": teammates,
                 "opponents": opponents,
             })
@@ -363,6 +377,7 @@ Per game breakdown:
             "gameDuration": ps["gameDuration"],
             "score": g["score"],
             "diffedLane": g["diffedLane"],
+            "mvpAce": g.get("mvpAce"),
             "teammates": g.get("teammates", []),
             "opponents": g.get("opponents", []),
         })
@@ -372,6 +387,7 @@ Per game breakdown:
 
     return {
         "gameName": game_name,
+        "queueUsed": queue_used,
         "mostPlayedPosition": most_common_position,
         "winRate": win_rate,
         "mostDiffedLane": most_diffed_lane,
@@ -393,12 +409,12 @@ Per game breakdown:
 
 
 @app.get("/history/{puuid}")
-async def get_history(puuid: str, start: int = 0, count: int = 10):
+async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 420):
     count = min(count, 10)
     async with httpx.AsyncClient(timeout=30.0) as client:
         match_ids = await riot_get(
             client,
-            f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?start={start}&count={count}&queue=420",
+            f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?start={start}&count={count}&queue={queue}",
         )
         if not match_ids:
             return []
@@ -432,6 +448,13 @@ async def get_history(puuid: str, start: int = 0, count: int = 10):
             for p in participants
             if p.get("puuid") != puuid and p.get("teamId") != player_team_id
         ]
+        all_ps = [(p, _compute_perf_score(p, participants)) for p in participants]
+        player_score_h = next(s for p, s in all_ps if p.get("puuid") == puuid)
+        win_scores_h = [(p, s) for p, s in all_ps if p.get("win")]
+        loss_scores_h = [(p, s) for p, s in all_ps if not p.get("win")]
+        mvp_h = max(win_scores_h,  key=lambda x: x[1])[0].get("puuid") if win_scores_h  else None
+        ace_h = max(loss_scores_h, key=lambda x: x[1])[0].get("puuid") if loss_scores_h else None
+        mvp_ace_h = "MVP" if puuid == mvp_h else ("ACE" if puuid == ace_h else None)
         games.append({
             "matchId": match_id,
             "championName": player["championName"],
@@ -443,7 +466,8 @@ async def get_history(puuid: str, start: int = 0, count: int = 10):
             "visionScore": player["visionScore"],
             "win": player["win"],
             "gameDuration": info["gameDuration"],
-            "score": _compute_perf_score(player, participants),
+            "score": player_score_h,
+            "mvpAce": mvp_ace_h,
             "diffedLane": _compute_diffed_lane(participants),
             "teammates": hist_teammates,
             "opponents": hist_opponents,
@@ -461,7 +485,9 @@ async def get_scoreboard(match_id: str):
     participants = sorted(data["info"]["participants"], key=lambda p: p["teamId"])
     return [
         {
+            "puuid": p.get("puuid", ""),
             "riotIdGameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown",
+            "riotIdTagline": p.get("riotIdTagline") or "",
             "championName": p["championName"],
             "kills": p["kills"],
             "deaths": p["deaths"],
