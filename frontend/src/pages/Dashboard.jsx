@@ -79,9 +79,9 @@ function computePerformanceScore(player, allPlayers) {
   const soloKills    = ch.soloKills                 ?? 0;
 
   let cs10Score = 0.0;
-  if (lane === "TOP" || lane === "MIDDLE") {
+  if (laneMins > 0 && (lane === "TOP" || lane === "MIDDLE")) {
     cs10Score = (laneMins - 54.0) * 0.35;
-  } else if (lane === "BOTTOM") {
+  } else if (laneMins > 0 && lane === "BOTTOM") {
     cs10Score = (laneMins - 51.0) * 0.37;
   }
 
@@ -92,7 +92,12 @@ function computePerformanceScore(player, allPlayers) {
   else if (lane === "MIDDLE") soloScore = soloKills * 0.85;
   else if (lane === "TOP")    soloScore = soloKills * 0.75;
 
-  const roleSpecific = cs10Score + platesScore + soloScore;
+  const turretTakedowns = ch.turretTakedowns ?? 0;
+  let takedownScore = 0.0;
+  if (lane === "TOP")                             takedownScore = turretTakedowns * 0.85;
+  else if (lane === "MIDDLE" || lane === "BOTTOM") takedownScore = turretTakedowns * 0.75;
+
+  const roleSpecific = cs10Score + platesScore + soloScore + takedownScore;
 
   // Win/Loss
   const winLoss = player.win ? 3.0 : -3.0;
