@@ -35,67 +35,98 @@ NUMERIC_STATS = [
 ]
 
 
-def _compute_perf_score(player: dict, all_players: list) -> int:
-    """Score 0-100: win team 58-100, loss team 8-40, ranked within own team."""
-    n = len(all_players) or 1
-    player_team_id = player.get("teamId", 100)
+def _compute_perf_score(player: dict, all_players: list) -> float:
+    """
+    0-100 performance score (reverse-engineered dpm.lol algorithm).
+    Components: Base + Global + Lane + Objectives + Team + KDA + RoleSpecific + Win/Loss.
+    Returns a float rounded to 2 decimal places.
+    """
+    ch   = player.get("challenges") or {}
+    lane = player.get("teamPosition") or "MIDDLE"
 
-    avg_kda  = sum((p.get("kills",0)+p.get("assists",0))/max(p.get("deaths",1),1) for p in all_players) / n
-    avg_dmg  = sum(p.get("totalDamageDealtToChampions",0) for p in all_players) / n
-    avg_gold = sum(p.get("goldEarned",0) for p in all_players) / n
-    avg_cs   = sum(p.get("totalMinionsKilled",0) for p in all_players) / n
-    avg_vis  = sum(p.get("visionScore",0) for p in all_players) / n
-    avg_kp   = sum(
-        (p.get("kills",0)+p.get("assists",0)) /
-        max(sum(x.get("kills",0) for x in all_players if x.get("teamId")==p.get("teamId")), 1)
-        for p in all_players
-    ) / n
+    # ── BASE ─────────────────────────────────────────────────────────────────
+    base = 15.0
 
-    def raw(p):
-        kda  = (p.get("kills",0)+p.get("assists",0)) / max(p.get("deaths",1), 1)
-        pkp  = (p.get("kills",0)+p.get("assists",0)) / max(
-            sum(x.get("kills",0) for x in all_players if x.get("teamId")==p.get("teamId")), 1)
-        cs = p.get("totalMinionsKilled", 0)
-        vis = p.get("visionScore", 0)
-        # Support detection: low CS → weight vision & KP more heavily
-        if cs < 50:
-            return (
-                (kda  / max(avg_kda,  0.1))  * 0.12
-                + (p.get("totalDamageDealtToChampions",0) / max(avg_dmg,  1)) * 0.10
-                + (p.get("goldEarned",0)                 / max(avg_gold, 1)) * 0.10
-                + (cs                                    / max(avg_cs,   1)) * 0.05
-                + (vis                                   / max(avg_vis,  1)) * 0.38
-                + (pkp / max(avg_kp, 0.01))                                  * 0.25
-            )
-        return (
-            (kda  / max(avg_kda,  0.1))  * 0.20
-            + (p.get("totalDamageDealtToChampions",0) / max(avg_dmg,  1)) * 0.25
-            + (p.get("goldEarned",0)                 / max(avg_gold, 1)) * 0.15
-            + (cs                                    / max(avg_cs,   1)) * 0.15
-            + (vis                                   / max(avg_vis,  1)) * 0.10
-            + (pkp / max(avg_kp, 0.01))                                  * 0.15
+    # ── GLOBAL ───────────────────────────────────────────────────────────────
+    gpm  = ch.get("goldPerMinute")        or 0.0
+    dpm  = ch.get("damagePerMinute")      or 0.0
+    vspm = ch.get("visionScorePerMinute") or 0.0
+    global_score = (gpm + 60) * 0.008 + (dpm - 24.6) * 0.007 + vspm * 2.0
+
+    # ── KDA (role-dependent) ──────────────────────────────────────────────────
+    kills   = player.get("kills",   0) or 0
+    deaths  = player.get("deaths",  0) or 0
+    assists = player.get("assists", 0) or 0
+    if lane == "TOP":
+        kda_score = kills * 0.80 + assists * 0.80 + deaths * -1.50
+    elif lane == "UTILITY":
+        kda_score = kills * 0.85 + assists * 0.90 + deaths * -1.25
+    else:  # JUNGLE, MIDDLE, BOTTOM
+        kda_score = kills * 0.75 + assists * 0.75 + deaths * -1.50
+
+    # ── LANE PERFORMANCE (vs lane opponent) ───────────────────────────────────
+    player_team = player.get("teamId", 100)
+    player_pos  = player.get("teamPosition") or ""
+    lane_score  = 0.0
+    if player_pos and player_pos not in ("", "UNKNOWN"):
+        opp = next(
+            (p for p in all_players
+             if p.get("teamPosition") == player_pos and p.get("teamId") != player_team),
+            None,
         )
+        if opp:
+            gold_diff  = (player.get("goldEarned", 0) or 0) - (opp.get("goldEarned", 0) or 0)
+            xp_diff    = (player.get("champExperience", 0) or 0) - (opp.get("champExperience", 0) or 0)
+            max_cs_adv = ch.get("maxCsAdvantageOnLaneOpponent", 0) or 0
+            raw_lane   = gold_diff * 0.0015 + xp_diff * 0.0011 + max_cs_adv * 0.08
+            lane_score = max(-5.0, min(10.0, raw_lane))
 
-    my_raw   = raw(player)
-    my_team  = [p for p in all_players if p.get("teamId") == player_team_id]
-    team_n   = max(len(my_team) - 1, 1)
-    team_rank = sum(1 for p in my_team if raw(p) > my_raw)   # 0 = best in team
-    team_pct  = 1.0 - (team_rank / team_n)                   # 1.0 = best, 0.0 = worst
+    # ── OBJECTIVES ────────────────────────────────────────────────────────────
+    rift_heralds = ch.get("riftHeraldKills", 0)            or 0
+    dragons      = player.get("dragonKills", 0)            or 0
+    barons       = player.get("baronKills",  0)            or 0
+    horde        = ch.get("voidMonsterKill", 0)            or 0
+    obj_dmg      = player.get("damageDealtToObjectives", 0) or 0
+    obj_score    = rift_heralds * 3.0 + dragons * 2.1 + barons * 2.0 + horde * 0.5 + obj_dmg * 0.00024
 
-    is_win = player.get("win", False)
-    if is_win:
-        return round(58 + team_pct * 42)
+    # ── TEAM ──────────────────────────────────────────────────────────────────
+    # Riot API challenges values are 0-1; convert to 0-100 for the formula
+    kp_pct        = (ch.get("killParticipation",          0) or 0.0) * 100
+    team_dmg_pct  = (ch.get("teamDamagePercentage",       0) or 0.0) * 100
+    dmg_taken_pct = (ch.get("damageTakenOnTeamPercentage",0) or 0.0) * 100
+    team_score    = (kp_pct - 25) * 0.14 + team_dmg_pct * 0.09 + dmg_taken_pct * 0.07
 
-    # Losers: global lobby percentile curve — no ceiling cap.
-    # Best loser (rank #1 in whole game) can reach 100.
-    lobby_pos = sum(1 for p in all_players if raw(p) < my_raw)
-    lobby_pct = lobby_pos / max(len(all_players) - 1, 1)  # 0 = worst, 1 = best
+    # ── ROLE-SPECIFIC MASTERY ─────────────────────────────────────────────────
+    lane_mins     = ch.get("laneMinionsFirst10Minutes", 0) or 0
+    turret_plates = ch.get("turretPlatesTaken",         0) or 0
+    solo_kills    = ch.get("soloKills",                 0) or 0
 
-    if lobby_pct <= 0.5:
-        return round(8 + lobby_pct * 68)           # 8–42
+    if lane in ("TOP", "MIDDLE"):
+        cs10_score = (lane_mins - 54.0) * 0.35
+    elif lane == "BOTTOM":
+        cs10_score = (lane_mins - 51.0) * 0.37
+    else:
+        cs10_score = 0.0
 
-    excess = (lobby_pct - 0.5) * 2                # 0→1
-    return round(42 + (excess ** 1.2) * 58)        # 42–100
+    plates_score = 2.25 + turret_plates * 1.50
+
+    if lane == "BOTTOM":
+        solo_score = solo_kills * 1.50
+    elif lane == "MIDDLE":
+        solo_score = solo_kills * 0.85
+    elif lane == "TOP":
+        solo_score = solo_kills * 0.75
+    else:
+        solo_score = 0.0
+
+    role_specific = cs10_score + plates_score + solo_score
+
+    # ── WIN / LOSS ────────────────────────────────────────────────────────────
+    win_loss = 3.0 if player.get("win", False) else -3.0
+
+    # ── TOTAL ────────────────────────────────────────────────────────────────
+    total = base + global_score + lane_score + obj_score + team_score + kda_score + role_specific + win_loss
+    return round(max(0.0, min(100.0, total)), 2)
 
 
 def _compute_diffed_lane(all_players: list):
@@ -489,6 +520,7 @@ async def get_scoreboard(match_id: str):
             "riotIdGameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown",
             "riotIdTagline": p.get("riotIdTagline") or "",
             "championName": p["championName"],
+            "teamPosition": p.get("teamPosition", "UNKNOWN"),
             "kills": p["kills"],
             "deaths": p["deaths"],
             "assists": p["assists"],
@@ -496,8 +528,21 @@ async def get_scoreboard(match_id: str):
             "visionScore": p["visionScore"],
             "totalDamageDealtToChampions": p["totalDamageDealtToChampions"],
             "goldEarned": p["goldEarned"],
+            "champExperience": p.get("champExperience", 0),
+            "dragonKills": p.get("dragonKills", 0),
+            "baronKills": p.get("baronKills", 0),
+            "damageDealtToObjectives": p.get("damageDealtToObjectives", 0),
             "win": p["win"],
             "teamId": p["teamId"],
+            "challenges": {
+                k: (p.get("challenges") or {}).get(k, 0)
+                for k in (
+                    "goldPerMinute", "damagePerMinute", "visionScorePerMinute",
+                    "killParticipation", "teamDamagePercentage", "damageTakenOnTeamPercentage",
+                    "laneMinionsFirst10Minutes", "turretPlatesTaken", "soloKills",
+                    "maxCsAdvantageOnLaneOpponent", "riftHeraldKills", "voidMonsterKill",
+                )
+            },
         }
         for p in participants
     ]
