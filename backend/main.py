@@ -68,13 +68,25 @@ def _compute_perf_score(player: dict, all_players: list, timeline: dict = None) 
     player_team = player.get("teamId", 100)
     player_pos  = player.get("teamPosition") or ""
     lane_score  = 0.0
+    opp = None
+    
     if player_pos and player_pos not in ("", "UNKNOWN"):
         opp = next(
             (p for p in all_players
              if p.get("teamPosition") == player_pos and p.get("teamId") != player_team),
             None,
         )
-        if opp:
+        
+    if not opp:
+        my_lane = player.get("lane")
+        if my_lane and my_lane not in ("", "NONE"):
+            opp = next(
+                (p for p in all_players
+                 if p.get("lane") == my_lane and p.get("teamId") != player_team),
+                None,
+            )
+
+    if opp:
             true_gold_diff = 0
             true_xp_diff = 0
             
