@@ -36,28 +36,64 @@ NUMERIC_STATS = [
 
 
 def _compute_perf_score(player: dict, all_players: list) -> int:
-    """Rank a player 0-100 relative to the 10-person lobby (mirrors frontend logic)."""
+    """Score 0-100: win team 58-100, loss team 8-40, ranked within own team."""
     n = len(all_players) or 1
+    player_team_id = player.get("teamId", 100)
+
     avg_kda  = sum((p.get("kills",0)+p.get("assists",0))/max(p.get("deaths",1),1) for p in all_players) / n
     avg_dmg  = sum(p.get("totalDamageDealtToChampions",0) for p in all_players) / n
     avg_gold = sum(p.get("goldEarned",0) for p in all_players) / n
     avg_cs   = sum(p.get("totalMinionsKilled",0) for p in all_players) / n
     avg_vis  = sum(p.get("visionScore",0) for p in all_players) / n
+    avg_kp   = sum(
+        (p.get("kills",0)+p.get("assists",0)) /
+        max(sum(x.get("kills",0) for x in all_players if x.get("teamId")==p.get("teamId")), 1)
+        for p in all_players
+    ) / n
 
     def raw(p):
-        kda = (p.get("kills",0)+p.get("assists",0)) / max(p.get("deaths",1), 1)
+        kda  = (p.get("kills",0)+p.get("assists",0)) / max(p.get("deaths",1), 1)
+        pkp  = (p.get("kills",0)+p.get("assists",0)) / max(
+            sum(x.get("kills",0) for x in all_players if x.get("teamId")==p.get("teamId")), 1)
+        cs = p.get("totalMinionsKilled", 0)
+        vis = p.get("visionScore", 0)
+        # Support detection: low CS → weight vision & KP more heavily
+        if cs < 50:
+            return (
+                (kda  / max(avg_kda,  0.1))  * 0.12
+                + (p.get("totalDamageDealtToChampions",0) / max(avg_dmg,  1)) * 0.10
+                + (p.get("goldEarned",0)                 / max(avg_gold, 1)) * 0.10
+                + (cs                                    / max(avg_cs,   1)) * 0.05
+                + (vis                                   / max(avg_vis,  1)) * 0.38
+                + (pkp / max(avg_kp, 0.01))                                  * 0.25
+            )
         return (
-            (kda / max(avg_kda, 0.1)) * 25
-            + (p.get("totalDamageDealtToChampions",0) / max(avg_dmg, 1)) * 25
-            + (p.get("goldEarned",0) / max(avg_gold, 1)) * 20
-            + (p.get("totalMinionsKilled",0) / max(avg_cs, 1)) * 15
-            + (p.get("visionScore",0) / max(avg_vis, 1)) * 15
+            (kda  / max(avg_kda,  0.1))  * 0.20
+            + (p.get("totalDamageDealtToChampions",0) / max(avg_dmg,  1)) * 0.25
+            + (p.get("goldEarned",0)                 / max(avg_gold, 1)) * 0.15
+            + (cs                                    / max(avg_cs,   1)) * 0.15
+            + (vis                                   / max(avg_vis,  1)) * 0.10
+            + (pkp / max(avg_kp, 0.01))                                  * 0.15
         )
 
-    my_raw = raw(player)
-    rank = sum(1 for p in all_players if raw(p) > my_raw)
-    score_table = [100, 93, 83, 75, 72, 64, 61, 58, 49, 25]
-    return score_table[min(rank, 9)]
+    my_raw   = raw(player)
+    my_team  = [p for p in all_players if p.get("teamId") == player_team_id]
+    team_n   = max(len(my_team) - 1, 1)
+    team_rank = sum(1 for p in my_team if raw(p) > my_raw)   # 0 = best in team
+    team_pct  = 1.0 - (team_rank / team_n)                   # 1.0 = best, 0.0 = worst
+
+    is_win = player.get("win", False)
+    if is_win:
+        return round(58 + team_pct * 42)
+
+    base = round(8 + team_pct * 32)
+    # Bonus if outperforming the avg enemy even while losing
+    enemy_team = [p for p in all_players if p.get("teamId") != player_team_id]
+    avg_enemy  = sum(raw(p) for p in enemy_team) / max(len(enemy_team), 1)
+    if my_raw > avg_enemy:
+        over = (my_raw - avg_enemy) / max(avg_enemy, 0.01)
+        base = min(55, round(base + min(22, over * 30)))
+    return base
 
 
 def _compute_diffed_lane(all_players: list):
