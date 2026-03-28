@@ -530,9 +530,9 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
               {game.teamPosition || "-"} · {mins}:{secs}
             </span>
             {game.diffedLane && (
-              <span className="flex items-center gap-0.5">
+              <span className="flex items-center gap-0.5 flex-shrink-0">
                 <LaneIcon lane={game.diffedLane} />
-                <span className="text-[10px] text-slate-400 dark:text-white/30">Diff</span>
+                <span className="text-[10px] text-slate-400 dark:text-white/30 truncate">Diff</span>
               </span>
             )}
           </div>
@@ -564,7 +564,7 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
 
         {/* Score */}
         {game.score != null && (
-          <div className="hidden sm:flex flex-col items-center flex-shrink-0">
+          <div className="flex flex-col items-center flex-shrink-0">
             <span className={`text-sm font-black tabular-nums ${scoreColor}`}>{game.score}</span>
             <span className="text-[10px] text-slate-400 dark:text-white/25 uppercase tracking-wide">Score</span>
           </div>
@@ -810,9 +810,9 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
                       </div>
                     </div>
                   )}
-                  <div ref={chatEndRef} />
                 </div>
               )}
+              <div ref={chatEndRef} />
 
               {/* Input */}
               <form onSubmit={handleAsk} className="p-3">
