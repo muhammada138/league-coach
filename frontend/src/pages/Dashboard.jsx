@@ -86,7 +86,7 @@ function computePerformanceScore(player, allPlayers) {
     if (laneMins > 0 && (lane === "TOP" || lane === "MIDDLE")) {
       cs10Score = (laneMins - 54.0) * 0.35;
     } else if (laneMins > 0) { // BOTTOM
-      cs10Score = (laneMins - 51.0) * 0.37;
+      cs10Score = (laneMins - 51.0) * 0.35;
     }
     const platesScore = 2.25 + turretPlates * 1.50;
     const soloScore = lane === "BOTTOM" ? soloKills * 1.50
@@ -94,7 +94,7 @@ function computePerformanceScore(player, allPlayers) {
                     : /* TOP */           soloKills * 0.75;
     const tdScore = lane === "TOP" ? turretTds * 0.85 : turretTds * 0.75;
 
-    roleSpecific = Math.min(20.0, cs10Score + platesScore + soloScore + tdScore);
+    roleSpecific = cs10Score + platesScore + soloScore + tdScore;
 
   } else if (lane === "JUNGLE") {
     // Branch B: Jungle
@@ -104,7 +104,7 @@ function computePerformanceScore(player, allPlayers) {
     const enemyJg    = ch.enemyJungleMonsterKills  ?? 0;
     const pickKill   = ch.pickKillWithAlly         ?? 0;
 
-    roleSpecific = Math.min(20.0,
+    roleSpecific = (
       initCrab   * 1.50
       + scuttle    * 0.45
       + jungleCs10 * 0.067
@@ -121,7 +121,7 @@ function computePerformanceScore(player, allPlayers) {
     const pickKill     = ch.pickKillWithAlly           ?? 0;
 
     const questScore = supportQuest ? 1.50 : -3.0;
-    roleSpecific = Math.min(20.0,
+    roleSpecific = (
       questScore
       + stealthWards * 0.17
       + controlWards * 0.58
@@ -129,13 +129,15 @@ function computePerformanceScore(player, allPlayers) {
       + pickKill     * 0.22
     );
   }
+  
+  roleSpecific = Math.max(0.0, Math.min(20.0, roleSpecific));
 
   // Win/Loss
   const winLoss = player.win ? 3.0 : -3.0;
 
   // Total
   const total = base + globalScore + laneScore + objScore + teamScore + kdaScore + roleSpecific + winLoss;
-  return Math.round(Math.max(0, Math.min(100, total)));
+  return Math.max(0, Math.min(100, total)).toFixed(2);
 }
 
 // LP series anchored to current LP, working backwards through games.
@@ -711,7 +713,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName }) {
 
   const withScores = scoreboard.map((p) => ({
     ...p,
-    score: computePerformanceScore(p, scoreboard),
+    score: p.score ?? computePerformanceScore(p, scoreboard),
   }));
   const team100Won = scoreboard.find((p) => p.teamId === 100)?.win ?? true;
 

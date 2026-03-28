@@ -35,7 +35,7 @@ NUMERIC_STATS = [
 ]
 
 
-def _compute_perf_score(player: dict, all_players: list) -> float:
+def _compute_perf_score(player: dict, all_players: list, timeline: dict = None) -> float:
     """
     0-100 performance score (reverse-engineered dpm.lol algorithm).
     Components: Base + Global + Lane + Objectives + Team + KDA + RoleSpecific + Win/Loss.
@@ -48,9 +48,9 @@ def _compute_perf_score(player: dict, all_players: list) -> float:
     base = 15.0
 
     # ── GLOBAL ───────────────────────────────────────────────────────────────
-    gpm  = ch.get("goldPerMinute")        or 0.0
-    dpm  = ch.get("damagePerMinute")      or 0.0
-    vspm = ch.get("visionScorePerMinute") or 0.0
+    gpm  = ch.get("goldPerMinute", 0) or 0.0
+    dpm  = ch.get("damagePerMinute", 0) or 0.0
+    vspm = ch.get("visionScorePerMinute", 0) or 0.0
     global_score = (gpm + 60) * 0.008 + (dpm - 24.6) * 0.007 + vspm * 2.0
 
     # ── KDA (role-dependent) ──────────────────────────────────────────────────
@@ -64,7 +64,7 @@ def _compute_perf_score(player: dict, all_players: list) -> float:
     else:  # JUNGLE, MIDDLE, BOTTOM
         kda_score = kills * 0.75 + assists * 0.75 + deaths * -1.50
 
-    # ── LANE PERFORMANCE (vs lane opponent) ───────────────────────────────────
+    # ── LANE PERFORMANCE (The Timeline Fix) ───────────────────────────────────
     player_team = player.get("teamId", 100)
     player_pos  = player.get("teamPosition") or ""
     lane_score  = 0.0
@@ -75,10 +75,30 @@ def _compute_perf_score(player: dict, all_players: list) -> float:
             None,
         )
         if opp:
-            gold_diff  = (player.get("goldEarned", 0) or 0) - (opp.get("goldEarned", 0) or 0)
-            xp_diff    = (player.get("champExperience", 0) or 0) - (opp.get("champExperience", 0) or 0)
+            true_gold_diff = 0
+            true_xp_diff = 0
+            
+            if timeline:
+                frames = timeline.get("info", {}).get("frames", [])
+                if frames:
+                    target_frame_idx = min(15, len(frames) - 1)
+                    p_frames = frames[target_frame_idx].get("participantFrames", {})
+                    
+                    p_id = str(player.get("participantId"))
+                    o_id = str(opp.get("participantId"))
+                    
+                    p_frame = p_frames.get(p_id, {})
+                    o_frame = p_frames.get(o_id, {})
+                    
+                    true_gold_diff = p_frame.get("totalGold", 0) - o_frame.get("totalGold", 0)
+                    true_xp_diff = p_frame.get("xp", 0) - o_frame.get("xp", 0)
+            else:
+                # Graceful fallback to end-of-game totals if timeline fetch failed
+                true_gold_diff = (player.get("goldEarned", 0) or 0) - (opp.get("goldEarned", 0) or 0)
+                true_xp_diff = (player.get("champExperience", 0) or 0) - (opp.get("champExperience", 0) or 0)
+                
             max_cs_adv = ch.get("maxCsAdvantageOnLaneOpponent", 0) or 0
-            raw_lane   = gold_diff * 0.0015 + xp_diff * 0.0011 + max_cs_adv * 0.08
+            raw_lane   = (true_gold_diff * 0.0015) + (true_xp_diff * 0.0011) + (max_cs_adv * 0.08)
             lane_score = max(-5.0, min(10.0, raw_lane))
 
     # ── OBJECTIVES ────────────────────────────────────────────────────────────
@@ -97,6 +117,7 @@ def _compute_perf_score(player: dict, all_players: list) -> float:
     team_score    = (kp_pct - 25) * 0.14 + team_dmg_pct * 0.09 + dmg_taken_pct * 0.07
 
     # ── ROLE-SPECIFIC MASTERY ─────────────────────────────────────────────────
+    role_specific = 0.0
     if lane in ("TOP", "MIDDLE", "BOTTOM"):
         # Branch A: Laners
         lane_mins     = ch.get("laneMinionsFirst10Minutes", 0) or 0
@@ -104,12 +125,11 @@ def _compute_perf_score(player: dict, all_players: list) -> float:
         solo_kills    = ch.get("soloKills",                 0) or 0
         turret_tds    = ch.get("turretTakedowns",           0) or 0
 
+        cs10_score = 0.0
         if lane_mins > 0 and lane in ("TOP", "MIDDLE"):
             cs10_score = (lane_mins - 54.0) * 0.35
         elif lane_mins > 0:  # BOTTOM
-            cs10_score = (lane_mins - 51.0) * 0.37
-        else:
-            cs10_score = 0.0
+            cs10_score = (lane_mins - 51.0) * 0.35
 
         plates_score = 2.25 + turret_plates * 1.50
 
@@ -121,8 +141,8 @@ def _compute_perf_score(player: dict, all_players: list) -> float:
             solo_score = solo_kills * 0.75
 
         td_score = turret_tds * 0.85 if lane == "TOP" else turret_tds * 0.75
-
-        role_specific = min(20.0, cs10_score + plates_score + solo_score + td_score)
+        
+        role_specific = cs10_score + plates_score + solo_score + td_score
 
     elif lane == "JUNGLE":
         # Branch B: Jungle
@@ -132,8 +152,8 @@ def _compute_perf_score(player: dict, all_players: list) -> float:
         enemy_jg     = ch.get("enemyJungleMonsterKills", 0) or 0
         pick_kill    = ch.get("pickKillWithAlly",        0) or 0
 
-        role_specific = min(20.0,
-            init_crab    * 1.50
+        role_specific = (
+            init_crab      * 1.50
             + scuttle_crab * 0.45
             + jungle_cs10  * 0.067
             + enemy_jg     * 0.50
@@ -149,23 +169,25 @@ def _compute_perf_score(player: dict, all_players: list) -> float:
         pick_kill     = ch.get("pickKillWithAlly",           0) or 0
 
         quest_score = 1.50 if support_quest else -3.0
-        role_specific = min(20.0,
+        role_specific = (
             quest_score
             + stealth_wards * 0.17
             + control_wards * 0.58
             + ward_tds      * 0.42
             + pick_kill     * 0.22
         )
+        
+    role_specific = max(0.0, min(20.0, role_specific))
 
     # ── WIN / LOSS ────────────────────────────────────────────────────────────
     win_loss = 3.0 if player.get("win", False) else -3.0
 
     # ── TOTAL ────────────────────────────────────────────────────────────────
     total = base + global_score + lane_score + obj_score + team_score + kda_score + role_specific + win_loss
-    return round(max(0.0, min(100.0, total)))
+    return round(max(0.0, min(100.0, float(total))), 2)
 
 
-def _compute_diffed_lane(all_players: list):
+def _compute_diffed_lane(all_players: list, timeline: dict = None):
     """Return the position label where the two opposing players had the biggest score gap."""
     by_pos = {}
     for p in all_players:
@@ -177,8 +199,8 @@ def _compute_diffed_lane(all_players: list):
     for pos, players in by_pos.items():
         if len(players) != 2:
             continue
-        s1 = _compute_perf_score(players[0], all_players)
-        s2 = _compute_perf_score(players[1], all_players)
+        s1 = _compute_perf_score(players[0], all_players, timeline)
+        s2 = _compute_perf_score(players[1], all_players, timeline)
         diff = abs(s1 - s2)
         if diff > max_diff:
             max_diff, diffed = diff, pos
@@ -190,6 +212,18 @@ async def riot_get(client: httpx.AsyncClient, url: str) -> dict:
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail=response.text)
     return response.json()
+    
+    
+async def get_match_timeline(client: httpx.AsyncClient, match_id: str) -> dict:
+    """Helper to fetch the match-timeline-v5 data for a specific match gracefully."""
+    url = f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline"
+    try:
+        response = await client.get(url, headers=RIOT_HEADERS)
+        if response.status_code == 200:
+            return response.json()
+    except Exception:
+        pass
+    return None
 
 
 @app.get("/summoner/{game_name}/{tag_line}")
@@ -246,14 +280,24 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
         if not match_ids:
             raise HTTPException(status_code=404, detail="No matches found")
 
-        # 2. Fetch all match data in parallel
-        match_datas = await asyncio.gather(*[
+        # 2. Fetch all match data and timeline data in parallel
+        match_tasks = [
             riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
             for mid in match_ids
-        ])
+        ]
+        timeline_tasks = [
+            get_match_timeline(client, mid) for mid in match_ids
+        ]
+        
+        results = await asyncio.gather(*(match_tasks + timeline_tasks), return_exceptions=True)
+        half = len(match_ids)
+        match_datas = results[:half]
+        timeline_datas = results[half:]
 
         games = []
-        for match_id, match_data in zip(match_ids, match_datas):
+        for match_id, match_data, timeline in zip(match_ids, match_datas, timeline_datas):
+            if isinstance(match_data, Exception): continue
+            timeline = timeline if not isinstance(timeline, Exception) else None
             info = match_data["info"]
             participants = info["participants"]
             game_duration = info["gameDuration"]
@@ -294,9 +338,9 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
             player_cspm = player_stats["totalMinionsKilled"] / minutes if minutes > 0 else 0
             lobby_cspm = lobby_avgs["totalMinionsKilled"] / minutes if minutes > 0 else 0
 
-            all_player_scores = [(p, _compute_perf_score(p, participants)) for p in participants]
+            all_player_scores = [(p, _compute_perf_score(p, participants, timeline)) for p in participants]
             game_score = next(s for p, s in all_player_scores if p.get("puuid") == puuid)
-            game_diffed_lane = _compute_diffed_lane(participants)
+            game_diffed_lane = _compute_diffed_lane(participants, timeline)
             winning_scores = [(p, s) for p, s in all_player_scores if p.get("win")]
             losing_scores  = [(p, s) for p, s in all_player_scores if not p.get("win")]
             mvp_puuid_g = max(winning_scores, key=lambda x: x[1])[0].get("puuid") if winning_scores else None
@@ -485,12 +529,22 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
         )
         if not match_ids:
             return []
-        match_datas = await asyncio.gather(*[
+            
+        match_tasks = [
             riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
             for mid in match_ids
-        ])
+        ]
+        timeline_tasks = [get_match_timeline(client, mid) for mid in match_ids]
+        results = await asyncio.gather(*(match_tasks + timeline_tasks), return_exceptions=True)
+        
+        half = len(match_ids)
+        match_datas = results[:half]
+        timeline_datas = results[half:]
+        
     games = []
-    for match_id, match_data in zip(match_ids, match_datas):
+    for match_id, match_data, timeline in zip(match_ids, match_datas, timeline_datas):
+        if isinstance(match_data, Exception): continue
+        timeline = timeline if not isinstance(timeline, Exception) else None
         info = match_data["info"]
         participants = info["participants"]
         player = next((p for p in participants if p["puuid"] == puuid), None)
@@ -515,7 +569,7 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
             for p in participants
             if p.get("puuid") != puuid and p.get("teamId") != player_team_id
         ]
-        all_ps = [(p, _compute_perf_score(p, participants)) for p in participants]
+        all_ps = [(p, _compute_perf_score(p, participants, timeline)) for p in participants]
         player_score_h = next(s for p, s in all_ps if p.get("puuid") == puuid)
         win_scores_h = [(p, s) for p, s in all_ps if p.get("win")]
         loss_scores_h = [(p, s) for p, s in all_ps if not p.get("win")]
@@ -535,7 +589,7 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
             "gameDuration": info["gameDuration"],
             "score": player_score_h,
             "mvpAce": mvp_ace_h,
-            "diffedLane": _compute_diffed_lane(participants),
+            "diffedLane": _compute_diffed_lane(participants, timeline),
             "teammates": hist_teammates,
             "opponents": hist_opponents,
         })
@@ -570,6 +624,7 @@ async def get_scoreboard(match_id: str):
             "damageDealtToObjectives": p.get("damageDealtToObjectives", 0),
             "win": p["win"],
             "teamId": p["teamId"],
+            "score": _compute_perf_score(p, participants, timeline),
             "challenges": {
                 k: (p.get("challenges") or {}).get(k, 0)
                 for k in (
