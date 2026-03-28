@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach } from "../api/riot";
+import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame } from "../api/riot";
 import { readSaved, writeSaved } from "../components/Navbar";
 
 const TIER_COLORS = {
@@ -41,6 +41,56 @@ function computePerformanceScore(player, allPlayers) {
   const scoreTable = [100, 93, 83, 75, 72, 64, 61, 58, 49, 25];
   return scoreTable[Math.min(rank, 9)];
 }
+
+// LP series anchored to current LP, working backwards through games.
+// games: newest-first (as returned by API). Returns length = games.length + 1.
+// Index 0 = LP before oldest game shown; index N = currentLP.
+function computeLPSeries(games, currentLP) {
+  const ordered = [...games].reverse();
+  const series = new Array(ordered.length + 1);
+  series[ordered.length] = currentLP;
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    series[i] = ordered[i].win ? series[i + 1] - 20 : series[i + 1] + 17;
+  }
+  return series;
+}
+
+// Aggregate teammates or opponents across all games.
+// type: "with" | "against" → returns [{ puuid, name, games, wins }] sorted by games desc
+function aggregateTeammates(games, type) {
+  const map = {};
+  games.forEach((game) => {
+    const list = type === "with" ? game.teammates : game.opponents;
+    if (!Array.isArray(list)) return;
+    list.forEach((p) => {
+      if (!p.puuid) return;
+      if (!map[p.puuid]) map[p.puuid] = { puuid: p.puuid, name: p.gameName, games: 0, wins: 0 };
+      map[p.puuid].games++;
+      if (game.win) map[p.puuid].wins++;
+    });
+  });
+  return Object.values(map).sort((a, b) => b.games - a.games);
+}
+
+// Module-level cache for Data Dragon champion ID → asset name
+let _champIdMap = null;
+async function getChampIdMap(ddVersion) {
+  if (_champIdMap) return _champIdMap;
+  try {
+    const res = await fetch(
+      `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/data/en_US/champion.json`
+    );
+    const data = await res.json();
+    _champIdMap = {};
+    Object.values(data.data).forEach((c) => { _champIdMap[c.key] = c.id; });
+  } catch { _champIdMap = {}; }
+  return _champIdMap;
+}
+
+const QUEUE_LABELS = {
+  420: "Solo/Duo Ranked", 440: "Flex Ranked",
+  450: "ARAM", 400: "Normal Draft", 430: "Normal Blind",
+};
 
 // ── Skeleton loading ────────────────────────────────────────────────────────
 function Sk({ className = "" }) {
@@ -154,26 +204,34 @@ function ErrorScreen({ message, onRetry }) {
 }
 
 // ── LP Trend Graph ─────────────────────────────────────────────────────────
-function LPGraph({ games }) {
+function LPGraph({ games, profile, puuid }) {
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+  const currentLP = profile?.lp ?? 0;
   const ordered = [...games].reverse();
-  const trend = [0];
-  ordered.forEach((g) => {
-    trend.push(trend[trend.length - 1] + (g.win ? 20 : -17));
-  });
 
-  const min = Math.min(...trend);
-  const max = Math.max(...trend);
+  const series = (() => {
+    const storageKey = `lp_${puuid}`;
+    const fingerprint = `${currentLP}:${games.map((g) => g.matchId).join(",")}`;
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null");
+      if (stored?.fingerprint === fingerprint) return stored.series;
+    } catch { /* ignore */ }
+    const computed = computeLPSeries(games, currentLP);
+    try { localStorage.setItem(storageKey, JSON.stringify({ fingerprint, series: computed })); } catch { /* ignore */ }
+    return computed;
+  })();
+
+  const min = Math.min(...series);
+  const max = Math.max(...series);
   const range = Math.max(max - min, 30);
-  const W = 260, H = 52;
-  const padX = 8, padY = 8;
-  const innerW = W - 2 * padX;
-  const innerH = H - 2 * padY;
-  const toX = (i) => padX + (i / (trend.length - 1)) * innerW;
+  const W = 260, H = 52, padX = 8, padY = 8;
+  const innerW = W - 2 * padX, innerH = H - 2 * padY;
+  const toX = (i) => padX + (i / (series.length - 1)) * innerW;
   const toY = (v) => padY + innerH - ((v - min) / range) * innerH;
-  const pathD = trend.map((v, i) => `${i === 0 ? "M" : "L"} ${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`).join(" ");
-  const areaD = `${pathD} L ${toX(trend.length - 1).toFixed(1)} ${(padY + innerH).toFixed(1)} L ${toX(0).toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
-  const lastDelta = trend[trend.length - 1];
-  const lineColor = lastDelta >= 0 ? "#10b981" : "#ef4444";
+  const pathD = series.map((v, i) => `${i === 0 ? "M" : "L"} ${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`).join(" ");
+  const areaD = `${pathD} L ${toX(series.length - 1).toFixed(1)} ${(padY + innerH).toFixed(1)} L ${toX(0).toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
+  const netDelta = series[series.length - 1] - series[0];
+  const lineColor = netDelta >= 0 ? "#10b981" : "#ef4444";
 
   return (
     <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06]">
@@ -181,8 +239,8 @@ function LPGraph({ games }) {
         <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">
           LP Trend · Last {games.length}
         </span>
-        <span className={`text-xs font-bold ${lastDelta >= 0 ? "text-emerald-500" : "text-red-400"}`}>
-          {lastDelta >= 0 ? "+" : ""}{lastDelta} LP est.
+        <span className={`text-xs font-bold ${netDelta >= 0 ? "text-emerald-500" : "text-red-400"}`}>
+          {netDelta >= 0 ? "+" : ""}{netDelta} LP est.
         </span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 52 }}>
@@ -194,31 +252,50 @@ function LPGraph({ games }) {
         </defs>
         <path d={areaD} fill="url(#lpGradFill)" />
         <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        {trend.map((v, i) => (
-          <circle
-            key={i}
-            cx={toX(i).toFixed(1)}
-            cy={toY(v).toFixed(1)}
-            r="2.8"
-            fill={i === 0 ? "#475569" : ordered[i - 1]?.win ? "#10b981" : "#ef4444"}
-          />
-        ))}
+        {series.map((v, i) => {
+          const cx = toX(i).toFixed(1);
+          const cy = toY(v).toFixed(1);
+          const game = i > 0 ? ordered[i - 1] : null;
+          return (
+            <g key={i}>
+              <circle cx={cx} cy={cy} r="2.8" fill={i === 0 ? "#475569" : game?.win ? "#10b981" : "#ef4444"} />
+              <circle cx={cx} cy={cy} r="7" fill="transparent"
+                onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)}
+                style={{ cursor: "default" }} />
+            </g>
+          );
+        })}
+        {hoveredIdx !== null && (() => {
+          const lp = series[hoveredIdx];
+          const game = hoveredIdx > 0 ? ordered[hoveredIdx - 1] : null;
+          const label = game ? `${lp} LP · ${game.win ? "W" : "L"}` : `${lp} LP`;
+          const cx = toX(hoveredIdx);
+          const cy = toY(lp);
+          const tx = Math.min(Math.max(cx - 22, 0), W - 44);
+          const ty = Math.max(cy - 22, 0);
+          return (
+            <foreignObject x={tx} y={ty} width="44" height="18">
+              <div xmlns="http://www.w3.org/1999/xhtml" style={{ fontSize: 9, fontWeight: 700, background: "#0f172a", color: "#fff", borderRadius: 4, padding: "2px 4px", whiteSpace: "nowrap", pointerEvents: "none" }}>
+                {label}
+              </div>
+            </foreignObject>
+          );
+        })()}
       </svg>
       <div className="flex justify-between text-[10px] text-slate-400 dark:text-white/20 mt-0.5">
         <span>{games.length} games ago</span>
-        <span>Now</span>
+        <span>Now · {currentLP} LP</span>
       </div>
     </div>
   );
 }
 
 // ── Star / save button ─────────────────────────────────────────────────────
-function StarButton({ gameName, tagLine, puuid }) {
+function StarButton({ gameName, tagLine, puuid, profileIconId }) {
   const [saved, setSaved] = useState(() =>
     readSaved().some((p) => p.puuid === puuid)
   );
 
-  // nothing to save if we don't have a tagLine (shouldn't happen, but safe)
   if (!tagLine || !puuid) return null;
 
   const toggle = () => {
@@ -228,7 +305,7 @@ function StarButton({ gameName, tagLine, puuid }) {
       setSaved(false);
     } else {
       if (current.length >= 10) return;
-      writeSaved([...current, { gameName, tagLine, puuid }]);
+      writeSaved([...current, { gameName, tagLine, puuid, profileIconId }]);
       setSaved(true);
     }
   };
@@ -268,8 +345,82 @@ const TIER_EMBLEM = {
   MASTER: "Master", GRANDMASTER: "Grandmaster", CHALLENGER: "Challenger",
 };
 
+// ── Live Game Banner ────────────────────────────────────────────────────────
+function LiveGameBanner({ liveGame, ddVersion, puuid, onClose }) {
+  const [champMap, setChampMap] = useState(null);
+  const [elapsed, setElapsed] = useState(liveGame.gameLength ?? 0);
+
+  useEffect(() => { getChampIdMap(ddVersion).then(setChampMap); }, [ddVersion]);
+  useEffect(() => {
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const mins = Math.floor(elapsed / 60);
+  const secs = String(elapsed % 60).padStart(2, "0");
+  const queueLabel = QUEUE_LABELS[liveGame.queueId] ?? liveGame.gameMode ?? "Live Game";
+  const blueTeam = liveGame.participants.filter((p) => p.teamId === 100);
+  const redTeam  = liveGame.participants.filter((p) => p.teamId === 200);
+
+  const renderPlayer = (p) => {
+    const isMe = p.puuid === puuid;
+    const champName = champMap ? (champMap[String(p.championId)] ?? null) : null;
+    const iconUrl = champName
+      ? `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${champName}.png`
+      : null;
+    return (
+      <div key={p.puuid || p.summonerName}
+        className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg transition-colors
+          ${isMe ? "bg-[#c89b3c]/10 border border-[#c89b3c]/20" : "hover:bg-slate-50 dark:hover:bg-white/[0.02]"}`}
+      >
+        {iconUrl ? (
+          <img src={iconUrl} alt={champName}
+            className="w-7 h-7 rounded object-cover border border-slate-200 dark:border-white/10 flex-shrink-0"
+            onError={(e) => { e.target.style.display = "none"; }} />
+        ) : (
+          <div className="w-7 h-7 rounded bg-slate-200 dark:bg-white/10 flex-shrink-0 animate-pulse" />
+        )}
+        <span className={`text-xs font-semibold truncate ${isMe ? "text-[#c89b3c]" : "text-slate-700 dark:text-white/70"}`}>
+          {isMe && "★ "}{p.summonerName}
+          <span className="text-slate-400 dark:text-white/30 font-normal">{p.tagLine ? `#${p.tagLine}` : ""}</span>
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="bg-white dark:bg-white/[0.03] border border-red-200 dark:border-red-500/20 rounded-2xl shadow-sm dark:shadow-black/40 overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 bg-red-50/60 dark:bg-red-950/20 border-b border-red-100 dark:border-red-500/10">
+        <div className="flex items-center gap-2.5">
+          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-500 text-white text-[10px] font-black tracking-widest">
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            LIVE
+          </span>
+          <span className="text-sm font-bold text-slate-800 dark:text-white tabular-nums">{mins}:{secs}</span>
+          <span className="text-xs text-slate-400 dark:text-white/30">{queueLabel}</span>
+        </div>
+        <button onClick={onClose} className="text-slate-400 dark:text-white/20 hover:text-slate-600 dark:hover:text-white/50 transition-colors">
+          <svg className="w-4 h-4" viewBox="0 0 12 12" fill="none">
+            <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+      <div className="p-3 grid grid-cols-2 gap-3">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-1.5 px-1">Blue Team</div>
+          <div className="space-y-0.5">{blueTeam.map(renderPlayer)}</div>
+        </div>
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-red-400 mb-1.5 px-1">Red Team</div>
+          <div className="space-y-0.5">{redTeam.map(renderPlayer)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Profile Card ───────────────────────────────────────────────────────────
-function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion }) {
+function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveLoading }) {
   const totalGames = profile.wins + profile.losses;
   const wr = totalGames > 0 ? ((profile.wins / totalGames) * 100).toFixed(1) : "-";
   const tierColor = TIER_COLORS[profile.tier] ?? "text-slate-400";
@@ -314,14 +465,28 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion }) {
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-0.5 mb-0.5">
+          <div className="flex items-center gap-0.5 mb-0.5 flex-wrap">
             <h2 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight leading-none truncate">
               {gameName}
             </h2>
             <span className="text-xs text-slate-400 dark:text-white/25 font-normal ml-1 flex-shrink-0">
               #{tagLine}
             </span>
-            <StarButton gameName={gameName} tagLine={tagLine} puuid={puuid} />
+            <StarButton gameName={gameName} tagLine={tagLine} puuid={puuid} profileIconId={profile.profileIconId} />
+            {onLiveCheck && (
+              <button
+                onClick={onLiveCheck}
+                disabled={liveLoading}
+                className="ml-2 flex-shrink-0 flex items-center gap-1 text-[10px] font-bold
+                  px-2 py-0.5 rounded border border-red-400/40 text-red-400
+                  hover:bg-red-400/10 transition-colors disabled:opacity-50"
+              >
+                {liveLoading
+                  ? <span className="w-2 h-2 rounded-full border border-t-red-400 border-red-400/20 animate-spin block" />
+                  : <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />}
+                LIVE
+              </button>
+            )}
           </div>
           <p className="text-xs text-slate-400 dark:text-white/30 mb-2">Level {profile.summonerLevel}</p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -341,7 +506,7 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion }) {
           </div>
         </div>
       </div>
-      {games && <LPGraph games={games} />}
+      {games && <LPGraph games={games} profile={profile} puuid={puuid} />}
     </div>
   );
 }
@@ -641,47 +806,22 @@ function StatsContent({ playerAverages, lobbyAverages, deltas }) {
 
 // ── Summary Strip ───────────────────────────────────────────────────────────
 function SummaryStrip({ analysis }) {
-  const wins  = analysis.games.filter((g) => g.win).length;
+  const wins   = analysis.games.filter((g) => g.win).length;
   const losses = analysis.games.length - wins;
+  const avgScore = analysis.games.reduce((s, g) => s + (g.score ?? 0), 0) / analysis.games.length;
   const items = [
-    {
-      label: "Win Rate",
-      value: `${analysis.winRate}%`,
-      sub: `${wins}W · ${losses}L`,
-      positive: analysis.winRate >= 50,
-    },
-    {
-      label: "Avg KDA",
-      value: analysis.playerAverages.kda.toFixed(2),
-      sub: `Lobby ${analysis.lobbyAverages.kda.toFixed(2)}`,
-      positive: analysis.deltas.kda >= 0,
-    },
-    {
-      label: "CS / min",
-      value: analysis.playerAverages.cspm.toFixed(2),
-      sub: `Lobby ${analysis.lobbyAverages.cspm.toFixed(2)}`,
-      positive: analysis.deltas.cspm >= 0,
-    },
-    {
-      label: "Vision",
-      value: analysis.playerAverages.visionScore.toFixed(1),
-      sub: `Lobby ${analysis.lobbyAverages.visionScore.toFixed(1)}`,
-      positive: analysis.deltas.visionScore >= 0,
-    },
+    { label: "Win Rate",  value: `${analysis.winRate}%`,                         sub: `${wins}W · ${losses}L`,                                positive: analysis.winRate >= 50 },
+    { label: "Avg KDA",   value: analysis.playerAverages.kda.toFixed(2),          sub: `Lobby ${analysis.lobbyAverages.kda.toFixed(2)}`,         positive: analysis.deltas.kda >= 0 },
+    { label: "CS / min",  value: analysis.playerAverages.cspm.toFixed(2),         sub: `Lobby ${analysis.lobbyAverages.cspm.toFixed(2)}`,        positive: analysis.deltas.cspm >= 0 },
+    { label: "Vision",    value: analysis.playerAverages.visionScore.toFixed(1),  sub: `Lobby ${analysis.lobbyAverages.visionScore.toFixed(1)}`, positive: analysis.deltas.visionScore >= 0 },
+    { label: "Avg Score", value: avgScore.toFixed(0),                             sub: `Last ${analysis.games.length} games`,                   positive: avgScore >= 60 },
   ];
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
       {items.map(({ label, value, sub, positive }) => (
-        <div
-          key={label}
-          className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-xl p-3 text-center"
-        >
-          <div className={`text-xl font-black tabular-nums ${positive ? "text-emerald-500" : "text-red-400"}`}>
-            {value}
-          </div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mt-0.5">
-            {label}
-          </div>
+        <div key={label} className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-xl p-3 text-center">
+          <div className={`text-xl font-black tabular-nums ${positive ? "text-emerald-500" : "text-red-400"}`}>{value}</div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mt-0.5">{label}</div>
           <div className="text-[10px] text-slate-400 dark:text-white/20 mt-0.5">{sub}</div>
         </div>
       ))}
@@ -689,8 +829,61 @@ function SummaryStrip({ analysis }) {
   );
 }
 
-// ── Right Panel (tabbed: Coaching | Stats) ─────────────────────────────────
-function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerContext }) {
+// ── Teammates Content ───────────────────────────────────────────────────────
+function TeammatesContent({ games }) {
+  const [tab, setTab] = useState("with");
+  const rows = aggregateTeammates(games, tab);
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex border-b border-slate-100 dark:border-white/[0.06] flex-shrink-0 mx-5 mb-1 mt-3">
+        {["with", "against"].map((t) => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`flex-1 py-2 text-xs font-semibold capitalize transition-colors duration-150
+              ${tab === t
+                ? "text-slate-900 dark:text-white border-b-2 border-[#c89b3c] -mb-px"
+                : "text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/50"}`}
+          >
+            {t === "with" ? "With" : "Against"}
+          </button>
+        ))}
+      </div>
+      {rows.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-xs text-slate-400 dark:text-white/25 text-center px-5">
+            No data — load more games to see {tab === "with" ? "teammates" : "opponents"}.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-5 py-1.5">
+            {["Summoner", "G", "W/L", "WR"].map((h, i) => (
+              <span key={h} className={`text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25 ${i > 0 ? "text-right" : ""}`}>{h}</span>
+            ))}
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {rows.map((r) => {
+              const wr = r.games > 0 ? Math.round((r.wins / r.games) * 100) : 0;
+              const wrColor = wr >= 55 ? "text-emerald-500 dark:text-emerald-400" : wr >= 45 ? "text-slate-600 dark:text-white/60" : "text-red-400";
+              return (
+                <div key={r.puuid} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-5 py-2
+                  hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors border-b
+                  border-slate-50 dark:border-white/[0.03] last:border-0">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-white/70 truncate max-w-[130px]">{r.name}</span>
+                  <span className="text-xs text-slate-500 dark:text-white/40 text-right tabular-nums">{r.games}</span>
+                  <span className="text-xs text-slate-500 dark:text-white/40 text-right tabular-nums whitespace-nowrap">{r.wins}-{r.games - r.wins}</span>
+                  <span className={`text-xs font-bold text-right tabular-nums ${wrColor}`}>{wr}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Right Panel (tabbed: Coaching | Stats | Teams) ──────────────────────────
+function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerContext, games }) {
   const [tab, setTab] = useState("coaching");
   const [chatInput, setChatInput] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
@@ -735,11 +928,12 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
         {[
           { id: "coaching", label: "AI Coaching", dot: true },
           { id: "stats",    label: "Stats",        dot: false },
+          { id: "teams",    label: "Teams",        dot: false },
         ].map(({ id, label, dot }) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-4 py-3.5 text-xs font-semibold tracking-wide transition-colors duration-150
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-3.5 text-xs font-semibold tracking-wide transition-colors duration-150
               ${tab === id
                 ? "text-slate-900 dark:text-white border-b-2 border-[#c89b3c] -mb-px"
                 : "text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/50"
@@ -837,13 +1031,17 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
               </form>
             </div>
           </div>
-        ) : (
+        ) : tab === "stats" ? (
           <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
             <StatsContent
               playerAverages={playerAverages}
               lobbyAverages={lobbyAverages}
               deltas={deltas}
             />
+          </div>
+        ) : (
+          <div className="lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
+            <TeammatesContent games={games} />
           </div>
         )}
       </div>
@@ -871,6 +1069,10 @@ export default function Dashboard() {
   const [expandedMatchId, setExpandedMatchId] = useState(null);
   const [scoreboard, setScoreboard] = useState(null);
   const [scoreboardLoading, setScoreboardLoading] = useState(false);
+
+  const [liveGame, setLiveGame] = useState(null);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [notInGame, setNotInGame] = useState(false);
 
   const MAX_GAMES = 40;
   const [extraGames, setExtraGames] = useState([]);
@@ -906,6 +1108,8 @@ export default function Dashboard() {
     setError("");
     setExpandedMatchId(null);
     setScoreboard(null);
+    setLiveGame(null);
+    setNotInGame(false);
     doFetch(state?.puuid)
       .catch(() => setError("Failed to load data. Check that the backend is running."))
       .finally(() => setLoading(false));
@@ -935,6 +1139,23 @@ export default function Dashboard() {
       // silently fail - button stays visible for retry
     } finally {
       setLoadingMore(false);
+    }
+  };
+
+  const handleLiveCheck = async () => {
+    if (liveLoading || !resolvedPuuid) return;
+    setLiveLoading(true);
+    try {
+      const data = await getLiveGame(resolvedPuuid);
+      if (data.inGame) {
+        setLiveGame(data);
+      } else {
+        setLiveGame(null);
+        setNotInGame(true);
+        setTimeout(() => setNotInGame(false), 2500);
+      }
+    } catch { /* silently fail */ } finally {
+      setLiveLoading(false);
     }
   };
 
@@ -993,7 +1214,34 @@ export default function Dashboard() {
           {/* Left - profile + match history */}
           <div className="flex-1 min-w-0 space-y-4">
 
-            <ProfileCard gameName={gameName} tagLine={tagLine} puuid={resolvedPuuid} profile={profile} games={analysis.games} ddVersion={ddVersion} />
+            <ProfileCard
+              gameName={gameName}
+              tagLine={tagLine}
+              puuid={resolvedPuuid}
+              profile={profile}
+              games={analysis.games}
+              ddVersion={ddVersion}
+              onLiveCheck={handleLiveCheck}
+              liveLoading={liveLoading}
+            />
+
+            {liveGame?.inGame && (
+              <LiveGameBanner
+                liveGame={liveGame}
+                ddVersion={ddVersion}
+                puuid={resolvedPuuid}
+                onClose={() => setLiveGame(null)}
+              />
+            )}
+            {notInGame && (
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.07] text-xs text-slate-500 dark:text-white/40 animate-fadeIn">
+                <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M8 5v4M8 11v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+                Not currently in a game
+              </div>
+            )}
 
             <SummaryStrip analysis={analysis} />
 
@@ -1066,6 +1314,7 @@ export default function Dashboard() {
               playerAverages={analysis.playerAverages}
               lobbyAverages={analysis.lobbyAverages}
               deltas={analysis.deltas}
+              games={[...analysis.games, ...extraGames]}
               playerContext={[
                 `Player: ${gameName}`,
                 `Role: ${analysis.mostPlayedPosition}`,
