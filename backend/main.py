@@ -347,6 +347,10 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
             timeline = None
             info = match_data["info"]
             participants = info["participants"]
+
+            for p in participants:
+                p["totalMinionsKilled"] = p.get("totalMinionsKilled", 0) + p.get("neutralMinionsKilled", 0)
+
             game_duration = info["gameDuration"]
             game_end_timestamp = info.get("gameEndTimestamp") or (info.get("gameCreation", 0) + game_duration * 1000)
 
@@ -543,7 +547,7 @@ Per game breakdown:
             "opponents": g.get("opponents", []),
         })
 
-    diffed_lanes = [g["diffedLane"] for g in game_summaries if g["diffedLane"]]
+    diffed_lanes = [g["diffedLane"] for g in game_summaries if g["diffedLane"] and not g["win"]]
     most_diffed_lane = Counter(diffed_lanes).most_common(1)[0][0] if diffed_lanes else None
 
     result = {
@@ -600,6 +604,10 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
         timeline = None
         info = match_data["info"]
         participants = info["participants"]
+        
+        for p in participants:
+            p["totalMinionsKilled"] = p.get("totalMinionsKilled", 0) + p.get("neutralMinionsKilled", 0)
+            
         player = next((p for p in participants if p["puuid"] == puuid), None)
         if player is None:
             continue
@@ -666,6 +674,9 @@ async def get_scoreboard(match_id: str):
     data = results[0]
     timeline = results[1] if not isinstance(results[1], Exception) else None
     participants = sorted(data["info"]["participants"], key=lambda p: p["teamId"])
+    
+    for p in participants:
+        p["totalMinionsKilled"] = p.get("totalMinionsKilled", 0) + p.get("neutralMinionsKilled", 0)
     
     async with httpx.AsyncClient() as c2:
         rank_tasks = [get_cached_rank(c2, p.get("puuid", "")) for p in participants]
@@ -752,7 +763,12 @@ async def get_scoreboard(match_id: str):
 async def get_live_game(puuid: str):
     url = f"https://{RIOT_REGION}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{puuid}"
     async with httpx.AsyncClient() as client:
-        response = await client.get(url, headers=RIOT_HEADERS)
+        async with api_semaphore:
+            response = await client.get(url, headers=RIOT_HEADERS)
+            if response.status_code == 429:
+                await asyncio.sleep(1.2)
+                response = await client.get(url, headers=RIOT_HEADERS)
+
         if response.status_code == 404:
             return {"inGame": False}
         if response.status_code != 200:
