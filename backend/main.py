@@ -817,9 +817,43 @@ async def live_enrich(body: LiveEnrichRequest):
                         player = next((p for p in participants if p.get("puuid") == puuid), None)
                         if player:
                             score = _compute_perf_score(player, participants, None, info.get("gameDuration", 0))
-                            last5.append({"win": player["win"], "score": round(score)})
+                            last5.append({
+                                "win": player["win"],
+                                "score": round(score),
+                                "champion": str(player.get("championId", "")),
+                                "position": player.get("teamPosition", "UNKNOWN"),
+                            })
 
-                return {"puuid": puuid, "tier": tier, "division": division, "lp": lp, "wins": wins, "losses": losses, "last5": last5}
+                # Derived fields for win predictor
+                avg_score = round(sum(g["score"] for g in last5) / len(last5)) if last5 else 50
+                # Ordered unique champs (most recent first)
+                seen: set = set()
+                main_champs = []
+                for g in last5:
+                    if g["champion"] not in seen:
+                        seen.add(g["champion"])
+                        main_champs.append(g["champion"])
+                # Most-played position from last 5
+                pos_counts: dict = {}
+                for g in last5:
+                    pos_counts[g["position"]] = pos_counts.get(g["position"], 0) + 1
+                main_position = max(pos_counts, key=lambda k: pos_counts[k]) if pos_counts else "UNKNOWN"
+                # Streak: consecutive W or L from most recent game
+                streak = 0
+                if last5:
+                    direction = 1 if last5[0]["win"] else -1
+                    for g in last5:
+                        if (1 if g["win"] else -1) == direction:
+                            streak += direction
+                        else:
+                            break
+
+                return {
+                    "puuid": puuid, "tier": tier, "division": division, "lp": lp,
+                    "wins": wins, "losses": losses, "last5": last5,
+                    "avg_score": avg_score, "main_champs": main_champs,
+                    "main_position": main_position, "streak": streak,
+                }
         except Exception:
             return {"puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0, "last5": []}
 

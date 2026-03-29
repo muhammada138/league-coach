@@ -522,15 +522,33 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose }) {
   const blueTeam = liveGame.participants.filter((p) => p.teamId === 100);
   const redTeam  = liveGame.participants.filter((p) => p.teamId === 200);
 
-  // Win predictor: rank (70%) + season WR (30%)
+  // Win predictor: rank 40% + recent form 30% + season WR 20% + champ comfort 10% + streak ±5%
   const predictor = liveStats ? (() => {
+    const MAX_RANK = 10.75; // Challenger I
     const playerScore = (p) => {
       const s = liveStats[p.puuid];
-      if (!s || s.tier === "UNRANKED") return 3.5;
-      const rs = (TIER_SCORE[s.tier] ?? 3.5) + (DIV_BONUS[s.division] ?? 0);
+      if (!s) return 0.5; // neutral for missing data
+
+      // 1. Rank (40%) — normalized 0→1
+      const rankRaw = s.tier === "UNRANKED" ? 3.5 : (TIER_SCORE[s.tier] ?? 3.5) + (DIV_BONUS[s.division] ?? 0);
+      const rankNorm = rankRaw / MAX_RANK;
+
+      // 2. Season WR (20%)
       const total = s.wins + s.losses;
-      const wr = total > 0 ? s.wins / total : 0.5;
-      return rs * 0.7 + wr * 10 * 0.3;
+      const seasonWR = total > 0 ? s.wins / total : 0.5;
+
+      // 3. Recent form — avg perf score of last 5 games (30%)
+      const formNorm = (s.avg_score ?? 50) / 100;
+
+      // 4. Champ comfort — is the player on a champ they've played recently? (10%)
+      const onMainChamp = (s.main_champs ?? []).includes(String(p.championId));
+      const champComfort = onMainChamp ? 0.10 : 0.0;
+
+      // 5. Streak momentum (±5%) — capped at ±3 games
+      const streakClamped = Math.max(-3, Math.min(3, s.streak ?? 0));
+      const streakBonus = (streakClamped / 3) * 0.05;
+
+      return rankNorm * 0.40 + seasonWR * 0.20 + formNorm * 0.30 + champComfort + streakBonus;
     };
     const blueAvg = blueTeam.reduce((sum, p) => sum + playerScore(p), 0) / Math.max(blueTeam.length, 1);
     const redAvg  = redTeam.reduce((sum, p) => sum + playerScore(p), 0) / Math.max(redTeam.length, 1);
@@ -639,7 +657,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose }) {
               </div>
               <div className="flex justify-between px-10">
                 <span className="text-[9px] text-blue-300 dark:text-blue-400/60 font-semibold">Blue</span>
-                <span className="text-[9px] text-slate-400 dark:text-white/20">based on rank · season WR</span>
+                <span className="text-[9px] text-slate-400 dark:text-white/20">rank · form · WR · champ · streak</span>
                 <span className="text-[9px] text-red-300 dark:text-red-400/60 font-semibold">Red</span>
               </div>
             </>
