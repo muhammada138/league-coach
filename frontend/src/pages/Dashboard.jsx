@@ -743,14 +743,24 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
               <button
                 onClick={onLiveCheck}
                 disabled={liveLoading}
-                className="ml-2 flex-shrink-0 flex items-center gap-1 text-[10px] font-bold
-                  px-2 py-0.5 rounded border border-red-400/40 text-red-400
-                  hover:bg-red-400/10 transition-colors disabled:opacity-50"
+                className={`ml-2 flex-shrink-0 flex items-center gap-1.5 text-[10px] font-bold
+                  px-2 py-0.5 rounded border transition-all duration-200
+                  ${liveLoading
+                    ? "border-red-400/20 text-red-400/50 cursor-wait"
+                    : "border-red-400/40 text-red-400 hover:bg-red-400/10 cursor-pointer"
+                  }`}
               >
-                {liveLoading
-                  ? <span className="w-2 h-2 rounded-full border border-t-red-400 border-red-400/20 animate-spin block" />
-                  : <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />}
-                LIVE
+                {liveLoading ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full border border-t-red-400/70 border-red-400/15 animate-spin block" />
+                    checking
+                  </>
+                ) : (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                    LIVE
+                  </>
+                )}
               </button>
             )}
           </div>
