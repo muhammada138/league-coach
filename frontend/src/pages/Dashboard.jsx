@@ -1818,7 +1818,18 @@ export default function Dashboard() {
             )}
 
             {analysis ? (
-              <SummaryStrip analysis={analysis} games={[...analysis.games, ...extraGames]} />
+              queueTab !== "ranked" && tabGames[queueTab] === null ? (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {[...Array(5)].map((_, i) => <div key={i} className="skeleton h-[72px] rounded-xl" />)}
+                </div>
+              ) : (
+                <SummaryStrip
+                  analysis={analysis}
+                  games={queueTab === "ranked"
+                    ? [...analysis.games, ...extraGames]
+                    : (tabGames[queueTab] ?? [])}
+                />
+              )
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 {[...Array(5)].map((_, i) => <div key={i} className="skeleton h-[72px] rounded-xl" />)}
