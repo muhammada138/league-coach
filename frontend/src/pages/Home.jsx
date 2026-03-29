@@ -23,10 +23,23 @@ const HOW_IT_WORKS = [
 ];
 
 function readHistory() {
-  try { return JSON.parse(localStorage.getItem("searchHistory") ?? "[]"); } catch { return []; }
+  try {
+    const parsed = JSON.parse(localStorage.getItem("searchHistory") ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
 }
 function readSaved() {
-  try { return JSON.parse(localStorage.getItem("savedProfiles") ?? "[]"); } catch { return []; }
+  try {
+    const parsed = JSON.parse(localStorage.getItem("savedProfiles") ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+
+function saveHistory(entry) {
+  const history = readHistory().filter(
+    (h) => h.toLowerCase() !== entry.toLowerCase()
+  );
+  localStorage.setItem("searchHistory", JSON.stringify([entry, ...history].slice(0, 8)));
 }
 
 function getSuggestions(query) {
@@ -36,6 +49,7 @@ function getSuggestions(query) {
   const results = [];
 
   for (const p of readSaved()) {
+    if (!p || !p.gameName || !p.tagLine) continue;
     const key = `${p.gameName}#${p.tagLine}`.toLowerCase();
     if (p.gameName.toLowerCase().includes(q) && !seen.has(key)) {
       seen.add(key);
@@ -43,6 +57,7 @@ function getSuggestions(query) {
     }
   }
   for (const h of readHistory()) {
+    if (typeof h !== "string") continue;
     const idx = h.indexOf("#");
     if (idx === -1) continue;
     const name = h.slice(0, idx);
@@ -88,6 +103,7 @@ export default function Home() {
     setError("");
     try {
       const data = await getSummoner(name, tag);
+      saveHistory(`${name}#${tag}`);
       navigate(
         `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(tag)}`,
         { state: { puuid: data.puuid } }
