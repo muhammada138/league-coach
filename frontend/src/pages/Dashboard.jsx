@@ -691,7 +691,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
 }
 
 // ── Profile Card ───────────────────────────────────────────────────────────
-function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveLoading }) {
+function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveStatus = 'idle' }) {
   const totalGames = profile.wins + profile.losses;
   const wr = totalGames > 0 ? ((profile.wins / totalGames) * 100).toFixed(1) : "-";
   const tierColor = TIER_COLORS[profile.tier] ?? "text-slate-400";
@@ -744,28 +744,40 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
             </span>
             <StarButton gameName={gameName} tagLine={tagLine} puuid={puuid} profileIconId={profile.profileIconId} />
             {onLiveCheck && (
-              <button
-                onClick={onLiveCheck}
-                disabled={liveLoading}
-                className={`ml-2 flex-shrink-0 flex items-center gap-1.5 text-[10px] font-bold
-                  px-2 py-0.5 rounded border transition-all duration-200
-                  ${liveLoading
-                    ? "border-red-400/20 text-red-400/50 cursor-wait"
-                    : "border-red-400/40 text-red-400 hover:bg-red-400/10 cursor-pointer"
-                  }`}
-              >
-                {liveLoading ? (
-                  <>
-                    <span className="w-1.5 h-1.5 rounded-full border border-t-red-400/70 border-red-400/15 animate-spin block" />
-                    checking
-                  </>
-                ) : (
-                  <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                    LIVE
-                  </>
+              <div className="ml-2 flex items-center gap-2">
+                <button
+                  onClick={onLiveCheck}
+                  disabled={liveStatus === 'loading'}
+                  className={`flex-shrink-0 flex items-center gap-1.5 text-[10px] font-bold
+                    px-2 py-0.5 rounded border transition-all duration-200
+                    ${liveStatus === 'loading'
+                      ? "border-red-400/20 text-red-400/50 cursor-wait"
+                      : "border-red-400/40 text-red-400 hover:bg-red-400/10 cursor-pointer"
+                    }`}
+                >
+                  {liveStatus === 'loading' ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full border border-t-red-400/70 border-red-400/15 animate-spin block" />
+                      checking
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                      LIVE
+                    </>
+                  )}
+                </button>
+                {liveStatus === 'not-in-game' && (
+                  <span className="text-[10px] text-slate-400 dark:text-white/30 whitespace-nowrap animate-fadeIn">
+                    not in game
+                  </span>
                 )}
-              </button>
+                {liveStatus === 'error' && (
+                  <span className="text-[10px] text-red-400/60 whitespace-nowrap animate-fadeIn">
+                    try again
+                  </span>
+                )}
+              </div>
             )}
           </div>
           <p className="text-xs text-slate-400 dark:text-white/30 mb-2">Level {profile.summonerLevel}</p>
@@ -1577,8 +1589,7 @@ export default function Dashboard() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
 
   const [liveGame, setLiveGame] = useState(null);
-  const [liveLoading, setLiveLoading] = useState(false);
-  const [notInGame, setNotInGame] = useState(false);
+  const [liveStatus, setLiveStatus] = useState('idle'); // 'idle' | 'loading' | 'not-in-game' | 'error'
 
   const MAX_GAMES = 40;
   const [extraGames, setExtraGames] = useState([]);
@@ -1712,21 +1723,22 @@ export default function Dashboard() {
   };
 
   const handleLiveCheck = async () => {
-    if (liveLoading || !resolvedPuuid) return;
-    setLiveLoading(true);
+    if (liveStatus === 'loading' || !resolvedPuuid) return;
+    setLiveStatus('loading');
     try {
       const data = await getLiveGame(resolvedPuuid);
       if (data.inGame) {
         setLiveGame(data);
-        return; // liveLoading stays true until LiveGameBanner calls onReady
+        return; // stays 'loading' until LiveGameBanner calls onReady
       }
       setLiveGame(null);
-      setNotInGame(true);
-      setTimeout(() => setNotInGame(false), 2500);
+      setLiveStatus('not-in-game');
+      setTimeout(() => setLiveStatus('idle'), 3000);
     } catch (err) {
       console.error("Live game check failed:", err);
+      setLiveStatus('error');
+      setTimeout(() => setLiveStatus('idle'), 3000);
     }
-    setLiveLoading(false);
   };
 
   const handleToggleGame = async (matchId) => {
@@ -1792,7 +1804,7 @@ export default function Dashboard() {
               games={analysis ? [...analysis.games, ...extraGames] : []}
               ddVersion={ddVersion}
               onLiveCheck={handleLiveCheck}
-              liveLoading={liveLoading}
+              liveStatus={liveStatus}
             />
 
             {liveGame?.inGame && (
@@ -1801,17 +1813,8 @@ export default function Dashboard() {
                 ddVersion={ddVersion}
                 puuid={resolvedPuuid}
                 onClose={() => setLiveGame(null)}
-                onReady={() => setLiveLoading(false)}
+                onReady={() => setLiveStatus('idle')}
               />
-            )}
-            {notInGame && (
-              <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.07] text-xs text-slate-500 dark:text-white/40 animate-fadeIn">
-                <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 16 16" fill="none">
-                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M8 5v4M8 11v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                Not currently in a game
-              </div>
             )}
 
             {analysis ? (

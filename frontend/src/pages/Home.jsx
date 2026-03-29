@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSummoner } from "../api/riot";
 
-// subtle dot-grid SVG background
 const DOT_GRID = `url("data:image/svg+xml,%3Csvg width='28' height='28' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='1' fill='%23c89b3c'/%3E%3C/svg%3E")`;
 
 const HOW_IT_WORKS = [
@@ -23,24 +22,74 @@ const HOW_IT_WORKS = [
   },
 ];
 
+function readHistory() {
+  try { return JSON.parse(localStorage.getItem("searchHistory") ?? "[]"); } catch { return []; }
+}
+function readSaved() {
+  try { return JSON.parse(localStorage.getItem("savedProfiles") ?? "[]"); } catch { return []; }
+}
+
+function getSuggestions(query) {
+  if (!query.trim()) return [];
+  const q = query.toLowerCase();
+  const seen = new Set();
+  const results = [];
+
+  for (const p of readSaved()) {
+    const key = `${p.gameName}#${p.tagLine}`.toLowerCase();
+    if (p.gameName.toLowerCase().includes(q) && !seen.has(key)) {
+      seen.add(key);
+      results.push({ gameName: p.gameName, tagLine: p.tagLine, saved: true });
+    }
+  }
+  for (const h of readHistory()) {
+    const idx = h.indexOf("#");
+    if (idx === -1) continue;
+    const name = h.slice(0, idx);
+    const tag = h.slice(idx + 1);
+    const key = h.toLowerCase();
+    if (name.toLowerCase().includes(q) && !seen.has(key)) {
+      seen.add(key);
+      results.push({ gameName: name, tagLine: tag, saved: false });
+    }
+  }
+  return results.slice(0, 6);
+}
+
 export default function Home() {
   const [gameName, setGameName] = useState("");
   const [tagLine, setTagLine]   = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [focusedIdx, setFocusedIdx] = useState(-1);
+  const blurTimer = useRef(null);
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!gameName.trim() || !tagLine.trim()) return;
+  useEffect(() => {
+    setSuggestions(getSuggestions(gameName));
+    setFocusedIdx(-1);
+  }, [gameName]);
 
+  const applySuggestion = (s) => {
+    setGameName(s.gameName);
+    setTagLine(s.tagLine);
+    setShowSuggestions(false);
+  };
+
+  const handleSubmit = async (e, override) => {
+    e?.preventDefault();
+    const name = override?.gameName ?? gameName.trim();
+    const tag  = override?.tagLine  ?? tagLine.trim();
+    if (!name || !tag) return;
+    setShowSuggestions(false);
     setLoading(true);
     setError("");
-
     try {
-      const data = await getSummoner(gameName.trim(), tagLine.trim());
+      const data = await getSummoner(name, tag);
       navigate(
-        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(tagLine.trim())}`,
+        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(tag)}`,
         { state: { puuid: data.puuid } }
       );
     } catch (err) {
@@ -55,18 +104,29 @@ export default function Home() {
     }
   };
 
+  const handleKeyDown = (e) => {
+    if (!showSuggestions || suggestions.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setFocusedIdx((i) => Math.min(i + 1, suggestions.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setFocusedIdx((i) => Math.max(i - 1, -1));
+    } else if (e.key === "Enter" && focusedIdx >= 0) {
+      e.preventDefault();
+      applySuggestion(suggestions[focusedIdx]);
+    } else if (e.key === "Escape") {
+      setShowSuggestions(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 pt-14 pb-20 relative overflow-hidden">
 
-      {/* ── Background layers ─────────────────────────────────────────────── */}
-
-      {/* dot grid - light mode subtle, slightly more visible in dark */}
       <div
         className="absolute inset-0 opacity-[0.025] dark:opacity-[0.045] pointer-events-none"
         style={{ backgroundImage: DOT_GRID, backgroundSize: "28px 28px" }}
       />
-
-      {/* dark-mode color blobs */}
       <div className="hidden dark:block absolute top-[28%] left-1/2 -translate-x-1/2 -translate-y-1/2
         w-[800px] h-[600px] rounded-full pointer-events-none
         bg-[#c89b3c]/[0.055] blur-[160px]" />
@@ -76,16 +136,12 @@ export default function Home() {
       <div className="hidden dark:block absolute bottom-10 right-[10%]
         w-[320px] h-[320px] rounded-full pointer-events-none
         bg-[#c89b3c]/[0.025] blur-[100px]" />
-
-      {/* light-mode glow */}
       <div className="dark:hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
         w-[600px] h-[400px] rounded-full pointer-events-none
         bg-[#c89b3c]/[0.07] blur-[100px]" />
 
-      {/* ── Main content ──────────────────────────────────────────────────── */}
       <div className="relative w-full max-w-md animate-fadeUp">
 
-        {/* Badge */}
         <div className="flex justify-center mb-7">
           <span className="inline-flex items-center gap-2 text-[11px] font-semibold tracking-widest uppercase
             text-[#c89b3c] border border-[#c89b3c]/30 bg-[#c89b3c]/[0.06] px-4 py-1.5 rounded-full">
@@ -94,7 +150,6 @@ export default function Home() {
           </span>
         </div>
 
-        {/* Heading */}
         <div className="text-center mb-10">
           <h1 className="text-[2.75rem] font-extrabold tracking-tight leading-[1.1] mb-3">
             <span className="text-slate-900 dark:text-white">Stop guessing.</span>
@@ -107,7 +162,6 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Card */}
         <div className="
           bg-white dark:bg-white/[0.03]
           border border-slate-200 dark:border-white/[0.08]
@@ -123,39 +177,81 @@ export default function Home() {
               Riot ID
             </label>
 
-            {/* Input row */}
-            <div className="flex items-stretch rounded-xl overflow-hidden
-              border border-slate-200 dark:border-white/10
-              focus-within:border-[#c89b3c]/60 dark:focus-within:border-[#c89b3c]/50
-              focus-within:ring-2 focus-within:ring-[#c89b3c]/10
-              bg-slate-50 dark:bg-white/[0.04]
-              transition-all duration-200 shadow-inner">
-              <input
-                type="text"
-                placeholder="Game Name"
-                value={gameName}
-                onChange={(e) => setGameName(e.target.value)}
-                className="flex-1 px-4 py-3.5 bg-transparent
-                  text-slate-900 dark:text-white
-                  placeholder-slate-400 dark:placeholder-white/20
-                  focus:outline-none text-sm"
-              />
-              <div className="flex items-center px-3 text-slate-300 dark:text-white/15 font-bold text-sm select-none border-l border-slate-200 dark:border-white/10">
-                #
+            <div className="relative">
+              <div className="flex items-stretch rounded-xl overflow-hidden
+                border border-slate-200 dark:border-white/10
+                focus-within:border-[#c89b3c]/60 dark:focus-within:border-[#c89b3c]/50
+                focus-within:ring-2 focus-within:ring-[#c89b3c]/10
+                bg-slate-50 dark:bg-white/[0.04]
+                transition-all duration-200 shadow-inner">
+                <input
+                  type="text"
+                  placeholder="Game Name"
+                  value={gameName}
+                  autoComplete="off"
+                  onChange={(e) => setGameName(e.target.value)}
+                  onFocus={() => { clearTimeout(blurTimer.current); setShowSuggestions(true); }}
+                  onBlur={() => { blurTimer.current = setTimeout(() => setShowSuggestions(false), 150); }}
+                  onKeyDown={handleKeyDown}
+                  className="flex-1 px-4 py-3.5 bg-transparent
+                    text-slate-900 dark:text-white
+                    placeholder-slate-400 dark:placeholder-white/20
+                    focus:outline-none text-sm"
+                />
+                <div className="flex items-center px-3 text-slate-300 dark:text-white/15 font-bold text-sm select-none border-l border-slate-200 dark:border-white/10">
+                  #
+                </div>
+                <input
+                  type="text"
+                  placeholder="TAG"
+                  value={tagLine}
+                  autoComplete="off"
+                  onChange={(e) => setTagLine(e.target.value)}
+                  className="w-20 px-3 py-3.5 bg-transparent
+                    text-slate-900 dark:text-white
+                    placeholder-slate-400 dark:placeholder-white/20
+                    focus:outline-none text-sm"
+                />
               </div>
-              <input
-                type="text"
-                placeholder="TAG"
-                value={tagLine}
-                onChange={(e) => setTagLine(e.target.value)}
-                className="w-20 px-3 py-3.5 bg-transparent
-                  text-slate-900 dark:text-white
-                  placeholder-slate-400 dark:placeholder-white/20
-                  focus:outline-none text-sm"
-              />
+
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1.5 z-50
+                  bg-white dark:bg-[#0b0f1a]
+                  border border-slate-200 dark:border-white/[0.08]
+                  rounded-xl shadow-xl dark:shadow-black/60
+                  overflow-hidden animate-fadeIn">
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={`${s.gameName}#${s.tagLine}`}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => applySuggestion(s)}
+                      className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 transition-colors
+                        ${i === focusedIdx
+                          ? "bg-[#c89b3c]/10 text-[#c89b3c]"
+                          : "hover:bg-slate-50 dark:hover:bg-white/[0.04] text-slate-700 dark:text-white/70"
+                        }`}
+                    >
+                      {s.saved ? (
+                        <svg className="w-3 h-3 flex-shrink-0 text-[#c89b3c]/60" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M8 1.5l1.75 3.55 3.92.57-2.84 2.77.67 3.9L8 10.35l-3.5 1.84.67-3.9L2.33 5.62l3.92-.57L8 1.5z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-3 h-3 flex-shrink-0 text-slate-300 dark:text-white/20" viewBox="0 0 12 12" fill="none">
+                          <path d="M6 1v5l3 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                          <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.3"/>
+                        </svg>
+                      )}
+                      <span className="truncate">
+                        {s.gameName}
+                        <span className="text-slate-400 dark:text-white/30 text-xs">#{s.tagLine}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Error */}
             {error && (
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
@@ -163,7 +259,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
@@ -187,7 +282,6 @@ export default function Home() {
           </form>
         </div>
 
-        {/* How it works */}
         <div className="mt-10">
           <div className="flex items-center gap-3 mb-5">
             <div className="flex-1 h-px bg-slate-200 dark:bg-white/[0.06]" />
@@ -224,7 +318,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Footer note */}
         <div className="flex items-center justify-center gap-5 mt-8">
           {["Solo/Duo Ranked", "All Regions", "Groq AI"].map((tag) => (
             <span key={tag} className="text-[11px] text-slate-400 dark:text-white/20 font-medium">
