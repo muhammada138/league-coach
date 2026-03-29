@@ -290,20 +290,21 @@ async def get_profile(puuid: str):
 
     summoner_level = summoner.get("summonerLevel", 0)
     ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
+    flex   = next((e for e in entries if e.get("queueType") == "RANKED_FLEX_SR"),   None)
 
     profile_icon_id = summoner.get("profileIconId", 0)
 
-    if ranked is None:
-        return {"summonerLevel": summoner_level, "profileIconId": profile_icon_id, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0}
+    def entry_data(e):
+        if e is None:
+            return {"tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0}
+        return {"tier": e["tier"], "division": e["rank"], "lp": e["leaguePoints"], "wins": e["wins"], "losses": e["losses"]}
 
+    solo = entry_data(ranked)
     return {
         "summonerLevel": summoner_level,
         "profileIconId": profile_icon_id,
-        "tier": ranked["tier"],
-        "division": ranked["rank"],
-        "lp": ranked["leaguePoints"],
-        "wins": ranked["wins"],
-        "losses": ranked["losses"],
+        **solo,
+        "flex": entry_data(flex),
     }
 
 
