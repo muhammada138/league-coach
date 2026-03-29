@@ -378,8 +378,9 @@ export default function Navbar() {
       border-b border-slate-200/80 dark:border-white/5
       transition-colors duration-300">
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-3">
-        <Link to="/" className="flex-shrink-0">
-          <img src="/logo.png" alt="Rift IQ" className="h-8 w-auto object-contain" />
+        <Link to="/" className="flex-shrink-0 flex items-center gap-2.5">
+          <img src="/logo.png" alt="" className="h-9 w-auto object-contain" />
+          <span className="text-lg font-black tracking-tight text-slate-800 dark:text-white/90">Rift IQ</span>
         </Link>
 
         <div className="flex items-center gap-2 ml-auto">
