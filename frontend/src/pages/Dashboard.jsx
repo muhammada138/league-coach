@@ -571,7 +571,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
     const stats = liveStats?.[p.puuid];
     const last5 = stats?.last5 ?? [];
     const rankLabel = stats
-      ? (stats.tier === "UNRANKED" ? "Unranked" : `${stats.tier.charAt(0) + stats.tier.slice(1).toLowerCase()} ${stats.division}`)
+      ? (stats.tier === "UNRANKED" ? "Unranked" : `${stats.tier.charAt(0) + stats.tier.slice(1).toLowerCase()}${stats.division ? ` ${stats.division}` : ""}`)
       : null;
 
     return (
