@@ -8,7 +8,8 @@ export const SAVED_KEY = "savedProfiles";
 
 export function readSaved() {
   try {
-    return JSON.parse(localStorage.getItem(SAVED_KEY) ?? "[]");
+    const parsed = JSON.parse(localStorage.getItem(SAVED_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -22,7 +23,8 @@ const HISTORY_KEY = "searchHistory";
 
 function readSearchHistory() {
   try {
-    return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
+    const parsed = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -78,8 +80,8 @@ function NavSearch() {
   const expanded = focused || query.length > 0;
   const showHistory = focused && !error;
   const filteredHistory = query.length === 0
-    ? history
-    : history.filter((h) => h.toLowerCase().includes(query.toLowerCase()));
+    ? history.filter((h) => typeof h === "string")
+    : history.filter((h) => typeof h === "string" && h.toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
     if (focused) setHistory(readSearchHistory());

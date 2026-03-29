@@ -1005,7 +1005,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
   const teams = scoreboard.teams;
   const withScores = participants.map((p) => ({
     ...p,
-    score: p.score ?? computePerformanceScore(p, scoreboard),
+    score: p.score ?? computePerformanceScore(p, participants),
   }));
   const team100Won = teams.find((t) => t.teamId === 100)?.win ?? true;
   const team200Won = teams.find((t) => t.teamId === 200)?.win ?? false;
@@ -1082,7 +1082,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
 }
 
 // ── Horizontal Game Row ────────────────────────────────────────────────────
-function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, gameName, ddVersion, runesMap }) {
+function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, gameName, ddVersion, runesMap, isRanked }) {
   const isRemake = game.gameDuration < 210;
   const mins = Math.floor(game.gameDuration / 60);
   const secs = String(game.gameDuration % 60).padStart(2, "0");
@@ -1635,7 +1635,7 @@ export default function Dashboard() {
     setExpandedMatchId(null);
     setScoreboard(null);
     setLiveGame(null);
-    setNotInGame(false);
+    setLiveStatus('idle');
     doFetch(state?.puuid)
       .then((puuid) => {
         setLoading(false); // profile card renders immediately
@@ -1676,7 +1676,7 @@ export default function Dashboard() {
       try {
         const start = analysis.games.length + extraGames.length;
         const remaining = MAX_GAMES - start;
-        const count = Math.min(10, remaining);
+        const count = Math.min(5, remaining);
         const newGames = await getHistory(resolvedPuuid, start, count, 420);
         setExtraGames((prev) => [...prev, ...newGames]);
         if (newGames.length < count) setHasMore(false);
@@ -1693,7 +1693,7 @@ export default function Dashboard() {
       try {
         const start = currentGames.length;
         const remaining = MAX_GAMES - start;
-        const count = Math.min(10, remaining);
+        const count = Math.min(5, remaining);
         const newGames = await getHistory(resolvedPuuid, start, count, queueNum);
         setTabGames((prev) => ({ ...prev, [queueTab]: [...currentGames, ...newGames] }));
         if (newGames.length < count) setTabHasMore((prev) => ({ ...prev, [queueTab]: false }));
@@ -1711,9 +1711,9 @@ export default function Dashboard() {
       const queueNum = tabId === "flex" ? 440 : 400;
       setTabLoadingMore(true);
       try {
-        const games = await getHistory(resolvedPuuid, 0, 10, queueNum);
+        const games = await getHistory(resolvedPuuid, 0, 5, queueNum);
         setTabGames((prev) => ({ ...prev, [tabId]: games }));
-        if (games.length < 10) setTabHasMore((prev) => ({ ...prev, [tabId]: false }));
+        if (games.length < 5) setTabHasMore((prev) => ({ ...prev, [tabId]: false }));
       } catch {
         setTabGames((prev) => ({ ...prev, [tabId]: [] }));
       } finally {
@@ -1899,6 +1899,7 @@ export default function Dashboard() {
                           gameName={gameName}
                           ddVersion={ddVersion}
                           runesMap={runesMap}
+                          isRanked={queueTab !== "draft"}
                         />
                       ))}
                     </div>
