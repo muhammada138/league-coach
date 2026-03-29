@@ -497,7 +497,7 @@ function LaneIcon({ lane }) {
 const TIER_SCORE = { IRON: 1, BRONZE: 2, SILVER: 3, GOLD: 4, PLATINUM: 5, EMERALD: 6, DIAMOND: 7, MASTER: 8, GRANDMASTER: 9, CHALLENGER: 10 };
 const DIV_BONUS  = { I: 0.75, II: 0.5, III: 0.25, IV: 0 };
 
-function LiveGameBanner({ liveGame, ddVersion, puuid, onClose }) {
+function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
   const [champMap, setChampMap] = useState(null);
   const [elapsed, setElapsed] = useState(liveGame.gameLength ?? 0);
   const [liveStats, setLiveStats] = useState(null);
@@ -512,7 +512,11 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose }) {
   useEffect(() => {
     const puuids = liveGame.participants.map((p) => p.puuid).filter(Boolean);
     if (puuids.length > 0) {
-      getLiveEnrich(puuids).then(setLiveStats).catch(() => {});
+      getLiveEnrich(puuids)
+        .then((stats) => { setLiveStats(stats); onReady?.(); })
+        .catch(() => { onReady?.(); });
+    } else {
+      onReady?.();
     }
   }, [liveGame]);
 
@@ -1714,16 +1718,15 @@ export default function Dashboard() {
       const data = await getLiveGame(resolvedPuuid);
       if (data.inGame) {
         setLiveGame(data);
-      } else {
-        setLiveGame(null);
-        setNotInGame(true);
-        setTimeout(() => setNotInGame(false), 2500);
+        return; // liveLoading stays true until LiveGameBanner calls onReady
       }
+      setLiveGame(null);
+      setNotInGame(true);
+      setTimeout(() => setNotInGame(false), 2500);
     } catch (err) {
       console.error("Live game check failed:", err);
-    } finally {
-      setLiveLoading(false);
     }
+    setLiveLoading(false);
   };
 
   const handleToggleGame = async (matchId) => {
@@ -1798,6 +1801,7 @@ export default function Dashboard() {
                 ddVersion={ddVersion}
                 puuid={resolvedPuuid}
                 onClose={() => setLiveGame(null)}
+                onReady={() => setLiveLoading(false)}
               />
             )}
             {notInGame && (
