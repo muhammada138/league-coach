@@ -22,3 +22,6 @@ export const askCoach = (question, context, history) =>
 
 export const getLiveGame = (puuid) =>
   api.get(`/live/${puuid}`).then((r) => r.data);
+
+export const getLiveEnrich = (puuids) =>
+  api.post("/live-enrich", { puuids }).then((r) => r.data);
