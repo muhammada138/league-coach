@@ -527,7 +527,8 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose }) {
     const MAX_RANK = 10.75; // Challenger I
     const playerScore = (p) => {
       const s = liveStats[p.puuid];
-      if (!s) return 0.5; // neutral for missing data
+      // Treat missing data or completely hidden/unranked profiles as a neutral 50% baseline
+      if (!s || (s.tier === "UNRANKED" && s.wins === 0 && s.losses === 0)) return 0.5;
 
       // 1. Rank (40%) — normalized 0→1
       const rankRaw = s.tier === "UNRANKED" ? 3.5 : (TIER_SCORE[s.tier] ?? 3.5) + (DIV_BONUS[s.division] ?? 0);
@@ -587,7 +588,22 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose }) {
             <span className="text-slate-400 dark:text-white/30 font-normal">{p.tagLine ? `#${p.tagLine}` : ""}</span>
           </span>
           {rankLabel ? (
-            <span className="text-[10px] text-slate-400 dark:text-white/30 leading-none mt-0.5">{rankLabel}</span>
+            <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-400 dark:text-white/30 leading-none">
+              <span>{rankLabel}</span>
+              {stats?.last5?.length > 0 && (
+                <>
+                  <span>·</span>
+                  <span className={
+                    stats.avg_score >= 90 ? "text-yellow-500 dark:text-yellow-400 font-medium" :
+                    stats.avg_score >= 70 ? "text-purple-500 dark:text-purple-400 font-medium" :
+                    stats.avg_score >= 40 ? "text-blue-500 dark:text-blue-400 font-medium" :
+                    "text-red-500 dark:text-red-400 font-medium"
+                  }>
+                    {stats.avg_score} avg
+                  </span>
+                </>
+              )}
+            </div>
           ) : (
             <span className="text-[10px] text-slate-300 dark:text-white/10 leading-none mt-0.5 animate-pulse">loading…</span>
           )}
@@ -762,7 +778,7 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
 }
 
 // ── Expanded Scoreboard ────────────────────────────────────────────────────
-function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersion, runesMap, maxDamage, teamStats }) {
+function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersion, runesMap, maxDamage, teamStats, mvpPuuid, acePuuid }) {
   const navigate = useNavigate();
 
   const ROLE_ORDER = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5 };
@@ -813,11 +829,13 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
         const isMe = p.riotIdGameName === gameName;
         const scoreNum = isRemake ? 0 : parseFloat(p.score);
         const scoreColor =
-          scoreNum >= 79
-            ? "text-emerald-500 dark:text-emerald-400"
-            : scoreNum >= 50
-            ? "text-[#c89b3c]"
-            : "text-slate-400 dark:text-white/40";
+          scoreNum >= 90
+            ? "text-yellow-500 dark:text-yellow-400"
+            : scoreNum >= 70
+            ? "text-purple-500 dark:text-purple-400"
+            : scoreNum >= 40
+            ? "text-blue-500 dark:text-blue-400"
+            : "text-red-500 dark:text-red-400";
             
         const tier = (p.rank || "UNRANKED").split(" ")[0].toUpperCase();
         const rankColor = TIER_COLORS[tier] ?? "text-slate-400 dark:text-white/40";
@@ -864,18 +882,30 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
                 </div>
 
                 <div className="flex flex-col ml-0.5 min-w-0">
-                  <button
-                    onClick={() => p.puuid && p.riotIdTagline && navigate(
-                      `/player/${encodeURIComponent(p.riotIdGameName)}/${encodeURIComponent(p.riotIdTagline)}`,
-                      { state: { puuid: p.puuid } }
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => p.puuid && p.riotIdTagline && navigate(
+                        `/player/${encodeURIComponent(p.riotIdGameName)}/${encodeURIComponent(p.riotIdTagline)}`,
+                        { state: { puuid: p.puuid } }
+                      )}
+                      disabled={!p.puuid || !p.riotIdTagline}
+                      className={`font-bold truncate text-[11px] text-left
+                        ${isMe ? "text-[#c89b3c]" : "text-slate-800 dark:text-white/80"}
+                        ${p.puuid && p.riotIdTagline ? "hover:underline hover:text-[#c89b3c] cursor-pointer" : "cursor-default"}`}
+                    >
+                      {p.riotIdGameName || "Unknown"}
+                    </button>
+                    {p.puuid === mvpPuuid && (
+                      <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-yellow-400/15 text-yellow-400 border border-yellow-400/30 leading-none flex-shrink-0">
+                        MVP
+                      </span>
                     )}
-                    disabled={!p.puuid || !p.riotIdTagline}
-                    className={`font-bold truncate text-[11px] text-left
-                      ${isMe ? "text-[#c89b3c]" : "text-slate-800 dark:text-white/80"}
-                      ${p.puuid && p.riotIdTagline ? "hover:underline hover:text-[#c89b3c] cursor-pointer" : "cursor-default"}`}
-                  >
-                    {isMe && "★ "}{p.riotIdGameName || "Unknown"}
-                  </button>
+                    {p.puuid === acePuuid && (
+                      <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-400 border border-orange-400/30 leading-none flex-shrink-0">
+                        ACE
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1 mt-0.5">
                   {emblemUrl && <img src={emblemUrl} className="w-4 h-4 object-contain" alt={tier} onError={(e) => { e.target.style.display='none' }} />}
                     <span className={`text-[9px] truncate font-medium capitalize ${rankColor}`}>
@@ -956,6 +986,21 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
 
   const maxDamage = Math.max(...withScores.map(p => p.totalDamageDealtToChampions));
 
+  let mvpPuuid = null;
+  let acePuuid = null;
+  if (!isRemake) {
+    const winTeamId = team100Won ? 100 : 200;
+    let highestWinScore = -1;
+    let highestLoseScore = -1;
+    withScores.forEach((p) => {
+      if (p.teamId === winTeamId) {
+        if (p.score > highestWinScore) { highestWinScore = p.score; mvpPuuid = p.puuid; }
+      } else {
+        if (p.score > highestLoseScore) { highestLoseScore = p.score; acePuuid = p.puuid; }
+      }
+    });
+  }
+
   return (
     <div className="w-full overflow-hidden animate-slideDown">
       <table className="w-full">
@@ -983,6 +1028,8 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
             runesMap={runesMap}
             maxDamage={maxDamage}
             teamStats={teams.find(t => t.teamId === 100)}
+            mvpPuuid={mvpPuuid}
+            acePuuid={acePuuid}
           />
           <tr>
             <td colSpan={9} className="p-0">
@@ -999,6 +1046,8 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
             runesMap={runesMap}
             maxDamage={maxDamage}
             teamStats={teams.find(t => t.teamId === 200)}
+            mvpPuuid={mvpPuuid}
+            acePuuid={acePuuid}
           />
         </tbody>
       </table>
@@ -1013,11 +1062,13 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
   const secs = String(game.gameDuration % 60).padStart(2, "0");
   const imgSrc = `https://ddragon.leagueoflegends.com/cdn/14.24.1/img/champion/${game.championName}.png`;
   const kda = ((game.kills + game.assists) / Math.max(game.deaths, 1)).toFixed(2);
-  const scoreColor = game.score >= 79
-    ? "text-emerald-500 dark:text-emerald-400"
-    : game.score >= 50
-    ? "text-[#c89b3c]"
-    : "text-slate-400 dark:text-white/40";
+  const scoreColor = game.score >= 90
+    ? "text-yellow-500 dark:text-yellow-400"
+    : game.score >= 70
+    ? "text-purple-500 dark:text-purple-400"
+    : game.score >= 40
+    ? "text-blue-500 dark:text-blue-400"
+    : "text-red-500 dark:text-red-400";
 
   const borderClass = isRemake
     ? "border-slate-300 dark:border-white/10"
@@ -1658,7 +1709,9 @@ export default function Dashboard() {
         setNotInGame(true);
         setTimeout(() => setNotInGame(false), 2500);
       }
-    } catch { /* silently fail */ } finally {
+    } catch (err) {
+      console.error("Live game check failed:", err);
+    } finally {
       setLiveLoading(false);
     }
   };
@@ -1764,7 +1817,7 @@ export default function Dashboard() {
                   </div>
                   <div className="min-w-0">
                     <div className={`text-sm font-bold ${m.color}`}>{m.abbr} was most diffed</div>
-                    <div className="text-[11px] text-slate-400 dark:text-white/30">biggest score gap across your recent games</div>
+                    <div className="text-[11px] text-slate-400 dark:text-white/30">biggest score gap across your recent losses</div>
                   </div>
                 </div>
               );
