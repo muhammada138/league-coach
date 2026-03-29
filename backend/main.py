@@ -6,6 +6,7 @@ from typing import List
 import asyncio
 import httpx
 import os
+import time
 from collections import Counter
 from dotenv import load_dotenv
 
@@ -27,6 +28,20 @@ RIOT_ROUTING = os.getenv("RIOT_ROUTING", "americas")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 RIOT_HEADERS = {"X-Riot-Token": RIOT_API_KEY}
+
+# ── Simple in-memory TTL cache (5 min) ───────────────────────────────────────
+_cache: dict = {}
+_CACHE_TTL = 300
+
+def _cache_get(key: str):
+    entry = _cache.get(key)
+    if entry and time.time() - entry[1] < _CACHE_TTL:
+        return entry[0]
+    return None
+
+def _cache_set(key: str, value):
+    _cache[key] = (value, time.time())
+
 
 NUMERIC_STATS = [
     "kills", "deaths", "assists", "totalMinionsKilled",
@@ -210,6 +225,23 @@ def _compute_diffed_lane(all_players: list, timeline: dict = None, game_duration
     return diffed
 
 
+# Global cache for rank lookups to prevent rate limit spikes during 10-player scoreboard fetches
+rank_cache = {}
+
+async def get_cached_rank(client: httpx.AsyncClient, puuid: str):
+    if not puuid:
+        return "Unranked"
+    if puuid in rank_cache:
+        return rank_cache[puuid]
+    try:
+        entries = await riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}")
+        ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
+        rank = f"{ranked['tier'].capitalize()} {ranked['rank']}" if ranked else "Unranked"
+        rank_cache[puuid] = rank
+        return rank
+    except Exception:
+        return "Unranked"
+
 # Create a semaphore to limit concurrent requests to the Riot API (prevents 429 Too Many Requests)
 api_semaphore = asyncio.Semaphore(15)
 
@@ -277,6 +309,10 @@ async def get_profile(puuid: str):
 
 @app.get("/analyze/{puuid}")
 async def analyze(puuid: str, game_name: str = "Summoner"):
+    cache_key = f"analyze:{puuid}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     async with httpx.AsyncClient(timeout=30.0) as client:
         # 1. Fetch last 5 ranked match IDs
         queue_priorities = [420, 440, 400]
@@ -312,6 +348,7 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
             info = match_data["info"]
             participants = info["participants"]
             game_duration = info["gameDuration"]
+            game_end_timestamp = info.get("gameEndTimestamp") or (info.get("gameCreation", 0) + game_duration * 1000)
 
             # 3. Find the player's participant entry
             player = next((p for p in participants if p["puuid"] == puuid), None)
@@ -378,6 +415,7 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
 
             games.append({
                 "matchId": match_id,
+                "gameEndTimestamp": game_end_timestamp,
                 "playerStats": player_stats,
                 "lobbyAverages": lobby_avgs,
                 "deltas": deltas,
@@ -488,6 +526,7 @@ Per game breakdown:
         ps = g["playerStats"]
         game_summaries.append({
             "matchId": g["matchId"],
+            "gameEndTimestamp": g["gameEndTimestamp"],
             "championName": ps["championName"],
             "teamPosition": ps["teamPosition"],
             "kills": ps["kills"],
@@ -507,7 +546,7 @@ Per game breakdown:
     diffed_lanes = [g["diffedLane"] for g in game_summaries if g["diffedLane"]]
     most_diffed_lane = Counter(diffed_lanes).most_common(1)[0][0] if diffed_lanes else None
 
-    return {
+    result = {
         "gameName": game_name,
         "queueUsed": queue_used,
         "mostPlayedPosition": most_common_position,
@@ -528,11 +567,18 @@ Per game breakdown:
         "coaching": coaching,
         "games": game_summaries,
     }
+    _cache_set(cache_key, result)
+    return result
+
 
 
 @app.get("/history/{puuid}")
 async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 420):
     count = min(count, 10)
+    cache_key = f"history:{puuid}:{start}:{count}:{queue}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     async with httpx.AsyncClient(timeout=30.0) as client:
         match_ids = await riot_get(
             client,
@@ -558,6 +604,8 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
         if player is None:
             continue
         minutes = info["gameDuration"] / 60
+        game_duration = info["gameDuration"]
+        game_end_timestamp = info.get("gameEndTimestamp") or (info.get("gameCreation", 0) + game_duration * 1000)
         cspm = round(player["totalMinionsKilled"] / minutes if minutes > 0 else 0, 2)
         player_team_id = player.get("teamId")
         hist_teammates = [
@@ -585,6 +633,7 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
         mvp_ace_h = "MVP" if puuid == mvp_h else ("ACE" if puuid == ace_h else None)
         games.append({
             "matchId": match_id,
+            "gameEndTimestamp": game_end_timestamp,
             "championName": player["championName"],
             "teamPosition": player.get("teamPosition", "UNKNOWN"),
             "kills": player["kills"],
@@ -600,6 +649,7 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
             "teammates": hist_teammates,
             "opponents": hist_opponents,
         })
+    _cache_set(cache_key, games)
     return games
 
 
@@ -616,12 +666,25 @@ async def get_scoreboard(match_id: str):
     data = results[0]
     timeline = results[1] if not isinstance(results[1], Exception) else None
     participants = sorted(data["info"]["participants"], key=lambda p: p["teamId"])
-    return [
-        {
+    
+    async with httpx.AsyncClient() as c2:
+        rank_tasks = [get_cached_rank(c2, p.get("puuid", "")) for p in participants]
+        ranks = await asyncio.gather(*rank_tasks, return_exceptions=True)
+
+    participants_out = []
+    for i, p in enumerate(participants):
+        rank = ranks[i] if not isinstance(ranks[i], Exception) else "Unranked"
+        perks = p.get("perks", {})
+        primary_style = next((s for s in perks.get("styles", []) if s.get("description") == "primaryStyle"), {})
+        sub_style = next((s for s in perks.get("styles", []) if s.get("description") == "subStyle"), {})
+        primary_perk = primary_style.get("selections", [{}])[0].get("perk") if primary_style.get("selections") else None
+
+        participants_out.append({
             "puuid": p.get("puuid", ""),
             "riotIdGameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown",
             "riotIdTagline": p.get("riotIdTagline") or "",
             "championName": p["championName"],
+            "champLevel": p.get("champLevel", 0),
             "teamPosition": p.get("teamPosition", "UNKNOWN"),
             "kills": p["kills"],
             "deaths": p["deaths"],
@@ -637,6 +700,13 @@ async def get_scoreboard(match_id: str):
             "win": p["win"],
             "teamId": p["teamId"],
             "score": _compute_perf_score(p, participants, timeline, data["info"]["gameDuration"]),
+            "gameDuration": data["info"]["gameDuration"],
+            "items": [p.get(f"item{j}", 0) for j in range(7)],
+            "summoner1Id": p.get("summoner1Id", 0),
+            "summoner2Id": p.get("summoner2Id", 0),
+            "primaryPerk": primary_perk,
+            "subStyle": sub_style.get("style"),
+            "rank": rank,
             "challenges": {
                 k: (p.get("challenges") or {}).get(k, 0)
                 for k in (
@@ -657,9 +727,25 @@ async def get_scoreboard(match_id: str):
                     "wardTakedowns",
                 )
             },
-        }
-        for p in participants
-    ]
+        })
+
+    teams_out = []
+    for t in data["info"]["teams"]:
+        obj = t.get("objectives", {})
+        teams_out.append({
+            "teamId": t["teamId"],
+            "win": t["win"],
+            "baron": obj.get("baron", {}).get("kills", 0),
+            "dragon": obj.get("dragon", {}).get("kills", 0),
+            "horde": obj.get("horde", {}).get("kills", 0),
+            "riftHerald": obj.get("riftHerald", {}).get("kills", 0),
+            "tower": obj.get("tower", {}).get("kills", 0),
+        })
+
+    return {
+        "participants": participants_out,
+        "teams": teams_out
+    }
 
 
 @app.get("/live/{puuid}")
@@ -691,6 +777,54 @@ async def get_live_game(puuid: str):
             for p in participants
         ],
     }
+
+
+class LiveEnrichRequest(BaseModel):
+    puuids: List[str]
+
+@app.post("/live-enrich")
+async def live_enrich(body: LiveEnrichRequest):
+    """For each PUUID in a live game: fetch rank/WR + last 5 ranked game outcomes+scores."""
+    async def enrich_one(puuid: str):
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                entries_task = riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}")
+                match_ids_task = riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue=420")
+                entries, match_ids = await asyncio.gather(entries_task, match_ids_task, return_exceptions=True)
+
+                ranked = next(
+                    (e for e in (entries if isinstance(entries, list) else []) if e.get("queueType") == "RANKED_SOLO_5x5"),
+                    None,
+                )
+                tier     = ranked["tier"]            if ranked else "UNRANKED"
+                division = ranked.get("rank", "")    if ranked else ""
+                lp       = ranked.get("leaguePoints", 0) if ranked else 0
+                wins     = ranked.get("wins",   0)   if ranked else 0
+                losses   = ranked.get("losses", 0)   if ranked else 0
+
+                last5 = []
+                if isinstance(match_ids, list) and match_ids:
+                    match_tasks = [
+                        riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
+                        for mid in match_ids[:5]
+                    ]
+                    match_datas = await asyncio.gather(*match_tasks, return_exceptions=True)
+                    for md in match_datas:
+                        if isinstance(md, Exception) or not md:
+                            continue
+                        info = md.get("info", {})
+                        participants = info.get("participants", [])
+                        player = next((p for p in participants if p.get("puuid") == puuid), None)
+                        if player:
+                            score = _compute_perf_score(player, participants, None, info.get("gameDuration", 0))
+                            last5.append({"win": player["win"], "score": round(score)})
+
+                return {"puuid": puuid, "tier": tier, "division": division, "lp": lp, "wins": wins, "losses": losses, "last5": last5}
+        except Exception:
+            return {"puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0, "last5": []}
+
+    results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])
+    return {r["puuid"]: r for r in results if isinstance(r, dict)}
 
 
 class ChatMessage(BaseModel):
