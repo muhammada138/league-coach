@@ -76,7 +76,10 @@ function NavSearch() {
   const navigate = useNavigate();
 
   const expanded = focused || query.length > 0;
-  const showHistory = focused && query.length === 0 && history.length > 0 && !error;
+  const showHistory = focused && !error;
+  const filteredHistory = query.length === 0
+    ? history
+    : history.filter((h) => h.toLowerCase().includes(query.toLowerCase()));
 
   useEffect(() => {
     if (focused) setHistory(readSearchHistory());
@@ -172,7 +175,7 @@ function NavSearch() {
       </div>
 
       {/* Search history dropdown */}
-      {showHistory && (
+      {showHistory && filteredHistory.length > 0 && (
         <div className="absolute top-full left-0 mt-1.5 w-52 z-50
           bg-white dark:bg-[#0b0f1a]
           border border-slate-200 dark:border-white/[0.08]
@@ -180,11 +183,11 @@ function NavSearch() {
           overflow-hidden animate-fadeIn">
           <div className="px-3 py-2 border-b border-slate-100 dark:border-white/[0.06]">
             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25">
-              Recent
+              {query.length === 0 ? "Recent" : "Suggestions"}
             </span>
           </div>
           <div className="py-1">
-            {history.map((item) => {
+            {filteredHistory.map((item) => {
               const hashIdx = item.indexOf("#");
               const name = hashIdx > -1 ? item.slice(0, hashIdx) : item;
               const tag = hashIdx > -1 ? item.slice(hashIdx + 1) : "";
