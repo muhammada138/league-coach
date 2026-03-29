@@ -35,12 +35,15 @@ NUMERIC_STATS = [
 ]
 
 
-def _compute_perf_score(player: dict, all_players: list, timeline: dict = None) -> float:
+def _compute_perf_score(player: dict, all_players: list, timeline: dict = None, game_duration: int = 0) -> float:
     """
     0-100 performance score (reverse-engineered dpm.lol algorithm).
     Components: Base + Global + Lane + Objectives + Team + KDA + RoleSpecific + Win/Loss.
     Returns a float rounded to 2 decimal places.
     """
+    if 0 < game_duration < 210:
+        return 0.0
+
     ch   = player.get("challenges") or {}
     lane = player.get("teamPosition") or "MIDDLE"
 
@@ -68,25 +71,13 @@ def _compute_perf_score(player: dict, all_players: list, timeline: dict = None) 
     player_team = player.get("teamId", 100)
     player_pos  = player.get("teamPosition") or ""
     lane_score  = 0.0
-    opp = None
-    
     if player_pos and player_pos not in ("", "UNKNOWN"):
         opp = next(
             (p for p in all_players
              if p.get("teamPosition") == player_pos and p.get("teamId") != player_team),
             None,
         )
-        
-    if not opp:
-        my_lane = player.get("lane")
-        if my_lane and my_lane not in ("", "NONE"):
-            opp = next(
-                (p for p in all_players
-                 if p.get("lane") == my_lane and p.get("teamId") != player_team),
-                None,
-            )
-
-    if opp:
+        if opp:
             true_gold_diff = 0
             true_xp_diff = 0
             
@@ -199,7 +190,7 @@ def _compute_perf_score(player: dict, all_players: list, timeline: dict = None) 
     return round(max(0.0, min(100.0, float(total))), 2)
 
 
-def _compute_diffed_lane(all_players: list, timeline: dict = None):
+def _compute_diffed_lane(all_players: list, timeline: dict = None, game_duration: int = 0):
     """Return the position label where the two opposing players had the biggest score gap."""
     by_pos = {}
     for p in all_players:
@@ -211,8 +202,8 @@ def _compute_diffed_lane(all_players: list, timeline: dict = None):
     for pos, players in by_pos.items():
         if len(players) != 2:
             continue
-        s1 = _compute_perf_score(players[0], all_players, timeline)
-        s2 = _compute_perf_score(players[1], all_players, timeline)
+        s1 = _compute_perf_score(players[0], all_players, timeline, game_duration)
+        s2 = _compute_perf_score(players[1], all_players, timeline, game_duration)
         diff = abs(s1 - s2)
         if diff > max_diff:
             max_diff, diffed = diff, pos
@@ -288,39 +279,36 @@ async def get_profile(puuid: str):
 async def analyze(puuid: str, game_name: str = "Summoner"):
     async with httpx.AsyncClient(timeout=30.0) as client:
         # 1. Fetch last 5 ranked match IDs
+        queue_priorities = [420, 440, 400]
+        id_tasks = [
+            riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={q}")
+            for q in queue_priorities
+        ]
+        id_results = await asyncio.gather(*id_tasks, return_exceptions=True)
+
         match_ids = []
         queue_used = 420
-        for try_queue in [420, 440, 400]:
-            ids = await riot_get(
-                client,
-                f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10&queue={try_queue}",
-            )
-            if ids:
+        for q, ids in zip(queue_priorities, id_results):
+            if isinstance(ids, list) and ids:
                 match_ids = ids
-                queue_used = try_queue
+                queue_used = q
                 break
 
         if not match_ids:
             raise HTTPException(status_code=404, detail="No matches found")
 
-        # 2. Fetch all match data and timeline data in parallel
+        # 2. Fetch all match data in parallel (skipping timelines for dashboard load speed)
         match_tasks = [
             riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
             for mid in match_ids
         ]
-        timeline_tasks = [
-            get_match_timeline(client, mid) for mid in match_ids
-        ]
         
-        results = await asyncio.gather(*(match_tasks + timeline_tasks), return_exceptions=True)
-        half = len(match_ids)
-        match_datas = results[:half]
-        timeline_datas = results[half:]
+        match_datas = await asyncio.gather(*match_tasks, return_exceptions=True)
 
         games = []
-        for match_id, match_data, timeline in zip(match_ids, match_datas, timeline_datas):
+        for match_id, match_data in zip(match_ids, match_datas):
             if isinstance(match_data, Exception): continue
-            timeline = timeline if not isinstance(timeline, Exception) else None
+            timeline = None
             info = match_data["info"]
             participants = info["participants"]
             game_duration = info["gameDuration"]
@@ -361,9 +349,9 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
             player_cspm = player_stats["totalMinionsKilled"] / minutes if minutes > 0 else 0
             lobby_cspm = lobby_avgs["totalMinionsKilled"] / minutes if minutes > 0 else 0
 
-            all_player_scores = [(p, _compute_perf_score(p, participants, timeline)) for p in participants]
+            all_player_scores = [(p, _compute_perf_score(p, participants, timeline, game_duration)) for p in participants]
             game_score = next(s for p, s in all_player_scores if p.get("puuid") == puuid)
-            game_diffed_lane = _compute_diffed_lane(participants, timeline)
+            game_diffed_lane = _compute_diffed_lane(participants, timeline, game_duration)
             winning_scores = [(p, s) for p, s in all_player_scores if p.get("win")]
             losing_scores  = [(p, s) for p, s in all_player_scores if not p.get("win")]
             mvp_puuid_g = max(winning_scores, key=lambda x: x[1])[0].get("puuid") if winning_scores else None
@@ -469,7 +457,7 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
 
     user_prompt = f"""Player: {game_name}
 Most played role: {most_common_position}
-Win rate last 10 games: {win_rate}%
+Win rate last 5 games: {win_rate}%
 
 Player averages vs lobby averages:
 - KDA ratio: {fmt(player_kda)} vs {fmt(lobby_kda)} (delta: {delta_str(player_kda - lobby_kda)})
@@ -557,17 +545,13 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
             riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
             for mid in match_ids
         ]
-        timeline_tasks = [get_match_timeline(client, mid) for mid in match_ids]
-        results = await asyncio.gather(*(match_tasks + timeline_tasks), return_exceptions=True)
         
-        half = len(match_ids)
-        match_datas = results[:half]
-        timeline_datas = results[half:]
+        match_datas = await asyncio.gather(*match_tasks, return_exceptions=True)
         
     games = []
-    for match_id, match_data, timeline in zip(match_ids, match_datas, timeline_datas):
+    for match_id, match_data in zip(match_ids, match_datas):
         if isinstance(match_data, Exception): continue
-        timeline = timeline if not isinstance(timeline, Exception) else None
+        timeline = None
         info = match_data["info"]
         participants = info["participants"]
         player = next((p for p in participants if p["puuid"] == puuid), None)
@@ -592,7 +576,7 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
             for p in participants
             if p.get("puuid") != puuid and p.get("teamId") != player_team_id
         ]
-        all_ps = [(p, _compute_perf_score(p, participants, timeline)) for p in participants]
+        all_ps = [(p, _compute_perf_score(p, participants, timeline, info["gameDuration"])) for p in participants]
         player_score_h = next(s for p, s in all_ps if p.get("puuid") == puuid)
         win_scores_h = [(p, s) for p, s in all_ps if p.get("win")]
         loss_scores_h = [(p, s) for p, s in all_ps if not p.get("win")]
@@ -612,7 +596,7 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
             "gameDuration": info["gameDuration"],
             "score": player_score_h,
             "mvpAce": mvp_ace_h,
-            "diffedLane": _compute_diffed_lane(participants, timeline),
+            "diffedLane": _compute_diffed_lane(participants, timeline, info["gameDuration"]),
             "teammates": hist_teammates,
             "opponents": hist_opponents,
         })
@@ -652,7 +636,7 @@ async def get_scoreboard(match_id: str):
             "damageDealtToObjectives": p.get("damageDealtToObjectives", 0),
             "win": p["win"],
             "teamId": p["teamId"],
-            "score": _compute_perf_score(p, participants, timeline),
+            "score": _compute_perf_score(p, participants, timeline, data["info"]["gameDuration"]),
             "challenges": {
                 k: (p.get("challenges") or {}).get(k, 0)
                 for k in (

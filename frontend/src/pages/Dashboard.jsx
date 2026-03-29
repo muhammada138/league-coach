@@ -46,28 +46,17 @@ function computePerformanceScore(player, allPlayers) {
 
   // Lane Performance (vs lane opponent)
   let laneScore = 0.0;
-  let opp = null;
   if (lane && lane !== "UNKNOWN") {
-    opp = allPlayers.find(
+    const opp = allPlayers.find(
       (p) => p.teamPosition === lane && p.teamId !== player.teamId
     );
-  }
-  
-  if (!opp) {
-    const myLane = player.lane;
-    if (myLane && myLane !== "NONE") {
-      opp = allPlayers.find(
-        (p) => p.lane === myLane && p.teamId !== player.teamId
-      );
+    if (opp) {
+      const goldDiff = (player.goldEarned ?? 0) - (opp.goldEarned ?? 0);
+      const xpDiff   = (player.champExperience ?? 0) - (opp.champExperience ?? 0);
+      const maxCsAdv = ch.maxCsAdvantageOnLaneOpponent ?? 0;
+      const rawLane  = goldDiff * 0.0015 + xpDiff * 0.0011 + maxCsAdv * 0.08;
+      laneScore = Math.max(-5.0, Math.min(10.0, rawLane));
     }
-  }
-
-  if (opp) {
-    const goldDiff = (player.goldEarned ?? 0) - (opp.goldEarned ?? 0);
-    const xpDiff   = (player.champExperience ?? 0) - (opp.champExperience ?? 0);
-    const maxCsAdv = ch.maxCsAdvantageOnLaneOpponent ?? 0;
-    const rawLane  = goldDiff * 0.0015 + xpDiff * 0.0011 + maxCsAdv * 0.08;
-    laneScore = Math.max(-5.0, Math.min(10.0, rawLane));
   }
 
   // Objectives
@@ -316,6 +305,7 @@ function ErrorScreen({ message, onRetry }) {
 function LPGraph({ games, profile, puuid }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const currentLP = profile?.lp ?? 0;
+  const rankLabel = profile?.tier === "UNRANKED" ? "Unranked" : `${profile?.tier} ${profile?.division}`;
   const ordered = [...games].reverse();
 
   const series = (() => {
@@ -348,8 +338,8 @@ function LPGraph({ games, profile, puuid }) {
         <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">
           LP Trend · Last {games.length}
         </span>
-        <span className={`text-xs font-bold ${netDelta >= 0 ? "text-emerald-500" : "text-red-400"}`}>
-          {netDelta >= 0 ? "+" : ""}{netDelta} LP est.
+        <span className="text-xs font-bold text-slate-700 dark:text-white/80 transition-colors duration-200">
+          {hoveredIdx !== null ? `${rankLabel} · ${series[hoveredIdx]} LP` : `${rankLabel} · ${currentLP} LP`}
         </span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 52 }}>
@@ -386,7 +376,7 @@ function LPGraph({ games, profile, puuid }) {
         {hoveredIdx !== null && (() => {
           const lp = series[hoveredIdx];
           const game = hoveredIdx > 0 ? ordered[hoveredIdx - 1] : null;
-          const label = game ? `${lp} LP · ${game.win ? "W" : "L"}` : `${lp} LP`;
+          const label = game ? `${rankLabel} · ${lp} LP · ${game.win ? "W" : "L"}` : `${rankLabel} · ${lp} LP`;
           const cx = toX(hoveredIdx);
           const cy = toY(lp);
           const tw = label.length * 7 + 14;
@@ -634,7 +624,7 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
 }
 
 // ── Expanded Scoreboard ────────────────────────────────────────────────────
-function TeamScoreRows({ players, isWin, teamLabel, gameName }) {
+function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake }) {
   const navigate = useNavigate();
   return (
     <>
@@ -651,7 +641,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName }) {
       </tr>
       {players.map((p, idx) => {
         const isMe = p.riotIdGameName === gameName;
-        const scoreNum = parseFloat(p.score);
+        const scoreNum = isRemake ? 0 : parseFloat(p.score);
         const scoreColor =
           scoreNum >= 79
             ? "text-emerald-500 dark:text-emerald-400"
@@ -702,7 +692,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName }) {
               {(p.goldEarned / 1000).toFixed(1)}k
             </td>
             <td className="px-3 py-2.5 text-center">
-              <span className={`font-bold text-sm ${scoreColor}`}>{p.score}</span>
+              <span className={`font-bold text-sm ${scoreColor}`}>{Math.round(scoreNum)}</span>
             </td>
           </tr>
         );
@@ -711,7 +701,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName }) {
   );
 }
 
-function ExpandedScoreboard({ scoreboard, loading, gameName }) {
+function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake }) {
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center gap-3">
@@ -749,6 +739,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName }) {
             isWin={team100Won}
             teamLabel="Blue Team"
             gameName={gameName}
+            isRemake={isRemake}
           />
           <tr>
             <td colSpan={8} className="p-0">
@@ -760,6 +751,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName }) {
             isWin={!team100Won}
             teamLabel="Red Team"
             gameName={gameName}
+            isRemake={isRemake}
           />
         </tbody>
       </table>
@@ -906,7 +898,12 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
             ? "border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10"
             : "border-red-200 dark:border-red-500/20 bg-red-50/20 dark:bg-red-950/10"
         }`}>
-          <ExpandedScoreboard scoreboard={scoreboard} loading={scoreboardLoading} gameName={gameName} />
+          <ExpandedScoreboard 
+            scoreboard={scoreboard} 
+            loading={scoreboardLoading} 
+            gameName={gameName} 
+            isRemake={isRemake} 
+          />
         </div>
       )}
     </div>
@@ -961,16 +958,51 @@ function StatsContent({ playerAverages, lobbyAverages, deltas }) {
 }
 
 // ── Summary Strip ───────────────────────────────────────────────────────────
-function SummaryStrip({ analysis }) {
-  const wins   = analysis.games.filter((g) => g.win).length;
-  const losses = analysis.games.length - wins;
-  const avgScore = analysis.games.reduce((s, g) => s + (g.score ?? 0), 0) / analysis.games.length;
+function SummaryStrip({ analysis, games }) {
+  const allGames = games || analysis.games;
+  const n = allGames.length || 1;
+  
+  const wins = allGames.filter((g) => g.win && g.gameDuration >= 210).length;
+  const losses = allGames.filter((g) => !g.win && g.gameDuration >= 210).length;
+  const totalValid = wins + losses || 1;
+  const winRate = ((wins / totalValid) * 100).toFixed(1);
+
+  const tk = allGames.reduce((sum, g) => sum + g.kills, 0);
+  const td = allGames.reduce((sum, g) => sum + g.deaths, 0);
+  const ta = allGames.reduce((sum, g) => sum + g.assists, 0);
+  const avgKda = (tk + ta) / Math.max(td, 1);
+
+  let totalMins = 0;
+  let totalCS = 0;
+  let totalVision = 0;
+  let totalScore = 0;
+  let validScoreCount = 0;
+
+  allGames.forEach((g) => {
+    const mins = g.gameDuration / 60;
+    totalMins += mins;
+    totalCS += g.cspm * mins;
+    totalVision += g.visionScore;
+    if (g.gameDuration >= 210) {
+      totalScore += g.score ?? 0;
+      validScoreCount++;
+    }
+  });
+
+  const avgCspm = totalMins > 0 ? totalCS / totalMins : 0;
+  const avgVision = totalVision / n;
+  const avgScore = validScoreCount > 0 ? totalScore / validScoreCount : 0;
+
+  const lKda = analysis.lobbyAverages.kda;
+  const lCspm = analysis.lobbyAverages.cspm;
+  const lVis = analysis.lobbyAverages.visionScore;
+
   const items = [
-    { label: "Win Rate",  value: `${analysis.winRate}%`,                         sub: `${wins}W · ${losses}L`,                                positive: analysis.winRate >= 50 },
-    { label: "Avg KDA",   value: analysis.playerAverages.kda.toFixed(2),          sub: `Lobby ${analysis.lobbyAverages.kda.toFixed(2)}`,         positive: analysis.deltas.kda >= 0 },
-    { label: "CS / min",  value: analysis.playerAverages.cspm.toFixed(2),         sub: `Lobby ${analysis.lobbyAverages.cspm.toFixed(2)}`,        positive: analysis.deltas.cspm >= 0 },
-    { label: "Vision",    value: analysis.playerAverages.visionScore.toFixed(1),  sub: `Lobby ${analysis.lobbyAverages.visionScore.toFixed(1)}`, positive: analysis.deltas.visionScore >= 0 },
-    { label: "Avg Score", value: avgScore.toFixed(0),                             sub: `Last ${analysis.games.length} games`,                   positive: avgScore >= 60 },
+    { label: "Win Rate",  value: `${winRate}%`,       sub: `${wins}W · ${losses}L`,          positive: Number(winRate) >= 50 },
+    { label: "Avg KDA",   value: avgKda.toFixed(2),   sub: `Lobby ${lKda.toFixed(2)}`,       positive: avgKda >= lKda },
+    { label: "CS / min",  value: avgCspm.toFixed(2),  sub: `Lobby ${lCspm.toFixed(2)}`,      positive: avgCspm >= lCspm },
+    { label: "Vision",    value: avgVision.toFixed(1),sub: `Lobby ${lVis.toFixed(1)}`,       positive: avgVision >= lVis },
+    { label: "Avg Score", value: avgScore.toFixed(0), sub: `Last ${validScoreCount} games`,  positive: avgScore >= 60 },
   ];
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -1074,7 +1106,9 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
   };
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (chatHistory.length > 0 || chatLoading) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   }, [chatHistory, chatLoading]);
 
   return (
@@ -1419,7 +1453,7 @@ export default function Dashboard() {
               tagLine={tagLine}
               puuid={resolvedPuuid}
               profile={profile}
-              games={analysis.games}
+              games={[...analysis.games, ...extraGames]}
               ddVersion={ddVersion}
               onLiveCheck={handleLiveCheck}
               liveLoading={liveLoading}
@@ -1443,7 +1477,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            <SummaryStrip analysis={analysis} />
+            <SummaryStrip analysis={analysis} games={[...analysis.games, ...extraGames]} />
 
             {analysis.mostDiffedLane && (() => {
               const m = LANE_META[analysis.mostDiffedLane] ?? { abbr: analysis.mostDiffedLane, color: "text-slate-400", bg: "bg-slate-400/10", border: "border-slate-400/25" };
