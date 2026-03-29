@@ -344,14 +344,14 @@ function ErrorScreen({ message, onRetry }) {
 }
 
 // ── LP Trend Graph ─────────────────────────────────────────────────────────
-function LPGraph({ games, profile, puuid }) {
+function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const currentLP = profile?.lp ?? 0;
   const rankLabel = profile?.tier === "UNRANKED" ? "Unranked" : `${profile?.tier} ${profile?.division}`;
   const ordered = [...games].reverse();
 
   const series = (() => {
-    const storageKey = `lp_${puuid}`;
+    const storageKey = `${cachePrefix}_${puuid}`;
     const fingerprint = `${currentLP}:${games.map((g) => g.matchId).join(",")}`;
     try {
       const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null");
@@ -691,14 +691,17 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
 }
 
 // ── Profile Card ───────────────────────────────────────────────────────────
-function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveStatus = 'idle' }) {
-  const totalGames = profile.wins + profile.losses;
-  const wr = totalGames > 0 ? ((profile.wins / totalGames) * 100).toFixed(1) : "-";
-  const tierColor = TIER_COLORS[profile.tier] ?? "text-slate-400";
+function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked" }) {
+  const displayProfile = queueTab === "flex" && profile.flex
+    ? { ...profile, ...profile.flex }
+    : profile;
+  const totalGames = displayProfile.wins + displayProfile.losses;
+  const wr = totalGames > 0 ? ((displayProfile.wins / totalGames) * 100).toFixed(1) : "-";
+  const tierColor = TIER_COLORS[displayProfile.tier] ?? "text-slate-400";
   const rankLabel =
-    profile.tier === "UNRANKED" ? "Unranked" : `${profile.tier} ${profile.division}`;
-  const emblemUrl = profile.tier && profile.tier !== "UNRANKED"
-    ? `https://opgg-static.akamaized.net/images/medals_new/${profile.tier.toLowerCase()}.png`
+    displayProfile.tier === "UNRANKED" ? "Unranked" : `${displayProfile.tier} ${displayProfile.division}`;
+  const emblemUrl = displayProfile.tier && displayProfile.tier !== "UNRANKED"
+    ? `https://opgg-static.akamaized.net/images/medals_new/${displayProfile.tier.toLowerCase()}.png`
     : null;
   const iconUrl = profile.profileIconId != null
     ? `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/profileicon/${profile.profileIconId}.png`
@@ -784,21 +787,21 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className={`text-sm font-bold ${tierColor}`}>
               {rankLabel}
-              {profile.tier !== "UNRANKED" && (
-                <span className="text-slate-400 dark:text-white/40 font-normal"> · {profile.lp} LP</span>
+              {displayProfile.tier !== "UNRANKED" && (
+                <span className="text-slate-400 dark:text-white/40 font-normal"> · {displayProfile.lp} LP</span>
               )}
             </span>
             {totalGames > 0 && (
               <span className="text-sm text-slate-500 dark:text-white/40">
-                <span className="text-emerald-500 font-semibold">{profile.wins}W</span>{" "}
-                <span className="text-red-400 font-semibold">{profile.losses}L</span>
+                <span className="text-emerald-500 font-semibold">{displayProfile.wins}W</span>{" "}
+                <span className="text-red-400 font-semibold">{displayProfile.losses}L</span>
                 <span className="text-slate-400 dark:text-white/30"> · {wr}%</span>
               </span>
             )}
           </div>
         </div>
       </div>
-      {games && <LPGraph games={games} profile={profile} puuid={puuid} />}
+      {games && games.length > 0 && <LPGraph games={games} profile={displayProfile} puuid={puuid} cachePrefix={queueTab === "flex" ? "lp_flex" : "lp"} />}
     </div>
   );
 }
@@ -1801,10 +1804,13 @@ export default function Dashboard() {
               tagLine={tagLine}
               puuid={resolvedPuuid}
               profile={profile}
-              games={analysis ? [...analysis.games, ...extraGames] : []}
+              games={queueTab === "flex"
+                ? (tabGames.flex ?? [])
+                : (analysis ? [...analysis.games, ...extraGames] : [])}
               ddVersion={ddVersion}
               onLiveCheck={handleLiveCheck}
               liveStatus={liveStatus}
+              queueTab={queueTab}
             />
 
             {liveGame?.inGame && (
