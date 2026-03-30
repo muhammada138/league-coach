@@ -534,7 +534,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
       // Treat missing data or completely hidden/unranked profiles as a neutral 50% baseline
       if (!s || (s.tier === "UNRANKED" && s.wins === 0 && s.losses === 0)) return 0.5;
 
-      // 1. Rank (40%) — normalized 0→1
+      // 1. Rank (40%) - normalized 0→1
       const rankRaw = s.tier === "UNRANKED" ? 3.5 : (TIER_SCORE[s.tier] ?? 3.5) + (DIV_BONUS[s.division] ?? 0);
       const rankNorm = rankRaw / MAX_RANK;
 
@@ -542,14 +542,14 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
       const total = s.wins + s.losses;
       const seasonWR = total > 0 ? s.wins / total : 0.5;
 
-      // 3. Recent form — avg perf score of last 5 games (30%)
+      // 3. Recent form - avg perf score of last 5 games (30%)
       const formNorm = (s.avg_score ?? 50) / 100;
 
-      // 4. Champ comfort — is the player on a champ they've played recently? (10%)
+      // 4. Champ comfort - is the player on a champ they've played recently? (10%)
       const onMainChamp = (s.main_champs ?? []).includes(String(p.championId));
       const champComfort = onMainChamp ? 0.10 : 0.0;
 
-      // 5. Streak momentum (±5%) — capped at ±3 games
+      // 5. Streak momentum (±5%) - capped at ±3 games
       const streakClamped = Math.max(-3, Math.min(3, s.streak ?? 0));
       const streakBonus = (streakClamped / 3) * 0.05;
 
@@ -1367,7 +1367,7 @@ function TeammatesContent({ games }) {
       {rows.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <p className="text-xs text-slate-400 dark:text-white/25 text-center px-5">
-            No repeat {tab === "with" ? "teammates" : "opponents"} yet — load more games to find patterns.
+            No repeat {tab === "with" ? "teammates" : "opponents"} yet - load more games to find patterns.
           </p>
         </div>
       ) : (
