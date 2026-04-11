@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
@@ -12,13 +13,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = FastAPI()
+
+_allowed_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -239,7 +245,8 @@ async def get_cached_rank(client: httpx.AsyncClient, puuid: str):
         rank = f"{ranked['tier'].capitalize()} {ranked['rank']}" if ranked else "Unranked"
         rank_cache[puuid] = rank
         return rank
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to fetch rank for puuid %s: %s", puuid, e)
         return "Unranked"
 
 # Create a semaphore to limit concurrent requests to the Riot API (prevents 429 Too Many Requests)
@@ -267,8 +274,8 @@ async def get_match_timeline(client: httpx.AsyncClient, match_id: str) -> dict:
                 response = await client.get(url, headers=RIOT_HEADERS)
             if response.status_code == 200:
                 return response.json()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to fetch timeline for match %s: %s", match_id, e)
     return None
 
 
@@ -871,7 +878,8 @@ async def live_enrich(body: LiveEnrichRequest):
                     "avg_score": avg_score, "main_champs": main_champs,
                     "main_position": main_position, "streak": streak,
                 }
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to enrich profile for puuid %s: %s", puuid, e)
             return {"puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0, "last5": []}
 
     results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])
