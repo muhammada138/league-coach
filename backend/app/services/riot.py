@@ -3,7 +3,7 @@ import asyncio
 import time
 import logging
 from fastapi import HTTPException
-from ..state import RIOT_HEADERS, api_semaphore, rank_cache, RIOT_REGION, RIOT_ROUTING
+from ..state import RIOT_HEADERS, api_semaphore, rank_cache, timeline_cache, RIOT_REGION, RIOT_ROUTING
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +34,13 @@ async def get_cached_rank(client: httpx.AsyncClient, puuid: str):
         return "Unranked"
 
 async def get_match_timeline(client: httpx.AsyncClient, match_id: str) -> dict:
+    if match_id in timeline_cache:
+        return timeline_cache[match_id]
     url = f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline"
     try:
-        return await riot_get(client, url)
+        data = await riot_get(client, url)
+        timeline_cache[match_id] = data
+        return data
     except Exception as e:
         logger.warning("Failed to fetch timeline for match %s: %s", match_id, e)
     return None
