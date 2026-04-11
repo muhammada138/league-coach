@@ -270,63 +270,90 @@ function SkeletonDashboard() {
               </div>
             </div>
 
-            {/* Match rows */}
-            <div>
-              <Sk className="h-2.5 w-24 mb-2" />
-              <div className="space-y-2">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="rounded-xl overflow-hidden border border-slate-200 dark:border-white/[0.07]">
-                    <div className="flex items-center gap-3 px-4 py-3 bg-slate-50/50 dark:bg-white/[0.01]">
-                      <Sk className="w-1 h-12 rounded-full flex-shrink-0" />
-                      <Sk className="w-12 h-12 rounded-lg flex-shrink-0" />
-                      <div className="w-36 flex-shrink-0 space-y-1.5">
-                        <Sk className="h-4 w-28" />
-                        <Sk className="h-3 w-20" />
-                      </div>
-                      <div className="flex-1 flex items-center gap-5">
-                        <div className="space-y-1.5">
-                          <Sk className="h-4 w-16" />
-                          <Sk className="h-2.5 w-12" />
-                        </div>
-                        <div className="hidden sm:block space-y-1.5">
-                          <Sk className="h-4 w-10" />
-                          <Sk className="h-2.5 w-8" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <SkeletonSummary />
+            <SkeletonMatchHistory />
           </div>
 
           {/* Right panel */}
           <div className="w-full lg:w-80 xl:w-96 flex-shrink-0">
-            <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-2xl overflow-hidden">
-              <div className="flex border-b border-slate-100 dark:border-white/[0.06]">
-                <div className="flex-1 py-3.5 px-4 flex items-center justify-center">
-                  <Sk className="h-3.5 w-20" />
-                </div>
-                <div className="w-px bg-slate-100 dark:bg-white/[0.06]" />
-                <div className="flex-1 py-3.5 px-4 flex items-center justify-center">
-                  <Sk className="h-3.5 w-12" />
-                </div>
-              </div>
-              <div className="p-5 space-y-5">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="flex gap-3">
-                    <Sk className="w-6 h-6 rounded-full flex-shrink-0" />
-                    <div className="flex-1 space-y-2">
-                      <Sk className="h-3.5 w-full" />
-                      <Sk className={`h-3.5 ${i % 2 === 0 ? "w-4/5" : "w-3/5"}`} />
-                      <Sk className={`h-3.5 ${i % 3 === 0 ? "w-3/5" : "w-2/3"}`} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <SkeletonRightPanel />
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function SkeletonSummary() {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-xl p-3 flex flex-col items-center gap-2">
+          <Sk className="h-6 w-12" />
+          <Sk className="h-2.5 w-16" />
+          <Sk className="h-2.5 w-14" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SkeletonMatchHistory() {
+  return (
+    <div className="space-y-2">
+      <Sk className="h-2.5 w-24 mb-2" />
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className="rounded-xl overflow-hidden border border-slate-200 dark:border-white/[0.07]">
+          <div className="flex items-center gap-3 px-4 py-3 bg-slate-50/50 dark:bg-white/[0.01]">
+            <Sk className="w-1 h-12 rounded-full flex-shrink-0" />
+            <Sk className="w-12 h-12 rounded-lg flex-shrink-0" />
+            <div className="w-36 flex-shrink-0 space-y-1.5">
+              <Sk className="h-4 w-28" />
+              <Sk className="h-3 w-20" />
+            </div>
+            <div className="flex-1 flex items-center gap-5">
+              <div className="space-y-1.5">
+                <Sk className="h-4 w-16" />
+                <Sk className="h-2.5 w-12" />
+              </div>
+              <div className="hidden sm:block space-y-1.5">
+                <Sk className="h-4 w-10" />
+                <Sk className="h-2.5 w-8" />
+              </div>
+            </div>
+            <div className="flex flex-col items-center gap-1.5">
+              <Sk className="h-4 w-8" />
+              <Sk className="h-2.5 w-10" />
+            </div>
+            <Sk className="w-6 h-6 rounded-full" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SkeletonRightPanel() {
+  return (
+    <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-2xl overflow-hidden">
+      <div className="flex border-b border-slate-100 dark:border-white/[0.06]">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="flex-1 py-3.5 px-4 flex items-center justify-center">
+            <Sk className="h-3.5 w-16" />
+          </div>
+        ))}
+      </div>
+      <div className="p-5 space-y-5">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="flex gap-3">
+            <Sk className="w-6 h-6 rounded-full flex-shrink-0" />
+            <div className="flex-1 space-y-2">
+              <Sk className="h-3.5 w-full" />
+              <Sk className={`h-3.5 ${i % 2 === 0 ? "w-4/5" : "w-3/5"}`} />
+              <Sk className={`h-3.5 ${i % 3 === 0 ? "w-3/5" : "w-2/3"}`} />
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1825,9 +1852,7 @@ export default function Dashboard() {
 
             {analysis ? (
               queueTab !== "ranked" && tabGames[queueTab] === null ? (
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  {[...Array(5)].map((_, i) => <div key={i} className="skeleton h-[72px] rounded-xl" />)}
-                </div>
+                <SkeletonSummary />
               ) : (
                 <SummaryStrip
                   analysis={analysis}
@@ -1837,9 +1862,7 @@ export default function Dashboard() {
                 />
               )
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                {[...Array(5)].map((_, i) => <div key={i} className="skeleton h-[72px] rounded-xl" />)}
-              </div>
+              <SkeletonSummary />
             )}
 
             {analysis?.mostDiffedLane && (() => {
@@ -1858,9 +1881,7 @@ export default function Dashboard() {
             })()}
 
             {analysisLoading && !analysis && (
-              <div className="space-y-2">
-                {[...Array(5)].map((_, i) => <div key={i} className="skeleton h-16 rounded-xl" />)}
-              </div>
+              <SkeletonMatchHistory />
             )}
 
             {analysis && (() => {
@@ -1970,7 +1991,7 @@ export default function Dashboard() {
                 ].join("\n")}
               />
             ) : (
-              <div className="skeleton h-64 rounded-2xl" />
+              <SkeletonRightPanel />
             )}
           </div>
 
