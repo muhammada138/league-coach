@@ -7,6 +7,10 @@ export default {
   darkMode: "class",
   theme: {
     extend: {
+      colors: {
+        gold: "#c89b3c",
+        background: "#050a18",
+      },
       keyframes: {
         shimmer: {
           "0%":   { backgroundPosition: "-400px 0" },
