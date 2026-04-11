@@ -47,6 +47,13 @@ You'll need a [Riot API key](https://developer.riotgames.com/) and a [Groq API k
 
 ### Backend
 
+The backend is structured modularly for scalability:
+- `app/main.py`: Application entry point and middleware configuration.
+- `app/routes/api.py`: API route handlers for Riot and Groq integrations.
+- `app/services/`: Core logic for Riot API (`riot.py`) and Groq AI (`groq.py`).
+- `app/models/`: Pydantic models for request/response validation.
+- `app/state.py`: Global state, caching, and environment configuration.
+
 ```bash
 cd backend
 pip install -r requirements.txt
