@@ -132,7 +132,8 @@ async def lp_history(puuid: str, queue: str = 'RANKED_SOLO_5x5'):
 @router.get("/analyze/{puuid}")
 async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
     count = max(5, min(count, 30))
-    cache_key = f"analyze:{puuid}:{count}"
+    # Versioned cache key to force logic updates
+    cache_key = f"{enriched_cache.CACHE_VERSION}:analyze:{puuid}:{count}"
     cached = route_cache.get(cache_key)
     if cached is not None: return cached
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -270,7 +271,8 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
 @router.get("/history/{puuid}")
 async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 420):
     count = min(count, 10)
-    cache_key = f"history:{puuid}:{start}:{count}:{queue}"
+    # Versioned cache key to force logic updates
+    cache_key = f"{enriched_cache.CACHE_VERSION}:history:{puuid}:{start}:{count}:{queue}"
     cached = route_cache.get(cache_key)
     if cached is not None: return cached
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -371,10 +373,12 @@ async def live_enrich(body: LiveEnrichRequest):
                 base.update({"tier": ranked["tier"] if ranked else "UNRANKED", "division": ranked.get("rank", "") if ranked else "", "lp": ranked.get("leaguePoints", 0) if ranked else 0, "wins": ranked.get("wins", 0) if ranked else 0, "losses": ranked.get("losses", 0) if ranked else 0})
 
                 if not isinstance(match_ids, Exception) and match_ids:
-                    match_datas = await asyncio.gather(*[
-                        riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
-                        for mid in match_ids
-                    ], return_exceptions=True)
+                    # Use specific semaphore to prevent heavy fan-out rate limits
+                    async with enriched_cache.enrich_semaphore:
+                        match_datas = await asyncio.gather(*[
+                            riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
+                            for mid in match_ids
+                        ], return_exceptions=True)
                     last5, champ_ids = [], []
                     for md in match_datas:
                         if isinstance(md, Exception): continue
