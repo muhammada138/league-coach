@@ -4,6 +4,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
+import IngestDashboard from "./pages/IngestDashboard";
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/player/:gameName/:tagLine" element={<Dashboard />} />
+            <Route path="/admin/ingest" element={<IngestDashboard />} />
           </Routes>
         </BrowserRouter>
         <SpeedInsights />
