@@ -542,7 +542,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
   useEffect(() => {
     const puuids = liveGame.participants.map((p) => p.puuid).filter(Boolean);
     if (puuids.length > 0) {
-      getLiveEnrich(puuids)
+      getLiveEnrich(puuids, liveGame.queueId ?? 420)
         .then((stats) => { setLiveStats(stats); onReady?.(); })
         .catch(() => { onReady?.(); });
     } else {
@@ -601,7 +601,9 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
             {isMe && "★ "}{p.summonerName}
             <span className="text-slate-400 dark:text-white/30 font-normal">{p.tagLine ? `#${p.tagLine}` : ""}</span>
           </span>
-          {rankLabel ? (
+          {!p.puuid ? (
+            <span className="text-[10px] text-slate-300 dark:text-white/20 leading-none mt-0.5">Hidden</span>
+          ) : rankLabel ? (
             <div className="flex items-center gap-1 mt-0.5 text-[10px] leading-none">
               <span className={TIER_COLORS[stats?.tier] ?? "text-slate-400 dark:text-white/30"}>{rankLabel}</span>
               {stats?.last5?.length > 0 && (
@@ -630,7 +632,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
                   className={`w-2 h-2 rounded-full ${g.win ? "bg-emerald-400" : "bg-red-400/80"}`} />
               ))
             : [...Array(5)].map((_, i) => (
-                <div key={i} className={`w-2 h-2 rounded-full ${liveStats ? "bg-slate-200 dark:bg-white/10" : "bg-slate-200 dark:bg-white/10 animate-pulse"}`} />
+                <div key={i} className={`w-2 h-2 rounded-full ${(liveStats || !p.puuid) ? "bg-slate-200 dark:bg-white/10" : "bg-slate-200 dark:bg-white/10 animate-pulse"}`} />
               ))
           }
         </div>
