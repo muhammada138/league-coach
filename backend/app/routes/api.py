@@ -9,7 +9,9 @@ from ..services.riot import (
 )
 from ..services.groq import get_coaching_feedback, ask_coach_question
 from ..state import RIOT_REGION, RIOT_ROUTING, route_cache
-from ..models.requests import LiveEnrichRequest, AskRequest
+from ..models.requests import LiveEnrichRequest, AskRequest, WinPredictRequest
+from ..services import win_predictor
+from ..services import db
 
 router = APIRouter()
 
@@ -41,22 +43,34 @@ async def get_profile(puuid: str):
         if e is None:
             return {"tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0}
         return {"tier": e["tier"], "division": e["rank"], "lp": e["leaguePoints"], "wins": e["wins"], "losses": e["losses"]}
+    ranked_data = entry_data(ranked)
+    # Fire-and-forget LP snapshot — doesn't block the response
+    asyncio.create_task(db.record_lp_snapshot(
+        puuid,
+        ranked_data["tier"], ranked_data["division"],
+        ranked_data["lp"], ranked_data["wins"], ranked_data["losses"],
+    ))
     return {
         "summonerLevel": summoner_level,
         "profileIconId": profile_icon_id,
-        **entry_data(ranked),
+        **ranked_data,
         "flex": entry_data(flex),
     }
 
+@router.get("/lp-history/{puuid}")
+async def lp_history(puuid: str):
+    return await db.get_lp_history(puuid, days=30)
+
 @router.get("/analyze/{puuid}")
-async def analyze(puuid: str, game_name: str = "Summoner"):
-    cache_key = f"analyze:{puuid}"
+async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
+    count = max(5, min(count, 30))
+    cache_key = f"analyze:{puuid}:{count}"
     cached = route_cache.get(cache_key)
     if cached is not None: return cached
     async with httpx.AsyncClient(timeout=30.0) as client:
         queue_priorities = [420, 440, 400]
         id_tasks = [
-            riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={q}")
+            riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count={count}&queue={q}")
             for q in queue_priorities
         ]
         id_results = await asyncio.gather(*id_tasks, return_exceptions=True)
@@ -133,7 +147,9 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
     win_rate = round((wins / n) * 100, 1)
     positions = [g["playerStats"]["teamPosition"] for g in games]
     most_common_position = Counter(positions).most_common(1)[0][0]
-    
+    champ_names = [g["playerStats"]["championName"] for g in games]
+    most_played_champ = Counter(champ_names).most_common(1)[0][0]
+
     # Groq Logic
     system_prompt = (
         "You are a League of Legends coach giving direct, personal feedback to this specific player. "
@@ -141,9 +157,24 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
         "Be blunt and human. No corporate filler. Give 3-4 weaknesses where they are underperforming vs their lobby. "
         "Each tip: 1-2 sentences max. Lead with the problem, end with one concrete fix. "
         "Bold (**) every stat number and every key concept/stat name. "
+        f"The player is mainly playing **{most_played_champ}** — where relevant, reference this champion's specific kit, "
+        "abilities, and win conditions in your tips rather than giving generic advice. "
         "GROUPING RULES: (1) Vision (2) Combat (3) Economy. No intro sentence."
     )
-    user_prompt = f"Player: {game_name}\nMost played role: {most_common_position}\nWin rate last 5 games: {win_rate}%\n\nPlayer averages vs lobby averages:\n- KDA: {player_kda:.2f} vs {lobby_kda:.2f}\n- CSPM: {player_cspm:.2f} vs {lobby_cspm:.2f}\n- Vision: {player_avgs['visionScore']:.2f} vs {lobby_avgs_agg['visionScore']:.2f}\n..."
+    user_prompt = (
+        f"Player: {game_name}\n"
+        f"Most played champion: {most_played_champ}\n"
+        f"Most played role: {most_common_position}\n"
+        f"Win rate last {n} games: {win_rate}%\n\n"
+        f"Player averages vs lobby averages:\n"
+        f"- KDA: {player_kda:.2f} vs {lobby_kda:.2f}\n"
+        f"- CSPM: {player_cspm:.2f} vs {lobby_cspm:.2f}\n"
+        f"- Vision score: {player_avgs['visionScore']:.1f} vs {lobby_avgs_agg['visionScore']:.1f}\n"
+        f"- Damage dealt: {player_avgs['totalDamageDealtToChampions']:.0f} vs {lobby_avgs_agg['totalDamageDealtToChampions']:.0f}\n"
+        f"- Gold earned: {player_avgs['goldEarned']:.0f} vs {lobby_avgs_agg['goldEarned']:.0f}\n"
+        f"- Wards placed: {player_avgs['wardsPlaced']:.1f} vs {lobby_avgs_agg['wardsPlaced']:.1f}\n"
+        f"- Wards killed: {player_avgs['wardsKilled']:.1f} vs {lobby_avgs_agg['wardsKilled']:.1f}"
+    )
     coaching = await get_coaching_feedback(system_prompt, user_prompt)
     
     game_summaries = []
@@ -295,6 +326,11 @@ async def live_enrich(body: LiveEnrichRequest):
         return base
     results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])
     return {r["puuid"]: r for r in results}
+
+@router.post("/win-predict")
+async def win_predict(body: WinPredictRequest):
+    participants = [p.model_dump() for p in body.participants]
+    return win_predictor.predict(participants, body.live_stats)
 
 @router.post("/ask")
 async def ask_coach(body: AskRequest):
