@@ -1,23 +1,23 @@
 """
 Win Predictor – XGBoost-based match outcome estimator.
 
-Features per player (5-dim):
-  [rank_score, season_wr, form_score, mastery_score, streak_norm]
+Features per player (7-dim):
+  [rank_score, season_wr, form_score, recent_wr, champ_wr, mastery_score, streak_norm]
 
   - rank_score:    tier + division + LP bonus, normalised 0→1
-  - season_wr:     wins/(wins+losses) with games-played confidence weighting
-  - form_score:    avg perf score of last 5 games (0→1)
-  - mastery_score: champion mastery proxy — 0.06/0.04/0.02/0.0 based on whether
-                   the player's current champion appears in their top-1/2/3 most
-                   played champions from recent match history
-  - streak_norm:   current win/loss streak clamped ±3, normalised to [-1, 1]
+  - season_wr:     ranked wins/(wins+losses) confidence-weighted (full trust at 100 games)
+  - form_score:    avg perf score of last 10 games (0→1) — quality signal
+  - recent_wr:     actual W/L fraction of last 10 games (0→1) — outcome trend signal
+  - champ_wr:      win rate on the specific champion being played, from last 10 games,
+                   confidence-weighted toward 0.5 until 3+ games on that champ
+  - mastery_score: whether current champ appears in their top-3 most played (0→0.06)
+  - streak_norm:   current win/loss streak clamped ±5, normalised to [-1, 1]
 
-Model input (15-dim):  [blue_mean(5), red_mean(5), diff(5)]
+Model input (21-dim):  [blue_mean(7), red_mean(7), diff(7)]
 
-The XGBoost model is trained once on synthetic data that mirrors real LoL
-win-probability dynamics, then persisted to disk.  Replace
-model/win_predictor.pkl with a model trained on real Riot API match history
-for better accuracy.
+Trained on synthetic data that mirrors real LoL win-probability dynamics.
+Replace model/win_predictor.pkl with a model trained on real Riot API match
+history (see MEMORY.md future plans) for better accuracy.
 """
 
 import logging
@@ -73,9 +73,9 @@ def _train_and_save() -> None:
     """
     Generate 20 000 synthetic matches and fit an XGBClassifier.
 
-    The synthetic distribution matches the real-data feature distributions
-    used at inference time so the model learns useful non-linear interactions
-    (e.g. rank advantage matters more when form difference is also large).
+    7 features per player: rank_score, season_wr, form_score, recent_wr,
+    champ_wr, mastery_score, streak_norm.  Model input = 21-dim
+    [blue_mean, red_mean, diff].
     """
     try:
         import joblib          # noqa: PLC0415
@@ -83,23 +83,28 @@ def _train_and_save() -> None:
         from sklearn.model_selection import train_test_split  # noqa: PLC0415
 
         rng = np.random.RandomState(42)
-        WEIGHTS = np.array([0.40, 0.20, 0.30, 0.05, 0.05])
+        # Feature weights mirror _player_features ordering
+        WEIGHTS = np.array([0.30, 0.10, 0.25, 0.20, 0.08, 0.04, 0.03])
 
         X_list, y_list = [], []
         mastery_choices = [0.0, 0.02, 0.04, 0.06]
-        mastery_probs   = [0.55, 0.15, 0.15, 0.15]   # ~45% off-pick games
+        mastery_probs   = [0.55, 0.15, 0.15, 0.15]
 
         for _ in range(20_000):
             blue = np.array([
-                rng.beta(4, 4),                                          # rank_score
-                rng.beta(5, 5),                                          # season_wr
-                rng.beta(4, 4),                                          # form_score
-                rng.choice(mastery_choices, p=mastery_probs),            # mastery_score
-                rng.uniform(-1.0, 1.0),                                  # streak_norm
+                rng.beta(4, 4),                                # rank_score
+                rng.beta(5, 5),                                # season_wr
+                rng.beta(4, 4),                                # form_score
+                rng.beta(4, 4),                                # recent_wr
+                rng.beta(4, 4),                                # champ_wr
+                rng.choice(mastery_choices, p=mastery_probs),  # mastery_score
+                rng.uniform(-1.0, 1.0),                        # streak_norm
             ])
             red = np.array([
                 rng.beta(4, 4),
                 rng.beta(5, 5),
+                rng.beta(4, 4),
+                rng.beta(4, 4),
                 rng.beta(4, 4),
                 rng.choice(mastery_choices, p=mastery_probs),
                 rng.uniform(-1.0, 1.0),
@@ -139,11 +144,11 @@ def _train_and_save() -> None:
 # ---------------------------------------------------------------------------
 # Feature extraction
 # ---------------------------------------------------------------------------
-_NEUTRAL = np.array([0.5, 0.5, 0.5, 0.0, 0.0], dtype=float)
+_NEUTRAL = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.0, 0.0], dtype=float)
 
 
 def _player_features(stats: dict, champion_id: int) -> np.ndarray:
-    """Return a 5-dim feature vector for a single player."""
+    """Return a 7-dim feature vector for a single player."""
     tier = stats.get("tier", "UNRANKED")
     wins = stats.get("wins", 0)
     losses = stats.get("losses", 0)
@@ -152,45 +157,52 @@ def _player_features(stats: dict, champion_id: int) -> np.ndarray:
     if not stats or (tier == "UNRANKED" and wins == 0 and losses == 0 and not stats.get("last5")):
         return _NEUTRAL.copy()
 
-    # 1. Rank score with LP  (0 → 1)
+    # 1. Rank score  (0 → 1)
     if tier == "UNRANKED":
-        # Unranked but has recent game data — treat as low Iron for rank purposes
-        # (don't penalise too hard; they may be a smurf, but form score will reflect that)
+        # Has recent game data but no rank — treat as low Iron; form/recent_wr will carry them
         rank_score = 1.5 / MAX_RANK
     else:
         tier_val   = TIER_SCORE.get(tier, 3.5)
         div_val    = DIV_BONUS.get(stats.get("division", ""), 0.0)
-        lp_bonus   = (stats.get("lp", 0) / 100.0) * 0.25   # up to +0.25 within a tier
+        lp_bonus   = (stats.get("lp", 0) / 100.0) * 0.25
         rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.0)
 
-    # 2. Season WR with games-played confidence weighting
-    #    Smurf / new accounts are regressed toward 0.5 until 200 games
-    total    = wins + losses
-    raw_wr   = wins / total if total > 0 else 0.5
-    conf     = min(total / 200.0, 1.0)
+    # 2. Season WR — confidence-weighted toward 0.5 (full trust at 100 games)
+    total     = wins + losses
+    raw_wr    = wins / total if total > 0 else 0.5
+    conf      = min(total / 100.0, 1.0)
     season_wr = raw_wr * conf + 0.5 * (1.0 - conf)
 
-    # 3. Recent form (avg perf score of last 5 games, 0–100 → 0–1)
+    # 3. Form score — avg performance score from last 10 games (quality, not just W/L)
     form_score = stats.get("avg_score", 50) / 100.0
 
-    # 4. Champion mastery score
-    #    main_champs is a list of champion ID strings ordered by play frequency.
-    #    Being on your #1 pick gives a +0.08 edge; #2 +0.05; #3 +0.03; off-pick 0.
+    # 4. Recent WR — actual win fraction of last 10 games (outcome trend)
+    recent_wr = float(stats.get("recent_wr", 0.5))
+
+    # 5. Champion-specific WR from last 10 games — confidence-weighted (full trust at 3+ games)
     champ_id_str = str(champion_id)
-    main_champs  = stats.get("main_champs", [])
+    champ_wr_map = stats.get("champ_wr_map", {})
+    champ_data   = champ_wr_map.get(champ_id_str, [0, 0])
+    champ_total  = champ_data[1]
+    raw_champ_wr = champ_data[0] / champ_total if champ_total > 0 else 0.5
+    champ_conf   = min(champ_total / 3.0, 1.0)
+    champ_wr     = raw_champ_wr * champ_conf + 0.5 * (1.0 - champ_conf)
+
+    # 6. Mastery score — is current champion in their top-3 most played recently?
+    main_champs   = stats.get("main_champs", [])
     mastery_score = 0.0
     if champ_id_str in main_champs:
         idx = main_champs.index(champ_id_str)
-        _MASTERY_WEIGHTS = [0.08, 0.05, 0.03]
-        if idx < len(_MASTERY_WEIGHTS):
-            mastery_score = _MASTERY_WEIGHTS[idx]
+        for threshold, val in [(0, 0.06), (1, 0.04), (2, 0.02)]:
+            if idx == threshold:
+                mastery_score = val
+                break
 
-    # 5. Streak momentum normalised to [−1, 1]
-    #    Increased importance: streak can now be up to ±5
+    # 7. Streak momentum  (−1 → 1)
     streak      = max(-5, min(5, stats.get("streak", 0)))
     streak_norm = streak / 5.0
 
-    return np.array([rank_score, season_wr, form_score, mastery_score, streak_norm], dtype=float)
+    return np.array([rank_score, season_wr, form_score, recent_wr, champ_wr, mastery_score, streak_norm], dtype=float)
 
 
 def _team_vector(player_feat_list: list) -> np.ndarray:
@@ -241,7 +253,7 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
     if _model is not None:
         prob = float(_model.predict_proba(X)[0][1])
     else:
-        w = np.array([0.40, 0.20, 0.30, 0.05, 0.05])
+        w = np.array([0.30, 0.10, 0.25, 0.20, 0.08, 0.04, 0.03])
         b = float(np.dot(blue_vec, w))
         r = float(np.dot(red_vec, w))
         prob = b / (b + r) if (b + r) > 0 else 0.5
