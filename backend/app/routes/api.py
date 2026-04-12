@@ -383,6 +383,7 @@ async def live_enrich(body: LiveEnrichRequest):
             "wins": 0, "losses": 0, "last5": [], "avg_score": 50,
             "recent_wr": 0.5, "champ_wr_map": {}, "main_champs": [], "streak": 0,
         }
+        api_failed = False
         try:
             async with httpx.AsyncClient(timeout=25.0) as client:
                 entries, match_ids = await asyncio.gather(
@@ -390,6 +391,9 @@ async def live_enrich(body: LiveEnrichRequest):
                     riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
+                
+                if isinstance(entries, Exception) or isinstance(match_ids, Exception):
+                    api_failed = True
 
                 # Rank lookup — ranked queues use the matching entry; normals fall back to solo rank as skill proxy
                 if not isinstance(entries, Exception):
@@ -410,6 +414,9 @@ async def live_enrich(body: LiveEnrichRequest):
                             return await riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
 
                     match_datas = await asyncio.gather(*[_fetch(mid) for mid in match_ids], return_exceptions=True)
+                    
+                    if all(isinstance(md, Exception) for md in match_datas):
+                        api_failed = True
 
                     recent_games, champ_ids = [], []
                     # champ_wr_map: {championId_str: [wins, total]}
@@ -454,8 +461,10 @@ async def live_enrich(body: LiveEnrichRequest):
                             "streak": streak,
                         })
         except Exception:
-            pass
-        enriched_cache.set(cache_key, base)
+            api_failed = True
+            
+        if not api_failed:
+            enriched_cache.set(cache_key, base)
         return base
 
     results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])
