@@ -216,7 +216,8 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
         "Bold (**) every stat number and every key concept/stat name. "
         f"The player is mainly playing **{most_played_champ}** — where relevant, reference this champion's specific kit, "
         "abilities, and win conditions in your tips rather than giving generic advice. "
-        "GROUPING RULES: * Vision * Combat * Economy. No intro sentence."
+        "GROUPING RULES: Use bullet points for each category: * **Vision**, * **Combat**, * **Economy**. "
+        "Each tip should be its own bullet point under the category. No intro sentence."
     )
     user_prompt = (
         f"Player: {game_name}\n"
