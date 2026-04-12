@@ -61,6 +61,7 @@ async function getRunesMap(ddVersion) {
 }
 
 function computePerformanceScore(player, allPlayers) {
+  if (!player || !allPlayers) return "0.00";
   const ch   = player.challenges || {};
   const lane = player.teamPosition || "MIDDLE";
 
@@ -186,9 +187,10 @@ function computePerformanceScore(player, allPlayers) {
 // games: newest-first (as returned by API). Returns length = games.length + 1.
 // Index 0 = LP before oldest game shown; index N = currentLP.
 function computeLPSeries(games, currentLP) {
+  if (!Array.isArray(games)) return [currentLP || 0];
   const ordered = [...games].reverse();
   const series = new Array(ordered.length + 1);
-  series[ordered.length] = currentLP;
+  series[ordered.length] = currentLP || 0;
   for (let i = ordered.length - 1; i >= 0; i--) {
     series[i] = ordered[i].win ? series[i + 1] - 20 : series[i + 1] + 17;
   }
@@ -199,6 +201,7 @@ function computeLPSeries(games, currentLP) {
 // type: "with" | "against" → returns [{ puuid, name, games, wins }] sorted by games desc
 function aggregateTeammates(games, type) {
   const map = {};
+  if (!Array.isArray(games)) return [];
   games.forEach((game) => {
     const list = type === "with" ? game.teammates : game.opponents;
     if (!Array.isArray(list)) return;
@@ -375,11 +378,12 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const currentLP = profile?.lp ?? 0;
   const rankLabel = profile?.tier === "UNRANKED" ? "Unranked" : `${profile?.tier} ${profile?.division}`;
+  if (!games || games.length === 0) return null;
   const ordered = [...games].reverse();
 
   const series = (() => {
     const storageKey = `${cachePrefix}_${puuid}`;
-    const fingerprint = `${currentLP}:${games.map((g) => g.matchId).join(",")}`;
+    const fingerprint = `${currentLP}:${games.map((g) => g?.matchId).join(",")}`;
     try {
       const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null");
       if (stored?.fingerprint === fingerprint) return stored.series;
@@ -777,6 +781,7 @@ function LpHistoryGraph({ history }) {
 }
 
 function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked" }) {
+  if (!profile) return null;
   const displayProfile = queueTab === "flex" && profile.flex
     ? { ...profile, ...profile.flex }
     : profile;
@@ -899,8 +904,8 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
   const navigate = useNavigate();
 
   const ROLE_ORDER = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5 };
-  const sortedPlayers = [...players].sort((a, b) => {
-    return (ROLE_ORDER[a.teamPosition] || 99) - (ROLE_ORDER[b.teamPosition] || 99);
+  const sortedPlayers = [...(players || [])].sort((a, b) => {
+    return (ROLE_ORDER[a?.teamPosition] || 99) - (ROLE_ORDER[b?.teamPosition] || 99);
   });
 
   return (
@@ -1102,25 +1107,25 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
     }));
   }, [participants]);
 
-  const team100Won = teams.find((t) => t.teamId === 100)?.win ?? true;
-  const team200Won = teams.find((t) => t.teamId === 200)?.win ?? false;
+  const team100Won = teams?.find((t) => t.teamId === 100)?.win ?? true;
+  const team200Won = teams?.find((t) => t.teamId === 200)?.win ?? false;
 
   const maxDamage = useMemo(() => {
-    return Math.max(...withScores.map(p => p.totalDamageDealtToChampions));
+    return Math.max(0, ...(withScores || []).map(p => p.totalDamageDealtToChampions || 0));
   }, [withScores]);
 
   const { mvpPuuid, acePuuid } = useMemo(() => {
     let mvp = null;
     let ace = null;
-    if (!isRemake) {
+    if (!isRemake && withScores) {
       const winTeamId = team100Won ? 100 : 200;
       let highestWinScore = -1;
       let highestLoseScore = -1;
       withScores.forEach((p) => {
         if (p.teamId === winTeamId) {
-          if (p.score > highestWinScore) { highestWinScore = p.score; mvp = p.puuid; }
+          if ((p.score || 0) > highestWinScore) { highestWinScore = p.score || 0; mvp = p.puuid; }
         } else {
-          if (p.score > highestLoseScore) { highestLoseScore = p.score; ace = p.puuid; }
+          if ((p.score || 0) > highestLoseScore) { highestLoseScore = p.score || 0; ace = p.puuid; }
         }
       });
     }
@@ -1145,7 +1150,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
         </thead>
         <tbody>
           <TeamScoreRows
-            players={withScores.filter((p) => p.teamId === 100)}
+            players={withScores?.filter((p) => p.teamId === 100) || []}
             isWin={team100Won}
             teamLabel="Blue Team"
             gameName={gameName}
@@ -1153,7 +1158,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
             ddVersion={ddVersion}
             runesMap={runesMap}
             maxDamage={maxDamage}
-            teamStats={teams.find(t => t.teamId === 100)}
+            teamStats={teams?.find(t => t.teamId === 100)}
             mvpPuuid={mvpPuuid}
             acePuuid={acePuuid}
           />
@@ -1163,7 +1168,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
             </td>
           </tr>
           <TeamScoreRows
-            players={withScores.filter((p) => p.teamId === 200)}
+            players={withScores?.filter((p) => p.teamId === 200) || []}
             isWin={team200Won}
             teamLabel="Red Team"
             gameName={gameName}
@@ -1171,7 +1176,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
             ddVersion={ddVersion}
             runesMap={runesMap}
             maxDamage={maxDamage}
-            teamStats={teams.find(t => t.teamId === 200)}
+            teamStats={teams?.find(t => t.teamId === 200)}
             mvpPuuid={mvpPuuid}
             acePuuid={acePuuid}
           />
@@ -1183,7 +1188,8 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
 
 // ── Horizontal Game Row ────────────────────────────────────────────────────
 function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, gameName, ddVersion, runesMap, isRanked }) {
-  const isRemake = game.gameDuration < 210;
+  if (!game) return null;
+  const isRemake = (game.gameDuration || 0) < 210;
   const mins = Math.floor(game.gameDuration / 60);
   const secs = String(game.gameDuration % 60).padStart(2, "0");
   const imgSrc = `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${game.championName}.png`;
@@ -1385,7 +1391,7 @@ function StatsContent({ playerAverages, lobbyAverages, deltas }) {
 
 // ── Summary Strip ───────────────────────────────────────────────────────────
 function SummaryStrip({ analysis, games }) {
-  const allGames = games || analysis.games;
+  const allGames = games || analysis?.games || [];
   const n = allGames.length || 1;
   
   const wins = allGames.filter((g) => g.win && g.gameDuration >= 210).length;
