@@ -34,8 +34,14 @@ def init_db() -> None:
                 queue     TEXT    NOT NULL DEFAULT 'RANKED_SOLO_5x5'
             )
         """)
-        # Update existing rows that don't have a queue or need it explicitly
-        # (Already handled by DEFAULT, but good to ensure if it existed before)
+
+        # Migration: Add 'queue' column if table existed without it
+        cursor = conn.execute("PRAGMA table_info(lp_history)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'queue' not in columns:
+            conn.execute("ALTER TABLE lp_history ADD COLUMN queue TEXT NOT NULL DEFAULT 'RANKED_SOLO_5x5'")
+
+        # Ensure index exists
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_lp_puuid_q_ts ON lp_history(puuid, queue, timestamp)"
         )
