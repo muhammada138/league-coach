@@ -188,7 +188,7 @@ export default function IngestDashboard() {
         <p className="text-center text-white/20 text-xs mt-6 leading-relaxed">
           Dev key: ~48 req/min · Semaphore(1) · 1.25s between calls
           <br />
-          Cycling GOLD → PLATINUM → DIAMOND ladder pages
+          Cycling BRONZE → SILVER → GOLD → PLATINUM → EMERALD → DIAMOND → MASTER
         </p>
 
       </div>
