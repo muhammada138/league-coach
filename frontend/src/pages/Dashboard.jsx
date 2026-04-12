@@ -950,8 +950,8 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
       </tr>
       {sortedPlayers.map((p, idx) => {
         if (!p) return null;
-        const isMe = p.riotIdGameName === gameName;
-        const scoreNum = isRemake ? 0 : parseFloat(p.score || 0);
+        const isMe = p?.riotIdGameName === gameName;
+        const scoreNum = isRemake ? 0 : parseFloat(p?.score || 0);
         const scoreColor =
           scoreNum >= 90
             ? "text-yellow-500 dark:text-yellow-400"
@@ -961,7 +961,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
             ? "text-blue-500 dark:text-blue-400"
             : "text-red-500 dark:text-red-400";
             
-        const tier = (p.rank || "UNRANKED").split(" ")[0].toUpperCase();
+        const tier = (p?.rank || "UNRANKED").split(" ")[0].toUpperCase();
         const rankColor = TIER_COLORS[tier] ?? "text-slate-400 dark:text-white/40";
         const emblemUrl = tier !== "UNRANKED" 
           ? `https://opgg-static.akamaized.net/images/medals_new/${tier.toLowerCase()}.png` 
@@ -969,7 +969,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
 
         return (
           <tr
-            key={(p.riotIdGameName || idx) + (p.championName || idx)}
+            key={(p?.riotIdGameName || idx) + (p?.championName || idx)}
             className={`border-b border-black/[0.04] dark:border-white/[0.03] last:border-0 transition-colors ${
               isMe
                 ? "bg-[#c89b3c]/10 dark:bg-[#c89b3c]/[0.12]"
@@ -981,26 +981,26 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
               <div className="flex items-center gap-1.5 sm:gap-2 w-full max-w-[180px] sm:max-w-[200px]">
                 <div className="relative flex-shrink-0">
                   <img
-                    src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${p.championName}.png`}
+                    src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${p?.championName}.png`}
                     className="w-8 h-8 rounded object-cover border border-slate-200 dark:border-white/10"
                     onError={(e) => { e.target.style.display = "none"; }}
                   />
                   <div className="absolute -bottom-1 -right-1 bg-slate-900 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-slate-700 leading-none">
-                    {p.champLevel}
+                    {p?.champLevel}
                   </div>
                 </div>
                 
                 <div className="flex items-center gap-0.5 flex-shrink-0">
                   <div className="flex flex-col gap-0.5">
-                    <img src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${SUMMONER_SPELLS[p.summoner1Id]}.png`} title={SUMMONER_SPELL_NAMES[p.summoner1Id]} className="w-4 h-4 rounded cursor-help" onError={(e) => { e.target.style.display = "none"; }} />
-                    <img src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${SUMMONER_SPELLS[p.summoner2Id]}.png`} title={SUMMONER_SPELL_NAMES[p.summoner2Id]} className="w-4 h-4 rounded cursor-help" onError={(e) => { e.target.style.display = "none"; }} />
+                    <img src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${SUMMONER_SPELLS[p?.summoner1Id]}.png`} title={SUMMONER_SPELL_NAMES[p?.summoner1Id]} className="w-4 h-4 rounded cursor-help" onError={(e) => { e.target.style.display = "none"; }} />
+                    <img src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${SUMMONER_SPELLS[p?.summoner2Id]}.png`} title={SUMMONER_SPELL_NAMES[p?.summoner2Id]} className="w-4 h-4 rounded cursor-help" onError={(e) => { e.target.style.display = "none"; }} />
                   </div>
                   <div className="flex flex-col gap-0.5 bg-black/5 dark:bg-white/5 rounded-[3px] p-[1px]">
-                    {runesMap && p.primaryPerk && runesMap[p.primaryPerk] ? (
-                        <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[p.primaryPerk]}`} className="w-[14px] h-[14px] rounded-full bg-black/90 object-cover" />
+                    {runesMap && p?.primaryPerk && runesMap[p?.primaryPerk] ? (
+                        <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[p?.primaryPerk]}`} className="w-[14px] h-[14px] rounded-full bg-black/90 object-cover" />
                     ) : <div className="w-[14px] h-[14px]" />}
-                    {runesMap && p.subStyle && runesMap[p.subStyle] ? (
-                        <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[p.subStyle]}`} className="w-[14px] h-[14px] rounded-full bg-black/90 object-cover" />
+                    {runesMap && p?.subStyle && runesMap[p?.subStyle] ? (
+                        <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[p?.subStyle]}`} className="w-[14px] h-[14px] rounded-full bg-black/90 object-cover" />
                     ) : <div className="w-[14px] h-[14px]" />}
                   </div>
                 </div>
@@ -1008,23 +1008,23 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
                 <div className="flex flex-col ml-0.5 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <button
-                      onClick={() => p.puuid && p.riotIdTagline && navigate(
-                        `/player/${encodeURIComponent(p.riotIdGameName)}/${encodeURIComponent(p.riotIdTagline)}`,
-                        { state: { puuid: p.puuid } }
+                      onClick={() => p?.puuid && p?.riotIdTagline && navigate(
+                        `/player/${encodeURIComponent(p?.riotIdGameName)}/${encodeURIComponent(p?.riotIdTagline)}`,
+                        { state: { puuid: p?.puuid } }
                       )}
-                      disabled={!p.puuid || !p.riotIdTagline}
+                      disabled={!p?.puuid || !p?.riotIdTagline}
                       className={`font-bold truncate text-[11px] text-left
                         ${isMe ? "text-[#c89b3c]" : "text-slate-800 dark:text-white/80"}
-                        ${p.puuid && p.riotIdTagline ? "hover:underline hover:text-[#c89b3c] cursor-pointer" : "cursor-default"}`}
+                        ${p?.puuid && p?.riotIdTagline ? "hover:underline hover:text-[#c89b3c] cursor-pointer" : "cursor-default"}`}
                     >
-                      {p.riotIdGameName || "Unknown"}
+                      {p?.riotIdGameName || "Unknown"}
                     </button>
-                    {p.puuid === mvpPuuid && (
+                    {p?.puuid === mvpPuuid && (
                       <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-yellow-400/15 text-yellow-400 border border-yellow-400/30 leading-none flex-shrink-0">
                         MVP
                       </span>
                     )}
-                    {p.puuid === acePuuid && (
+                    {p?.puuid === acePuuid && (
                       <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-400 border border-orange-400/30 leading-none flex-shrink-0">
                         ACE
                       </span>
@@ -1033,36 +1033,36 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
                   <div className="flex items-center gap-1 mt-0.5">
                   {emblemUrl && <img src={emblemUrl} className="w-4 h-4 object-contain" alt={tier} onError={(e) => { e.target.style.display='none' }} />}
                     <span className={`text-[9px] truncate font-medium capitalize ${rankColor}`}>
-                      {p.rank}
+                      {p?.rank}
                     </span>
                   </div>
                 </div>
               </div>
             </td>
             <td className="px-2 py-2 text-center text-slate-700 dark:text-white/70 font-medium whitespace-nowrap text-xs">
-              {p.kills}/{p.deaths}/{p.assists}
+              {p?.kills}/{p?.deaths}/{p?.assists}
             </td>
             <td className="px-2 py-2 text-center">
               <div className="flex flex-col items-center justify-center min-w-[70px]">
                 <span className="text-[11px] font-bold text-slate-700 dark:text-white/80 leading-none">
-                  {(p.totalDamageDealtToChampions / 1000).toFixed(1)}k
+                  {((p?.totalDamageDealtToChampions || 0) / 1000).toFixed(1)}k
                 </span>
                 <div className="w-12 h-1.5 mt-1 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-red-400" style={{ width: `${Math.max(2, (p.totalDamageDealtToChampions / maxDamage) * 100)}%` }} />
+                  <div className="h-full bg-red-400" style={{ width: `${Math.max(2, ((p?.totalDamageDealtToChampions || 0) / maxDamage) * 100)}%` }} />
                 </div>
                 <span className="text-[9px] text-slate-400 dark:text-white/30 mt-1 leading-none whitespace-nowrap">
-                  {Math.round(p.totalDamageDealtToChampions / (p.gameDuration / 60))} / min
+                  {Math.round((p?.totalDamageDealtToChampions || 0) / ((p?.gameDuration || 1) / 60))} / min
                 </span>
               </div>
             </td>
-            <td className="px-2 py-2 text-center text-slate-500 dark:text-white/40 text-xs">{p.totalMinionsKilled}</td>
-            <td className="px-2 py-2 text-center text-slate-500 dark:text-white/40 text-xs">{p.visionScore}</td>
+            <td className="px-2 py-2 text-center text-slate-500 dark:text-white/40 text-xs">{p?.totalMinionsKilled || 0}</td>
+            <td className="px-2 py-2 text-center text-slate-500 dark:text-white/40 text-xs">{p?.visionScore || 0}</td>
             <td className="px-2 py-2 text-center text-slate-500 dark:text-white/40 text-xs">
-              {(p.goldEarned / 1000).toFixed(1)}k
+              {((p?.goldEarned || 0) / 1000).toFixed(1)}k
             </td>
             <td className="px-2 py-2 text-left">
               <div className="flex gap-0.5 items-center flex-wrap w-[85px] sm:w-auto sm:flex-nowrap">
-                {p.items.slice(0, 6).map((itemId, i) => (
+                {p?.items?.slice(0, 6).map((itemId, i) => (
                   itemId ? (
                     <img key={i} src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${itemId}.png`} className="w-5 h-5 sm:w-6 sm:h-6 rounded border border-slate-200 dark:border-white/10 object-cover" onError={(e) => { e.target.style.display = "none"; }} />
                   ) : (
@@ -1070,8 +1070,8 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
                   )
                 ))}
                 <div className="ml-0.5 flex-shrink-0">
-                  {p.items[6] ? (
-                    <img src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${p.items[6]}.png`} className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-slate-200 dark:border-white/10 object-cover" onError={(e) => { e.target.style.display = "none"; }} />
+                  {p?.items?.[6] ? (
+                    <img src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${p?.items[6]}.png`} className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-slate-200 dark:border-white/10 object-cover" onError={(e) => { e.target.style.display = "none"; }} />
                   ) : (
                     <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/5" />
                   )}
@@ -1674,10 +1674,25 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
 }
 
 // ── Main Dashboard ─────────────────────────────────────────────────────────
+const APP_VERSION = "1.1";
+
 export default function Dashboard() {
   const { gameName: rawGameName, tagLine: rawTagLine } = useParams();
   const gameName = rawGameName ? decodeURIComponent(rawGameName) : "";
   const tagLine  = rawTagLine  ? decodeURIComponent(rawTagLine)  : "";
+
+  useEffect(() => {
+    const storedVersion = localStorage.getItem("app_version");
+    if (storedVersion !== APP_VERSION) {
+      // Clear graph caches to force new logic
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith("lp_") || key.startsWith("lp_flex_")) {
+          localStorage.removeItem(key);
+        }
+      });
+      localStorage.setItem("app_version", APP_VERSION);
+    }
+  }, []);
 
   const { state } = useLocation();
   const navigate = useNavigate();

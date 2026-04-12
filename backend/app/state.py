@@ -15,6 +15,10 @@ RIOT_HEADERS = {"X-Riot-Token": RIOT_API_KEY}
 
 # Global semaphore to limit concurrent requests to the Riot API (prevents 429 Too Many Requests)
 api_semaphore = asyncio.Semaphore(15)
+# Specific semaphore for heavy match detail enrichment fan-out
+enrich_semaphore = asyncio.Semaphore(5)
+
+CACHE_VERSION = "v2"
 
 class TTLCache:
     def __init__(self, ttl_seconds: int):
