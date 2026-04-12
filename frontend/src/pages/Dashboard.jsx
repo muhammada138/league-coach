@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory, getTeammates } from "../api/riot";
@@ -376,6 +376,7 @@ function ErrorScreen({ message, onRetry }) {
 // ── LP Trend Graph ─────────────────────────────────────────────────────────
 function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
+  const uid = useId().replace(/:/g, "");
   const currentLP = profile?.lp ?? 0;
   const rankLabel = profile?.tier === "UNRANKED" ? "Unranked" : `${profile?.tier} ${profile?.division}`;
   if (!games || games.length === 0) return null;
@@ -417,12 +418,12 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
         <defs>
-          <linearGradient id="lpGradFill" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={uid} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={lineColor} stopOpacity="0.18" />
             <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
           </linearGradient>
         </defs>
-        <path d={areaD} fill="url(#lpGradFill)" />
+        <path d={areaD} fill={`url(#${uid})`} />
         <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         {series.map((v, i) => {
           const cx = toX(i);
@@ -707,6 +708,7 @@ const toAbsLP = (tier, div, lp) => (TIER_BASE_LP[tier] ?? 1200) + (DIV_BASE_LP[d
 
 function LpHistoryGraph({ history }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
+  const uid = useId().replace(/:/g, "");
   if (!history || history.length < 2) return null;
 
   const series = history.map((h) => ({ ...h, absLp: toAbsLP(h.tier, h.division, h.lp) }));
@@ -749,12 +751,12 @@ function LpHistoryGraph({ history }) {
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
         <defs>
-          <linearGradient id="lpHistFill" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={uid} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={lineColor} stopOpacity="0.18" />
             <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
           </linearGradient>
         </defs>
-        <path d={areaD} fill="url(#lpHistFill)" />
+        <path d={areaD} fill={`url(#${uid})`} />
         <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         {series.map((s, i) => {
           const cx = toX(s.timestamp);
@@ -1482,7 +1484,7 @@ function TeammatesContent({ games }) {
               <span key={h} className={`text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25 ${i > 0 ? "text-right" : ""}`}>{h}</span>
             ))}
           </div>
-          <div className="overflow-y-auto flex-1">
+          <div className="overflow-y-auto flex-1 custom-scrollbar">
             {rows.map((r) => {
               const wr = r.games > 0 ? Math.round((r.wins / r.games) * 100) : 0;
               const wrColor = wr >= 55 ? "text-emerald-500 dark:text-emerald-400" : wr >= 45 ? "text-slate-600 dark:text-white/60" : "text-red-400";
@@ -1580,7 +1582,7 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
         {tab === "coaching" ? (
           <div className="flex flex-col lg:flex-1 lg:min-h-0 lg:overflow-hidden">
             {/* Single unified scroll area: tips + chat together */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-5 space-y-4">
               {fallback ? (
                 <div className="text-sm text-slate-600 dark:text-white/60 leading-relaxed
                   [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white
@@ -1661,7 +1663,7 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
             </div>
           </div>
         ) : tab === "stats" ? (
-          <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+          <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto custom-scrollbar">
             <StatsContent
               playerAverages={playerAverages}
               lobbyAverages={lobbyAverages}
