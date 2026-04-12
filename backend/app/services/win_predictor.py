@@ -41,7 +41,7 @@ MAX_RANK  = 11.0  # Challenger I + max LP bonus
 # Approximates a ~53–56% win rate on your main vs 50% on an off-pick.
 _MASTERY_SCORES = [0.06, 0.04, 0.02]  # index 0 = most-played champ
 
-MODEL_PATH = Path(__file__).parent.parent.parent / "model" / "win_predictor.pkl"
+MODEL_PATH = Path(__file__).parent.parent.parent / "model" / "win_predictor_v2.pkl"
 
 # ---------------------------------------------------------------------------
 # Global model handle
