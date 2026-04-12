@@ -527,6 +527,7 @@ function LaneIcon({ lane }) {
 
 // ── Live Game Banner ────────────────────────────────────────────────────────
 function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
+  const navigate = useNavigate();
   const [champMap, setChampMap] = useState(null);
   const [elapsed, setElapsed] = useState(liveGame.gameLength ?? 0);
   const [liveStats, setLiveStats] = useState(null);
@@ -584,10 +585,18 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
       ? (stats.tier === "UNRANKED" ? "Unranked" : `${stats.tier.charAt(0) + stats.tier.slice(1).toLowerCase()}${stats.division ? ` ${stats.division}` : ""}`)
       : null;
 
+    const canNav = !isMe && p.puuid && p.summonerName && p.tagLine;
+    const handleNav = () => canNav && navigate(
+      `/player/${encodeURIComponent(p.summonerName)}/${encodeURIComponent(p.tagLine)}`,
+      { state: { puuid: p.puuid, back: true } }
+    );
+
     return (
       <div key={p.puuid || p.summonerName}
+        onClick={handleNav}
         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors
-          ${isMe ? "bg-[#c89b3c]/10 border border-[#c89b3c]/20" : "hover:bg-slate-50 dark:hover:bg-white/[0.02]"}`}
+          ${isMe ? "bg-[#c89b3c]/10 border border-[#c89b3c]/20" : "hover:bg-slate-50 dark:hover:bg-white/[0.02]"}
+          ${canNav ? "cursor-pointer group" : ""}`}
       >
         {iconUrl ? (
           <img src={iconUrl} alt={champName}
@@ -597,7 +606,8 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
           <div className="w-7 h-7 rounded bg-slate-200 dark:bg-white/10 flex-shrink-0 animate-pulse" />
         )}
         <div className="flex flex-col min-w-0 flex-1">
-          <span className={`text-xs font-semibold truncate ${isMe ? "text-[#c89b3c]" : "text-slate-700 dark:text-white/70"}`}>
+          <span className={`text-xs font-semibold truncate
+            ${isMe ? "text-[#c89b3c]" : canNav ? "text-slate-700 dark:text-white/70 group-hover:text-[#c89b3c] dark:group-hover:text-[#c89b3c] transition-colors" : "text-slate-700 dark:text-white/70"}`}>
             {isMe && "★ "}{p.summonerName}
             <span className="text-slate-400 dark:text-white/30 font-normal">{p.tagLine ? `#${p.tagLine}` : ""}</span>
           </span>
@@ -1011,7 +1021,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
                     <button
                       onClick={() => p?.puuid && p?.riotIdTagline && navigate(
                         `/player/${encodeURIComponent(p?.riotIdGameName)}/${encodeURIComponent(p?.riotIdTagline)}`,
-                        { state: { puuid: p?.puuid } }
+                        { state: { puuid: p?.puuid, back: true } }
                       )}
                       disabled={!p?.puuid || !p?.riotIdTagline}
                       className={`font-bold truncate text-[11px] text-left
@@ -1490,7 +1500,7 @@ function TeammatesContent({ games }) {
               return (
                 <div
                   key={r.puuid}
-                  onClick={() => r.tagLine && navigate(`/player/${encodeURIComponent(r.name)}/${encodeURIComponent(r.tagLine)}`, { state: { puuid: r.puuid } })}
+                  onClick={() => r.tagLine && navigate(`/player/${encodeURIComponent(r.name)}/${encodeURIComponent(r.tagLine)}`, { state: { puuid: r.puuid, back: true } })}
                   className={`grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-5 py-2
                     hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors border-b
                     border-slate-50 dark:border-white/[0.03] last:border-0
@@ -1914,10 +1924,10 @@ export default function Dashboard() {
 
         <div className="flex items-center justify-between mb-4">
           <button
-            onClick={() => navigate("/")}
+            onClick={() => state?.back ? navigate(-1) : navigate("/")}
             className="text-xs font-semibold text-slate-400 dark:text-white/30 hover:text-[#c89b3c] dark:hover:text-[#c89b3c] transition-colors flex items-center gap-1"
           >
-            ← Search Again
+            ← {state?.back ? "Back" : "Search Again"}
           </button>
           <button
             onClick={handleRefresh}
