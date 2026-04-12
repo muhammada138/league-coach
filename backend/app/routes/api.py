@@ -8,7 +8,7 @@ from ..services.riot import (
     _compute_perf_score, _compute_diffed_lane
 )
 from ..services.groq import get_coaching_feedback, ask_coach_question
-from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, CACHE_VERSION
+from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, enrich_semaphore, CACHE_VERSION
 from ..models.requests import LiveEnrichRequest, AskRequest, WinPredictRequest
 from ..services import win_predictor
 from ..services import db
@@ -354,6 +354,7 @@ async def get_live_game(puuid: str):
             data = await riot_get(client, url)
             return {
                 "inGame": True, "gameId": data.get("gameId"), "gameMode": data.get("gameMode", ""),
+                "queueId": data.get("gameQueueConfigId", 420),
                 "participants": [{"puuid": p.get("puuid", ""), "summonerName": (p.get("riotId") or p.get("summonerName") or "Unknown").split("#")[0], "tagLine": (p.get("riotId") or "").split("#")[1] if "#" in (p.get("riotId") or "") else "", "teamId": p.get("teamId", 0), "championId": p.get("championId", 0)} for p in data.get("participants", [])],
             }
         except HTTPException as e:
@@ -362,8 +363,16 @@ async def get_live_game(puuid: str):
 
 @router.post("/live-enrich")
 async def live_enrich(body: LiveEnrichRequest):
+    # Map live queueId → match history queue filter and rank entry type
+    # For ranked modes use that queue's rank entry; for non-ranked fall back to solo rank as skill proxy
+    _RANKED_RANK_TYPE = {420: "RANKED_SOLO_5x5", 440: "RANKED_FLEX_SR"}
+    rank_type = _RANKED_RANK_TYPE.get(body.queue_id, "RANKED_SOLO_5x5")
+    is_ranked_queue = body.queue_id in _RANKED_RANK_TYPE
+    match_queue_filter = body.queue_id  # always fetch from the same queue the game is in
+
     async def enrich_one(puuid: str):
-        cached = enriched_cache.get(puuid)
+        cache_key = f"{puuid}:{body.queue_id}"
+        cached = enriched_cache.get(cache_key)
         if cached: return cached
 
         base = {"puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0, "last5": [], "avg_score": 50, "main_champs": [], "streak": 0}
@@ -371,17 +380,20 @@ async def live_enrich(body: LiveEnrichRequest):
             async with httpx.AsyncClient(timeout=20.0) as client:
                 entries, match_ids = await asyncio.gather(
                     riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                    riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue=420"),
+                    riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
-                ranked = None
                 if not isinstance(entries, Exception):
-                    ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
-                base.update({"tier": ranked["tier"] if ranked else "UNRANKED", "division": ranked.get("rank", "") if ranked else "", "lp": ranked.get("leaguePoints", 0) if ranked else 0, "wins": ranked.get("wins", 0) if ranked else 0, "losses": ranked.get("losses", 0) if ranked else 0})
+                    # For ranked queues use the matching rank entry; for normals/ARAM fall back to solo rank as skill proxy
+                    ranked = next((e for e in entries if e.get("queueType") == rank_type), None)
+                    if not ranked and not is_ranked_queue:
+                        ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
+                    if ranked:
+                        base.update({"tier": ranked["tier"], "division": ranked.get("rank", ""), "lp": ranked.get("leaguePoints", 0), "wins": ranked.get("wins", 0), "losses": ranked.get("losses", 0)})
 
                 if not isinstance(match_ids, Exception) and match_ids:
-                    # Use specific semaphore to prevent heavy fan-out rate limits
-                    async with enriched_cache.enrich_semaphore:
+                    # Use module-level semaphore to prevent heavy fan-out rate limits
+                    async with enrich_semaphore:
                         match_datas = await asyncio.gather(*[
                             riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
                             for mid in match_ids
@@ -406,7 +418,7 @@ async def live_enrich(body: LiveEnrichRequest):
                     main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
                     base.update({"last5": last5, "avg_score": avg_score, "main_champs": main_champs, "streak": streak})
         except Exception: pass
-        enriched_cache.set(puuid, base)
+        enriched_cache.set(cache_key, base)
         return base
     results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])
     return {r["puuid"]: r for r in results}
