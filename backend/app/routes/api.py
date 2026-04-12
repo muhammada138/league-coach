@@ -258,8 +258,8 @@ async def live_enrich(body: LiveEnrichRequest):
             async with httpx.AsyncClient(timeout=20.0) as client:
                 entries = await riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}")
                 ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
-                return {"puuid": puuid, "tier": ranked["tier"] if ranked else "UNRANKED", "lp": ranked.get("leaguePoints", 0) if ranked else 0}
-        except: return {"puuid": puuid, "tier": "UNRANKED", "lp": 0}
+                return {"puuid": puuid, "tier": ranked["tier"] if ranked else "UNRANKED", "division": ranked.get("rank", "") if ranked else "", "lp": ranked.get("leaguePoints", 0) if ranked else 0, "wins": ranked.get("wins", 0) if ranked else 0, "losses": ranked.get("losses", 0) if ranked else 0}
+        except: return {"puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0}
     results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])
     return {r["puuid"]: r for r in results}
 
