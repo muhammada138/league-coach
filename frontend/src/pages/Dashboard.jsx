@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory, getTeammates } from "../api/riot";
@@ -781,6 +781,7 @@ function LpHistoryGraph({ history }) {
 }
 
 function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked" }) {
+  const [iconFailed, setIconFailed] = useState(false);
   if (!profile) return null;
   const displayProfile = queueTab === "flex" && profile.flex
     ? { ...profile, ...profile.flex }
@@ -796,8 +797,6 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVe
   const iconUrl = profile.profileIconId != null
     ? `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/profileicon/${profile.profileIconId}.png`
     : null;
-
-  const [iconFailed, setIconFailed] = useState(false);
 
   return (
     <div className="bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-2xl shadow-sm dark:shadow-black/40 p-5">
@@ -1090,28 +1089,16 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
 }
 
 function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion, runesMap }) {
-  if (loading) {
-    return (
-      <div className="p-6 flex items-center justify-center gap-3">
-        <div className="w-4 h-4 rounded-full border-2 border-t-[#c89b3c] border-[#c89b3c]/20 animate-spin" />
-        <span className="text-sm text-slate-400 dark:text-white/30">Loading scoreboard...</span>
-      </div>
-    );
-  }
-  if (!scoreboard || !Array.isArray(scoreboard.participants)) return null;
-
-  const participants = scoreboard.participants;
-  const teams = scoreboard.teams || [];
-  
   const withScores = useMemo(() => {
+    const participants = scoreboard?.participants || [];
     return participants.filter(Boolean).map((p) => ({
       ...p,
       score: p.score ?? computePerformanceScore(p, participants),
     }));
-  }, [participants]);
+  }, [scoreboard]);
 
-  const team100Won = teams?.find((t) => t.teamId === 100)?.win ?? true;
-  const team200Won = teams?.find((t) => t.teamId === 200)?.win ?? false;
+  const team100Won = useMemo(() => (scoreboard?.teams || [])?.find((t) => t.teamId === 100)?.win ?? true, [scoreboard]);
+  const team200Won = useMemo(() => (scoreboard?.teams || [])?.find((t) => t.teamId === 200)?.win ?? false, [scoreboard]);
 
   const maxDamage = useMemo(() => {
     return Math.max(0, ...(withScores || []).map(p => p.totalDamageDealtToChampions || 0));
@@ -1134,6 +1121,16 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
     }
     return { mvpPuuid: mvp, acePuuid: ace };
   }, [withScores, isRemake, team100Won]);
+
+  if (loading) {
+    return (
+      <div className="p-6 flex items-center justify-center gap-3">
+        <div className="w-4 h-4 rounded-full border-2 border-t-[#c89b3c] border-[#c89b3c]/20 animate-spin" />
+        <span className="text-sm text-slate-400 dark:text-white/30">Loading scoreboard...</span>
+      </div>
+    );
+  }
+  if (!scoreboard || !Array.isArray(scoreboard.participants)) return null;
 
   return (
     <div className="w-full overflow-hidden animate-slideDown">
@@ -1161,16 +1158,16 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
             ddVersion={ddVersion}
             runesMap={runesMap}
             maxDamage={maxDamage}
-            teamStats={teams?.find(t => t.teamId === 100)}
+            teamStats={(scoreboard?.teams || [])?.find(t => t.teamId === 100)}
             mvpPuuid={mvpPuuid}
             acePuuid={acePuuid}
-          />
-          <tr>
+            />
+            <tr>
             <td colSpan={9} className="p-0">
               <div className="h-px bg-black/10 dark:bg-white/[0.08]" />
             </td>
-          </tr>
-          <TeamScoreRows
+            </tr>
+            <TeamScoreRows
             players={withScores?.filter((p) => p.teamId === 200) || []}
             isWin={team200Won}
             teamLabel="Red Team"
@@ -1179,18 +1176,17 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
             ddVersion={ddVersion}
             runesMap={runesMap}
             maxDamage={maxDamage}
-            teamStats={teams?.find(t => t.teamId === 200)}
+            teamStats={(scoreboard?.teams || [])?.find(t => t.teamId === 200)}
             mvpPuuid={mvpPuuid}
             acePuuid={acePuuid}
-          />
-        </tbody>
+            />        </tbody>
       </table>
     </div>
   );
 }
 
 // ── Horizontal Game Row ────────────────────────────────────────────────────
-function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, gameName, ddVersion, runesMap, isRanked }) {
+function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, gameName, ddVersion, runesMap }) {
   if (!game) return null;
   const isRemake = (game.gameDuration || 0) < 210;
   const mins = Math.floor(game.gameDuration / 60);
@@ -2058,7 +2054,6 @@ export default function Dashboard() {
                           gameName={gameName}
                           ddVersion={ddVersion}
                           runesMap={runesMap}
-                          isRanked={queueTab !== "draft"}
                         />
                       ))}
                     </div>
