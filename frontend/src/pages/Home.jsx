@@ -13,7 +13,7 @@ const HOW_IT_WORKS = [
   {
     n: "02",
     title: "We crunch the games",
-    desc: "Your last 5 ranked games are pulled and compared against each lobby's average.",
+    desc: "Your recent ranked games are pulled and compared against each lobby's average.",
   },
   {
     n: "03",
@@ -76,6 +76,7 @@ export default function Home() {
   const [tagLine, setTagLine]   = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+  const [gameCount, setGameCount] = useState(10);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [focusedIdx, setFocusedIdx] = useState(-1);
@@ -106,7 +107,7 @@ export default function Home() {
       saveHistory(`${name}#${tag}`);
       navigate(
         `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(tag)}`,
-        { state: { puuid: data.puuid } }
+        { state: { puuid: data.puuid, gameCount } }
       );
     } catch (err) {
       const status = err.response?.status;
@@ -266,6 +267,28 @@ export default function Home() {
                   ))}
                 </div>
               )}
+            </div>
+
+            <div className="pt-1">
+              <label className="block text-[11px] font-bold tracking-widest uppercase text-slate-400 dark:text-white/30 mb-2">
+                Analysis window
+              </label>
+              <div className="flex gap-2">
+                {[10, 20, 30].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setGameCount(n)}
+                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all duration-150 border
+                      ${gameCount === n
+                        ? "bg-[#c89b3c]/15 border-[#c89b3c]/50 text-[#c89b3c]"
+                        : "bg-slate-50 dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.08] text-slate-500 dark:text-white/30 hover:border-slate-300 dark:hover:border-white/15"
+                      }`}
+                  >
+                    {n} games
+                  </button>
+                ))}
+              </div>
             </div>
 
             {error && (

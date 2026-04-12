@@ -34,3 +34,7 @@ dist/
 
 # Docs / specs
 docs/
+
+# Runtime data (generated at startup, not source-controlled)
+backend/data/
+backend/model/

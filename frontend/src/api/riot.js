@@ -8,8 +8,8 @@ export const getSummoner = (gameName, tagLine) =>
 export const getProfile = (puuid) =>
   api.get(`/profile/${puuid}`).then((r) => r.data);
 
-export const analyzeSummoner = (puuid, gameName) =>
-  api.get(`/analyze/${puuid}`, { params: { game_name: gameName } }).then((r) => r.data);
+export const analyzeSummoner = (puuid, gameName, count = 10) =>
+  api.get(`/analyze/${puuid}`, { params: { game_name: gameName, count } }).then((r) => r.data);
 
 export const getHistory = (puuid, start, count, queue = 420) =>
   api.get(`/history/${puuid}`, { params: { start, count, queue } }).then((r) => r.data);
@@ -25,3 +25,9 @@ export const getLiveGame = (puuid) =>
 
 export const getLiveEnrich = (puuids) =>
   api.post("/live-enrich", { puuids }).then((r) => r.data);
+
+export const getWinPredict = (participants, live_stats) =>
+  api.post("/win-predict", { participants, live_stats }).then((r) => r.data);
+
+export const getLpHistory = (puuid) =>
+  api.get(`/lp-history/${puuid}`).then((r) => r.data);
