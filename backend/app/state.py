@@ -14,7 +14,7 @@ ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://local
 RIOT_HEADERS = {"X-Riot-Token": RIOT_API_KEY}
 
 # Global semaphore to limit concurrent requests to the Riot API (prevents 429 Too Many Requests)
-api_semaphore = asyncio.Semaphore(15)
+api_semaphore = asyncio.Semaphore(3)
 # Specific semaphore for heavy match detail enrichment fan-out
 enrich_semaphore = asyncio.Semaphore(5)
 
