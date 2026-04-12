@@ -254,12 +254,45 @@ async def get_live_game(puuid: str):
 @router.post("/live-enrich")
 async def live_enrich(body: LiveEnrichRequest):
     async def enrich_one(puuid: str):
+        base = {"puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0, "last5": [], "avg_score": 50, "main_champs": [], "streak": 0}
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
-                entries = await riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}")
-                ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
-                return {"puuid": puuid, "tier": ranked["tier"] if ranked else "UNRANKED", "division": ranked.get("rank", "") if ranked else "", "lp": ranked.get("leaguePoints", 0) if ranked else 0, "wins": ranked.get("wins", 0) if ranked else 0, "losses": ranked.get("losses", 0) if ranked else 0}
-        except: return {"puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0}
+                entries, match_ids = await asyncio.gather(
+                    riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
+                    riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue=420"),
+                    return_exceptions=True,
+                )
+                ranked = None
+                if not isinstance(entries, Exception):
+                    ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
+                base.update({"tier": ranked["tier"] if ranked else "UNRANKED", "division": ranked.get("rank", "") if ranked else "", "lp": ranked.get("leaguePoints", 0) if ranked else 0, "wins": ranked.get("wins", 0) if ranked else 0, "losses": ranked.get("losses", 0) if ranked else 0})
+
+                if not isinstance(match_ids, Exception) and match_ids:
+                    match_datas = await asyncio.gather(*[
+                        riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
+                        for mid in match_ids
+                    ], return_exceptions=True)
+                    last5, champ_ids = [], []
+                    for md in match_datas:
+                        if isinstance(md, Exception): continue
+                        participants = md["info"]["participants"]
+                        player = next((p for p in participants if p.get("puuid") == puuid), None)
+                        if not player: continue
+                        score = float(_compute_perf_score(player, participants, None, md["info"]["gameDuration"]))
+                        last5.append({"win": player["win"], "score": round(score, 1)})
+                        champ_ids.append(str(player.get("championId", "")))
+                    avg_score = round(sum(g["score"] for g in last5) / len(last5), 1) if last5 else 50
+                    streak = 0
+                    if last5:
+                        direction = 1 if last5[0]["win"] else -1
+                        for g in last5:
+                            if (g["win"] and direction == 1) or (not g["win"] and direction == -1): streak += direction
+                            else: break
+                    from collections import Counter as _Counter
+                    main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
+                    base.update({"last5": last5, "avg_score": avg_score, "main_champs": main_champs, "streak": streak})
+        except Exception: pass
+        return base
     results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])
     return {r["puuid"]: r for r in results}
 
