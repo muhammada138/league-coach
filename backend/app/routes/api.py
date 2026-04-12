@@ -8,7 +8,7 @@ from ..services.riot import (
     _compute_perf_score, _compute_diffed_lane
 )
 from ..services.groq import get_coaching_feedback, ask_coach_question
-from ..state import RIOT_REGION, RIOT_ROUTING, route_cache
+from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache
 from ..models.requests import LiveEnrichRequest, AskRequest, WinPredictRequest
 from ..services import win_predictor
 from ..services import db
@@ -342,6 +342,9 @@ async def get_live_game(puuid: str):
 @router.post("/live-enrich")
 async def live_enrich(body: LiveEnrichRequest):
     async def enrich_one(puuid: str):
+        cached = enriched_cache.get(puuid)
+        if cached: return cached
+
         base = {"puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0, "last5": [], "avg_score": 50, "main_champs": [], "streak": 0}
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
@@ -380,6 +383,7 @@ async def live_enrich(body: LiveEnrichRequest):
                     main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
                     base.update({"last5": last5, "avg_score": avg_score, "main_champs": main_champs, "streak": streak})
         except Exception: pass
+        enriched_cache.set(puuid, base)
         return base
     results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])
     return {r["puuid"]: r for r in results}

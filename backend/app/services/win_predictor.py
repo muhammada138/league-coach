@@ -170,18 +170,20 @@ def _player_features(stats: dict, champion_id: int) -> np.ndarray:
 
     # 4. Champion mastery score
     #    main_champs is a list of champion ID strings ordered by play frequency.
-    #    Being on your #1 pick gives a +0.06 edge; #2 +0.04; #3 +0.02; off-pick 0.
+    #    Being on your #1 pick gives a +0.08 edge; #2 +0.05; #3 +0.03; off-pick 0.
     champ_id_str = str(champion_id)
     main_champs  = stats.get("main_champs", [])
     mastery_score = 0.0
     if champ_id_str in main_champs:
         idx = main_champs.index(champ_id_str)
-        if idx < len(_MASTERY_SCORES):
-            mastery_score = _MASTERY_SCORES[idx]
+        _MASTERY_WEIGHTS = [0.08, 0.05, 0.03]
+        if idx < len(_MASTERY_WEIGHTS):
+            mastery_score = _MASTERY_WEIGHTS[idx]
 
     # 5. Streak momentum normalised to [−1, 1]
-    streak      = max(-3, min(3, stats.get("streak", 0)))
-    streak_norm = streak / 3.0
+    #    Increased importance: streak can now be up to ±5
+    streak      = max(-5, min(5, stats.get("streak", 0)))
+    streak_norm = streak / 5.0
 
     return np.array([rank_score, season_wr, form_score, mastery_score, streak_norm], dtype=float)
 

@@ -49,3 +49,4 @@ class TTLCache:
 rank_cache = TTLCache(ttl_seconds=3600)  # 1 hour
 timeline_cache = TTLCache(ttl_seconds=86400)  # 24 hours
 route_cache = TTLCache(ttl_seconds=300)  # 5 minutes for analyze/history results
+enriched_cache = TTLCache(ttl_seconds=3600)  # 1 hour for enriched player stats
