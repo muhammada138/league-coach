@@ -1,6 +1,19 @@
 import axios from "axios";
 
-const api = axios.create({ baseURL: import.meta.env.VITE_API_URL });
+const api = axios.create({ baseURL: import.meta.env.VITE_API_URL, timeout: 25000 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 429) {
+      console.error("Riot API rate limit exceeded. Please try again in a few seconds.");
+    }
+    if (error.code === 'ECONNABORTED') {
+      console.error("The request timed out. The backend or Riot API is slow.");
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const getSummoner = (gameName, tagLine) =>
   api.get(`/summoner/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`).then((r) => r.data);
