@@ -30,11 +30,14 @@ def init_db() -> None:
                 lp        INTEGER NOT NULL,
                 wins      INTEGER NOT NULL,
                 losses    INTEGER NOT NULL,
-                timestamp INTEGER NOT NULL
+                timestamp INTEGER NOT NULL,
+                queue     TEXT    NOT NULL DEFAULT 'RANKED_SOLO_5x5'
             )
         """)
+        # Update existing rows that don't have a queue or need it explicitly
+        # (Already handled by DEFAULT, but good to ensure if it existed before)
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_lp_puuid_ts ON lp_history(puuid, timestamp)"
+            "CREATE INDEX IF NOT EXISTS idx_lp_puuid_q_ts ON lp_history(puuid, queue, timestamp)"
         )
         conn.commit()
 
@@ -43,15 +46,15 @@ def init_db() -> None:
 # Write
 # ---------------------------------------------------------------------------
 
-def _record_sync(puuid: str, tier: str, division: str, lp: int, wins: int, losses: int, timestamp: int = None) -> None:
+def _record_sync(puuid: str, tier: str, division: str, lp: int, wins: int, losses: int, queue: str = 'RANKED_SOLO_5x5', timestamp: int = None) -> None:
     if tier == "UNRANKED":
         return
     now = timestamp or int(time.time())
     with sqlite3.connect(DB_PATH) as conn:
         row = conn.execute(
             "SELECT tier, division, lp, timestamp FROM lp_history "
-            "WHERE puuid = ? ORDER BY timestamp DESC LIMIT 1",
-            (puuid,),
+            "WHERE puuid = ? AND queue = ? ORDER BY timestamp DESC LIMIT 1",
+            (puuid, queue),
         ).fetchone()
 
         if row:
@@ -64,25 +67,25 @@ def _record_sync(puuid: str, tier: str, division: str, lp: int, wins: int, losse
                 return
 
         conn.execute(
-            "INSERT INTO lp_history (puuid, tier, division, lp, wins, losses, timestamp) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (puuid, tier, division, lp, wins, losses, now),
+            "INSERT INTO lp_history (puuid, tier, division, lp, wins, losses, timestamp, queue) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (puuid, tier, division, lp, wins, losses, now, queue),
         )
         conn.commit()
 
 
 async def record_lp_snapshot(
-    puuid: str, tier: str, division: str, lp: int, wins: int, losses: int, timestamp: int = None
+    puuid: str, tier: str, division: str, lp: int, wins: int, losses: int, queue: str = 'RANKED_SOLO_5x5', timestamp: int = None
 ) -> None:
-    await asyncio.to_thread(_record_sync, puuid, tier, division, lp, wins, losses, timestamp)
+    await asyncio.to_thread(_record_sync, puuid, tier, division, lp, wins, losses, queue, timestamp)
 
 
 def _record_many_sync(snapshots: list[tuple]) -> None:
-    """snapshots: list of (puuid, tier, division, lp, wins, losses, timestamp)"""
+    """snapshots: list of (puuid, tier, division, lp, wins, losses, timestamp, queue)"""
     with sqlite3.connect(DB_PATH) as conn:
         conn.executemany(
-            "INSERT INTO lp_history (puuid, tier, division, lp, wins, losses, timestamp) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO lp_history (puuid, tier, division, lp, wins, losses, timestamp, queue) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             snapshots,
         )
         conn.commit()
@@ -97,15 +100,15 @@ async def record_many_lp_snapshots(snapshots: list[tuple]) -> None:
 # Read
 # ---------------------------------------------------------------------------
 
-def _history_sync(puuid: str, days: int) -> list[dict]:
+def _history_sync(puuid: str, queue: str, days: int) -> list[dict]:
     since = int(time.time()) - days * 86_400
     with sqlite3.connect(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT tier, division, lp, wins, losses, timestamp "
             "FROM lp_history "
-            "WHERE puuid = ? AND timestamp >= ? "
+            "WHERE puuid = ? AND queue = ? AND timestamp >= ? "
             "ORDER BY timestamp ASC",
-            (puuid, since),
+            (puuid, queue, since),
         ).fetchall()
     return [
         {"tier": r[0], "division": r[1], "lp": r[2], "wins": r[3], "losses": r[4], "timestamp": r[5]}
@@ -113,8 +116,8 @@ def _history_sync(puuid: str, days: int) -> list[dict]:
     ]
 
 
-async def get_lp_history(puuid: str, days: int = 30) -> list[dict]:
-    return await asyncio.to_thread(_history_sync, puuid, days)
+async def get_lp_history(puuid: str, queue: str = 'RANKED_SOLO_5x5', days: int = 30) -> list[dict]:
+    return await asyncio.to_thread(_history_sync, puuid, queue, days)
 
 
 def _has_history_sync(puuid: str) -> bool:

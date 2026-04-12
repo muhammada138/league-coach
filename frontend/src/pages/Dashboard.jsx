@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory } from "../api/riot";
+import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory, getTeammates } from "../api/riot";
 import { readSaved, writeSaved } from "../components/Navbar";
 
 const TIER_COLORS = {
@@ -91,7 +91,7 @@ function computePerformanceScore(player, allPlayers) {
   let laneScore = 0.0;
   if (lane && lane !== "UNKNOWN") {
     const opp = allPlayers.find(
-      (p) => p.teamPosition === lane && p.teamId !== player.teamId
+      (p) => p && p.teamPosition === lane && p.teamId !== player.teamId
     );
     if (opp) {
       const goldDiff = (player.goldEarned ?? 0) - (opp.goldEarned ?? 0);
@@ -396,7 +396,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
   const min = Math.min(...series);
   const max = Math.max(...series);
   const range = Math.max(max - min, 30);
-  const W = 260, H = 64, padX = 12, padY = 12;
+  const W = 260, H = 52, padX = 8, padY = 8;
   const innerW = W - 2 * padX, innerH = H - 2 * padY;
   const toX = (i) => padX + (i / (series.length - 1)) * innerW;
   const toY = (v) => padY + innerH - ((v - min) / range) * innerH;
@@ -423,7 +423,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
           </linearGradient>
         </defs>
         <path d={areaD} fill="url(#lpGradFill)" />
-        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         {series.map((v, i) => {
           const cx = toX(i);
           const cy = toY(v);
@@ -711,7 +711,7 @@ function LpHistoryGraph({ history }) {
 
   const series = history.map((h) => ({ ...h, absLp: toAbsLP(h.tier, h.division, h.lp) }));
 
-  const W = 260, H = 64, padX = 12, padY = 12;
+  const W = 260, H = 56, padX = 8, padY = 8;
   const innerW = W - 2 * padX, innerH = H - 2 * padY;
 
   const minTs   = series[0].timestamp;
@@ -755,7 +755,7 @@ function LpHistoryGraph({ history }) {
           </linearGradient>
         </defs>
         <path d={areaD} fill="url(#lpHistFill)" />
-        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         {series.map((s, i) => {
           const cx = toX(s.timestamp);
           const cy = toY(s.absLp);
@@ -904,9 +904,11 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
   const navigate = useNavigate();
 
   const ROLE_ORDER = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5 };
-  const sortedPlayers = [...(players || [])].sort((a, b) => {
-    return (ROLE_ORDER[a?.teamPosition] || 99) - (ROLE_ORDER[b?.teamPosition] || 99);
-  });
+  const sortedPlayers = [...(players || [])]
+    .filter(Boolean)
+    .sort((a, b) => {
+      return (ROLE_ORDER[a?.teamPosition] || 99) - (ROLE_ORDER[b?.teamPosition] || 99);
+    });
 
   return (
     <>
@@ -948,8 +950,9 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
         </td>
       </tr>
       {sortedPlayers.map((p, idx) => {
+        if (!p) return null;
         const isMe = p.riotIdGameName === gameName;
-        const scoreNum = isRemake ? 0 : parseFloat(p.score);
+        const scoreNum = isRemake ? 0 : parseFloat(p.score || 0);
         const scoreColor =
           scoreNum >= 90
             ? "text-yellow-500 dark:text-yellow-400"
@@ -967,7 +970,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
 
         return (
           <tr
-            key={p.riotIdGameName + p.championName}
+            key={(p.riotIdGameName || idx) + (p.championName || idx)}
             className={`border-b border-black/[0.04] dark:border-white/[0.03] last:border-0 transition-colors ${
               isMe
                 ? "bg-[#c89b3c]/10 dark:bg-[#c89b3c]/[0.12]"
@@ -1095,13 +1098,13 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
       </div>
     );
   }
-  if (!scoreboard || !scoreboard.participants) return null;
+  if (!scoreboard || !Array.isArray(scoreboard.participants)) return null;
 
   const participants = scoreboard.participants;
-  const teams = scoreboard.teams;
+  const teams = scoreboard.teams || [];
   
   const withScores = useMemo(() => {
-    return participants.map((p) => ({
+    return participants.filter(Boolean).map((p) => ({
       ...p,
       score: p.score ?? computePerformanceScore(p, participants),
     }));
@@ -1450,9 +1453,22 @@ function SummaryStrip({ analysis, games }) {
 }
 
 // ── Teammates Content ───────────────────────────────────────────────────────
-function TeammatesContent({ games }) {
+function TeammatesContent({ games, backendTeammates, loading }) {
   const [tab, setTab] = useState("with");
-  const rows = aggregateTeammates(games, tab).filter((r) => r.games > 1);
+  
+  if (loading) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-10">
+        <div className="w-5 h-5 rounded-full border-2 border-t-[#c89b3c] border-[#c89b3c]/20 animate-spin" />
+        <p className="text-xs text-slate-400 dark:text-white/25 text-center">Analyzing past 30 days...</p>
+      </div>
+    );
+  }
+
+  const rows = backendTeammates 
+    ? backendTeammates[tab] 
+    : aggregateTeammates(games, tab).filter((r) => r.games > 1);
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex border-b border-slate-100 dark:border-white/[0.06] flex-shrink-0 mx-5 mb-1 mt-3">
@@ -1503,7 +1519,7 @@ function TeammatesContent({ games }) {
 }
 
 // ── Right Panel (tabbed: Coaching | Stats | Teams) ──────────────────────────
-function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerContext, games }) {
+function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerContext, games, teammatesData, teammatesLoading }) {
   const [tab, setTab] = useState("coaching");
   const [chatInput, setChatInput] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
@@ -1511,10 +1527,10 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
   const chatEndRef = useRef(null);
 
   const tips = coaching
-    .split(/\n(?=\d+[\.\)])/g)
+    .split("\n")
     .map((s) => s.trim())
-    .filter((s) => /^\d+[\.\)]/.test(s))
-    .map((s) => s.replace(/^\d+[\.\)]\s*/, "").trim());
+    .filter((s) => s.length > 0 && /^\d+\./.test(s))
+    .map((s) => s.replace(/^\d+\.\s*/, "").trim());
 
   const fallback = tips.length === 0;
 
@@ -1662,7 +1678,11 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
           </div>
         ) : (
           <div className="lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
-            <TeammatesContent games={games} />
+            <TeammatesContent 
+              games={games} 
+              backendTeammates={teammatesData}
+              loading={teammatesLoading}
+            />
           </div>
         )}
       </div>
@@ -1732,11 +1752,26 @@ export default function Dashboard() {
     return puuidResolved;
   };
 
-  // Fetch LP history whenever the resolved puuid changes
+  // Fetch LP history whenever the resolved puuid or queueTab changes
   useEffect(() => {
     if (!resolvedPuuid) return;
-    getLpHistory(resolvedPuuid).then(setLpHistory).catch(() => {});
-  }, [resolvedPuuid]);
+    const queueMap = { ranked: 'RANKED_SOLO_5x5', flex: 'RANKED_FLEX_SR' };
+    const queue = queueMap[queueTab] || 'RANKED_SOLO_5x5';
+    getLpHistory(resolvedPuuid, queue).then(setLpHistory).catch(() => {});
+  }, [resolvedPuuid, queueTab]);
+
+  const [teammatesData, setTeammatesData] = useState(null);
+  const [teammatesLoading, setTeammatesLoading] = useState(false);
+
+  // Fetch 30-day teammate patterns when needed
+  useEffect(() => {
+    if (!resolvedPuuid || teammatesData) return;
+    setTeammatesLoading(true);
+    getTeammates(resolvedPuuid)
+      .then(setTeammatesData)
+      .catch(() => setTeammatesData({ with: [], against: [] }))
+      .finally(() => setTeammatesLoading(false));
+  }, [resolvedPuuid, teammatesData]);
 
   useEffect(() => {
     if (!gameName || !tagLine) { navigate("/"); return; }
@@ -2065,10 +2100,12 @@ export default function Dashboard() {
                 lobbyAverages={analysis.lobbyAverages}
                 deltas={analysis.deltas}
                 games={[...analysis.games, ...extraGames]}
+                teammatesData={teammatesData}
+                teammatesLoading={teammatesLoading}
                 playerContext={[
                   `Player: ${gameName}`,
                   `Role: ${analysis.mostPlayedPosition}`,
-                  `Win rate (last 5): ${analysis.winRate}%`,
+                  `Win rate (last ${analysis.games.length}): ${analysis.winRate}%`,
                   `Avg KDA: ${analysis.playerAverages.kda.toFixed(2)} (lobby: ${analysis.lobbyAverages.kda.toFixed(2)})`,
                   `CS/min: ${analysis.playerAverages.cspm.toFixed(2)} (lobby: ${analysis.lobbyAverages.cspm.toFixed(2)})`,
                   `Vision: ${analysis.playerAverages.visionScore.toFixed(1)} (lobby: ${analysis.lobbyAverages.visionScore.toFixed(1)})`,
