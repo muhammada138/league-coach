@@ -1116,7 +1116,7 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
   const isRemake = game.gameDuration < 210;
   const mins = Math.floor(game.gameDuration / 60);
   const secs = String(game.gameDuration % 60).padStart(2, "0");
-  const imgSrc = `https://ddragon.leagueoflegends.com/cdn/14.24.1/img/champion/${game.championName}.png`;
+  const imgSrc = `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${game.championName}.png`;
   const kda = ((game.kills + game.assists) / Math.max(game.deaths, 1)).toFixed(2);
   const scoreColor = game.score >= 90
     ? "text-yellow-500 dark:text-yellow-400"
