@@ -1820,9 +1820,9 @@ export default function Dashboard() {
       const queueNum = tabId === "flex" ? 440 : 400;
       setTabLoadingMore(true);
       try {
-        const games = await getHistory(resolvedPuuid, 0, 5, queueNum);
+        const games = await getHistory(resolvedPuuid, 0, 10, queueNum);
         setTabGames((prev) => ({ ...prev, [tabId]: games }));
-        if (games.length < 5) setTabHasMore((prev) => ({ ...prev, [tabId]: false }));
+        if (games.length < 10) setTabHasMore((prev) => ({ ...prev, [tabId]: false }));
       } catch {
         setTabGames((prev) => ({ ...prev, [tabId]: [] }));
       } finally {
