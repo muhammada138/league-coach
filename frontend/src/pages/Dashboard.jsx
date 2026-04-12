@@ -1094,29 +1094,38 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
 
   const participants = scoreboard.participants;
   const teams = scoreboard.teams;
-  const withScores = participants.map((p) => ({
-    ...p,
-    score: p.score ?? computePerformanceScore(p, participants),
-  }));
+  
+  const withScores = useMemo(() => {
+    return participants.map((p) => ({
+      ...p,
+      score: p.score ?? computePerformanceScore(p, participants),
+    }));
+  }, [participants]);
+
   const team100Won = teams.find((t) => t.teamId === 100)?.win ?? true;
   const team200Won = teams.find((t) => t.teamId === 200)?.win ?? false;
 
-  const maxDamage = Math.max(...withScores.map(p => p.totalDamageDealtToChampions));
+  const maxDamage = useMemo(() => {
+    return Math.max(...withScores.map(p => p.totalDamageDealtToChampions));
+  }, [withScores]);
 
-  let mvpPuuid = null;
-  let acePuuid = null;
-  if (!isRemake) {
-    const winTeamId = team100Won ? 100 : 200;
-    let highestWinScore = -1;
-    let highestLoseScore = -1;
-    withScores.forEach((p) => {
-      if (p.teamId === winTeamId) {
-        if (p.score > highestWinScore) { highestWinScore = p.score; mvpPuuid = p.puuid; }
-      } else {
-        if (p.score > highestLoseScore) { highestLoseScore = p.score; acePuuid = p.puuid; }
-      }
-    });
-  }
+  const { mvpPuuid, acePuuid } = useMemo(() => {
+    let mvp = null;
+    let ace = null;
+    if (!isRemake) {
+      const winTeamId = team100Won ? 100 : 200;
+      let highestWinScore = -1;
+      let highestLoseScore = -1;
+      withScores.forEach((p) => {
+        if (p.teamId === winTeamId) {
+          if (p.score > highestWinScore) { highestWinScore = p.score; mvp = p.puuid; }
+        } else {
+          if (p.score > highestLoseScore) { highestLoseScore = p.score; ace = p.puuid; }
+        }
+      });
+    }
+    return { mvpPuuid: mvp, acePuuid: ace };
+  }, [withScores, isRemake, team100Won]);
 
   return (
     <div className="w-full overflow-hidden animate-slideDown">
