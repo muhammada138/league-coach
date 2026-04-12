@@ -8,7 +8,7 @@ from ..services.riot import (
     _compute_perf_score, _compute_diffed_lane
 )
 from ..services.groq import get_coaching_feedback, ask_coach_question
-from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache
+from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, CACHE_VERSION
 from ..models.requests import LiveEnrichRequest, AskRequest, WinPredictRequest
 from ..services import win_predictor
 from ..services import db
@@ -133,7 +133,7 @@ async def lp_history(puuid: str, queue: str = 'RANKED_SOLO_5x5'):
 async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
     count = max(5, min(count, 30))
     # Versioned cache key to force logic updates
-    cache_key = f"{enriched_cache.CACHE_VERSION}:analyze:{puuid}:{count}"
+    cache_key = f"{CACHE_VERSION}:analyze:{puuid}:{count}"
     cached = route_cache.get(cache_key)
     if cached is not None: return cached
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -279,7 +279,7 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
 async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 420):
     count = min(count, 10)
     # Versioned cache key to force logic updates
-    cache_key = f"{enriched_cache.CACHE_VERSION}:history:{puuid}:{start}:{count}:{queue}"
+    cache_key = f"{CACHE_VERSION}:history:{puuid}:{start}:{count}:{queue}"
     cached = route_cache.get(cache_key)
     if cached is not None: return cached
     async with httpx.AsyncClient(timeout=30.0) as client:
