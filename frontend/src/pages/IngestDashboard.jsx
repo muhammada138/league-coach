@@ -48,9 +48,9 @@ export default function IngestDashboard() {
   // ETA rough estimate — shown only when running and some progress exists
   const etaText = (() => {
     if (isPaused || processed === 0) return null;
-    // ~48 req/min ingestion rate ≈ ~2.4 matches/min (1.25s between calls)
+    // ~89 calls per ladder page → ~80 new matches in ~111s ≈ 43 matches/min
     const remaining = target - processed;
-    const minsLeft  = Math.round(remaining / 2.4);
+    const minsLeft  = Math.round(remaining / 43);
     if (minsLeft > 1440) return `~${Math.round(minsLeft / 1440)}d remaining`;
     if (minsLeft > 60)   return `~${Math.round(minsLeft / 60)}h remaining`;
     return `~${minsLeft}m remaining`;
@@ -186,7 +186,7 @@ export default function IngestDashboard() {
 
         {/* Footer note */}
         <p className="text-center text-white/20 text-xs mt-6 leading-relaxed">
-          Dev key: ~48 req/min · Semaphore(1) · 1.25s between calls
+          Dev key: ~48 req/min · Semaphore(1) · 1.25s between calls · ~43 matches/min
           <br />
           Cycling BRONZE → SILVER → GOLD → PLATINUM → EMERALD → DIAMOND → MASTER
         </p>
