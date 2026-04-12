@@ -3,9 +3,9 @@ ML Data Ingestion Worker — accumulates real match data for win predictor retra
 
 Strategy
 --------
-Cycles through GOLD/PLATINUM/DIAMOND league ladder pages. For each player it
-fetches rank + last 10 ranked match IDs + each match detail, then extracts a
-7-dim feature vector per participant and saves
+Cycles through BRONZE→SILVER→GOLD→PLATINUM→EMERALD→DIAMOND→MASTER ladder pages.
+For each player it fetches rank + last 10 ranked match IDs + each match detail,
+then extracts a 7-dim feature vector per participant and saves
 (blue_feats, red_feats, blue_won) to the training_matches table.
 
 Feature extraction
@@ -44,17 +44,39 @@ _sem = asyncio.Semaphore(1)
 # Seconds to sleep after every successful Riot request
 _CALL_DELAY = 1.25
 
-# Ladder tiers cycled in order; restarts from the top when exhausted
+# Ladder tiers cycled in order; restarts from the top when exhausted.
+# MASTER uses None as division — handled via the masterleagues endpoint (no pagination).
 _SEED_TIERS = [
-    ("GOLD",     "I"),
-    ("PLATINUM", "I"),
-    ("DIAMOND",  "IV"),
-    ("GOLD",     "II"),
-    ("PLATINUM", "II"),
-    ("DIAMOND",  "III"),
-    ("GOLD",     "III"),
-    ("PLATINUM", "III"),
+    # Bronze — lower-elo representation
+    ("BRONZE",   "I"),
+    ("BRONZE",   "II"),
+    # Silver
     ("SILVER",   "I"),
+    ("SILVER",   "II"),
+    ("SILVER",   "III"),
+    ("SILVER",   "IV"),
+    # Gold
+    ("GOLD",     "I"),
+    ("GOLD",     "II"),
+    ("GOLD",     "III"),
+    ("GOLD",     "IV"),
+    # Platinum
+    ("PLATINUM", "I"),
+    ("PLATINUM", "II"),
+    ("PLATINUM", "III"),
+    ("PLATINUM", "IV"),
+    # Emerald (added Season 2023, between Platinum and Diamond)
+    ("EMERALD",  "I"),
+    ("EMERALD",  "II"),
+    ("EMERALD",  "III"),
+    ("EMERALD",  "IV"),
+    # Diamond
+    ("DIAMOND",  "I"),
+    ("DIAMOND",  "II"),
+    ("DIAMOND",  "III"),
+    ("DIAMOND",  "IV"),
+    # Master — single-page endpoint, no division
+    ("MASTER",   None),
 ]
 
 # Mutable state — survives across loop iterations, resets on restart (ok: dedup by match_id)
@@ -246,11 +268,23 @@ async def ingestion_worker() -> None:
                 # Fetch one page of ladder entries
                 async with _sem:
                     try:
-                        entries = await _riot_get(
-                            client,
-                            f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/"
-                            f"RANKED_SOLO_5x5/{tier}/{division}?page={_tier_page}",
-                        )
+                        if division is None:
+                            # Master uses a separate non-paginated endpoint
+                            data = await _riot_get(
+                                client,
+                                f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4"
+                                f"/masterleagues/by-queue/RANKED_SOLO_5x5",
+                            )
+                            entries = data.get("entries", [])
+                            # Inject tier since master entries omit it
+                            for e in entries:
+                                e.setdefault("tier", "MASTER")
+                        else:
+                            entries = await _riot_get(
+                                client,
+                                f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/"
+                                f"RANKED_SOLO_5x5/{tier}/{division}?page={_tier_page}",
+                            )
                     except Exception as exc:
                         logger.warning("Ladder fetch failed (%s %s p%d): %s", tier, division, _tier_page, exc)
                         entries = []
@@ -263,7 +297,12 @@ async def ingestion_worker() -> None:
                     logger.debug("Ladder exhausted for %s %s – advancing tier", tier, division)
                     continue
 
-                _tier_page += 1
+                if division is None:
+                    # Master has no pages — advance tier after one fetch
+                    _tier_idx += 1
+                    _tier_page = 1
+                else:
+                    _tier_page += 1
 
                 for entry in entries[:8]:   # process 8 players per ladder page
                     puuid = entry.get("puuid")
