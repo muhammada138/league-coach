@@ -41,7 +41,7 @@ MAX_RANK  = 11.0  # Challenger I + max LP bonus
 # Approximates a ~53–56% win rate on your main vs 50% on an off-pick.
 _MASTERY_SCORES = [0.06, 0.04, 0.02]  # index 0 = most-played champ
 
-MODEL_PATH = Path(__file__).parent.parent.parent / "model" / "win_predictor_v2.pkl"
+MODEL_PATH = Path(__file__).parent.parent.parent / "model" / "win_predictor_v3.pkl"
 
 # ---------------------------------------------------------------------------
 # Global model handle
@@ -91,27 +91,34 @@ def _train_and_save() -> None:
         mastery_probs   = [0.55, 0.15, 0.15, 0.15]
 
         for _ in range(20_000):
-            blue = np.array([
-                rng.beta(4, 4),                                # rank_score
-                rng.beta(5, 5),                                # season_wr
-                rng.beta(4, 4),                                # form_score
-                rng.beta(4, 4),                                # recent_wr
-                rng.beta(4, 4),                                # champ_wr
-                rng.choice(mastery_choices, p=mastery_probs),  # mastery_score
-                rng.uniform(-1.0, 1.0),                        # streak_norm
-            ])
-            red = np.array([
-                rng.beta(4, 4),
-                rng.beta(5, 5),
-                rng.beta(4, 4),
-                rng.beta(4, 4),
-                rng.beta(4, 4),
-                rng.choice(mastery_choices, p=mastery_probs),
-                rng.uniform(-1.0, 1.0),
-            ])
+            b_feats, r_feats = [], []
+            for _p in range(5):
+                b_feats.append([
+                    rng.beta(4, 4),                                # rank_score
+                    rng.beta(5, 5),                                # season_wr
+                    rng.beta(4, 4),                                # form_score
+                    rng.beta(4, 4),                                # recent_wr
+                    rng.beta(4, 4),                                # champ_wr
+                    rng.choice(mastery_choices, p=mastery_probs),  # mastery_score
+                    rng.uniform(-1.0, 1.0),                        # streak_norm
+                ])
+                r_feats.append([
+                    rng.beta(4, 4),
+                    rng.beta(5, 5),
+                    rng.beta(4, 4),
+                    rng.beta(4, 4),
+                    rng.beta(4, 4),
+                    rng.choice(mastery_choices, p=mastery_probs),
+                    rng.uniform(-1.0, 1.0),
+                ])
+            
+            blue = np.mean(b_feats, axis=0)
+            red = np.mean(r_feats, axis=0)
 
             diff = blue - red
-            prob = 1.0 / (1.0 + np.exp(-np.dot(diff, WEIGHTS) * 10.0))
+            # Since diff is smaller (averaged over 5 players), we increase the multiplier 
+            # from 10.0 to 25.0 to maintain a healthy spread of win probabilities.
+            prob = 1.0 / (1.0 + np.exp(-np.dot(diff, WEIGHTS) * 25.0))
             prob = 0.10 + prob * 0.80   # compress to [0.10, 0.90] — upsets exist
 
             y_list.append(int(rng.random() < prob))
@@ -254,9 +261,8 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
         prob = float(_model.predict_proba(X)[0][1])
     else:
         w = np.array([0.30, 0.10, 0.25, 0.20, 0.08, 0.04, 0.03])
-        b = float(np.dot(blue_vec, w))
-        r = float(np.dot(red_vec, w))
-        prob = b / (b + r) if (b + r) > 0 else 0.5
+        diff_val = float(np.dot(blue_vec - red_vec, w))
+        prob = 1.0 / (1.0 + np.exp(-diff_val * 25.0))
 
     blue_pct = max(1, min(99, round(prob * 100)))
     return {"bluePct": blue_pct, "redPct": 100 - blue_pct}
