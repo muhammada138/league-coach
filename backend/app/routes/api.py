@@ -220,10 +220,18 @@ async def get_scoreboard(match_id: str):
         perks = p.get("perks", {})
         primary_style = next((s for s in perks.get("styles", []) if s.get("description") == "primaryStyle"), {})
         primary_perk = primary_style.get("selections", [{}])[0].get("perk") if primary_style.get("selections") else None
+        sub_style = next((s for s in perks.get("styles", []) if s.get("description") == "subStyle"), {})
         participants_out.append({
-            "puuid": p.get("puuid", ""), "riotIdGameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown", "championName": p["championName"],
+            "puuid": p.get("puuid", ""), "riotIdGameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown",
+            "riotIdTagline": p.get("riotIdTagline", ""), "championName": p["championName"],
+            "champLevel": p.get("champLevel", 0),
             "teamPosition": p.get("teamPosition", "UNKNOWN"), "kills": p["kills"], "deaths": p["deaths"], "assists": p["assists"],
-            "totalMinionsKilled": p["totalMinionsKilled"], "visionScore": p["visionScore"], "win": p["win"], "teamId": p["teamId"],
+            "totalMinionsKilled": p["totalMinionsKilled"], "visionScore": p["visionScore"],
+            "totalDamageDealtToChampions": p.get("totalDamageDealtToChampions", 0),
+            "goldEarned": p.get("goldEarned", 0),
+            "summoner1Id": p.get("summoner1Id", 0), "summoner2Id": p.get("summoner2Id", 0),
+            "primaryPerk": primary_perk, "subStyle": sub_style.get("style"),
+            "win": p["win"], "teamId": p["teamId"], "gameDuration": data["info"]["gameDuration"],
             "score": _compute_perf_score(p, participants, None, data["info"]["gameDuration"]), "rank": rank,
             "items": [p.get(f"item{j}", 0) for j in range(7)],
         })
@@ -237,7 +245,7 @@ async def get_live_game(puuid: str):
             data = await riot_get(client, url)
             return {
                 "inGame": True, "gameId": data.get("gameId"), "gameMode": data.get("gameMode", ""),
-                "participants": [{"puuid": p.get("puuid", ""), "summonerName": (p.get("riotId") or p.get("summonerName") or "Unknown").split("#")[0], "teamId": p.get("teamId", 0)} for p in data.get("participants", [])],
+                "participants": [{"puuid": p.get("puuid", ""), "summonerName": (p.get("riotId") or p.get("summonerName") or "Unknown").split("#")[0], "tagLine": (p.get("riotId") or "").split("#")[1] if "#" in (p.get("riotId") or "") else "", "teamId": p.get("teamId", 0), "championId": p.get("championId", 0)} for p in data.get("participants", [])],
             }
         except HTTPException as e:
             if e.status_code == 404: return {"inGame": False}
