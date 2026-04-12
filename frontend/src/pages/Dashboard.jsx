@@ -1785,7 +1785,7 @@ export default function Dashboard() {
       try {
         const start = analysis.games.length + extraGames.length;
         const remaining = MAX_GAMES - start;
-        const count = Math.min(5, remaining);
+        const count = Math.min(10, remaining);
         const newGames = await getHistory(resolvedPuuid, start, count, 420);
         setExtraGames((prev) => [...prev, ...newGames]);
         if (newGames.length < count) setHasMore(false);
@@ -1802,7 +1802,7 @@ export default function Dashboard() {
       try {
         const start = currentGames.length;
         const remaining = MAX_GAMES - start;
-        const count = Math.min(5, remaining);
+        const count = Math.min(10, remaining);
         const newGames = await getHistory(resolvedPuuid, start, count, queueNum);
         setTabGames((prev) => ({ ...prev, [queueTab]: [...currentGames, ...newGames] }));
         if (newGames.length < count) setTabHasMore((prev) => ({ ...prev, [queueTab]: false }));
