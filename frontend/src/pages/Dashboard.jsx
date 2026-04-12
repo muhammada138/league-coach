@@ -392,7 +392,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
   const min = Math.min(...series);
   const max = Math.max(...series);
   const range = Math.max(max - min, 30);
-  const W = 260, H = 52, padX = 8, padY = 8;
+  const W = 260, H = 64, padX = 12, padY = 12;
   const innerW = W - 2 * padX, innerH = H - 2 * padY;
   const toX = (i) => padX + (i / (series.length - 1)) * innerW;
   const toY = (v) => padY + innerH - ((v - min) / range) * innerH;
@@ -411,7 +411,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
           {hoveredIdx !== null ? `${rankLabel} · ${series[hoveredIdx]} LP` : `${rankLabel} · ${currentLP} LP`}
         </span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 52 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
         <defs>
           <linearGradient id="lpGradFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={lineColor} stopOpacity="0.18" />
@@ -419,7 +419,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
           </linearGradient>
         </defs>
         <path d={areaD} fill="url(#lpGradFill)" />
-        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         {series.map((v, i) => {
           const cx = toX(i);
           const cy = toY(v);
@@ -707,7 +707,7 @@ function LpHistoryGraph({ history }) {
 
   const series = history.map((h) => ({ ...h, absLp: toAbsLP(h.tier, h.division, h.lp) }));
 
-  const W = 260, H = 56, padX = 8, padY = 8;
+  const W = 260, H = 64, padX = 12, padY = 12;
   const innerW = W - 2 * padX, innerH = H - 2 * padY;
 
   const minTs   = series[0].timestamp;
@@ -751,7 +751,7 @@ function LpHistoryGraph({ history }) {
           </linearGradient>
         </defs>
         <path d={areaD} fill="url(#lpHistFill)" />
-        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         {series.map((s, i) => {
           const cx = toX(s.timestamp);
           const cy = toY(s.absLp);
