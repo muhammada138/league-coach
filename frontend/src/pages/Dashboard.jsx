@@ -207,7 +207,7 @@ function aggregateTeammates(games, type) {
     if (!Array.isArray(list)) return;
     list.forEach((p) => {
       if (!p.puuid) return;
-      if (!map[p.puuid]) map[p.puuid] = { puuid: p.puuid, name: p.gameName, games: 0, wins: 0 };
+      if (!map[p.puuid]) map[p.puuid] = { puuid: p.puuid, name: p.gameName, tagLine: p.tagLine || "", games: 0, wins: 0 };
       map[p.puuid].games++;
       if (game.win) map[p.puuid].wins++;
     });
@@ -1451,7 +1451,8 @@ function SummaryStrip({ analysis, games }) {
 // ── Teammates Content ───────────────────────────────────────────────────────
 function TeammatesContent({ games }) {
   const [tab, setTab] = useState("with");
-  
+  const navigate = useNavigate();
+
   const rows = aggregateTeammates(games, tab).filter((r) => r.games >= 2);
 
   return (
@@ -1486,10 +1487,16 @@ function TeammatesContent({ games }) {
               const wr = r.games > 0 ? Math.round((r.wins / r.games) * 100) : 0;
               const wrColor = wr >= 55 ? "text-emerald-500 dark:text-emerald-400" : wr >= 45 ? "text-slate-600 dark:text-white/60" : "text-red-400";
               return (
-                <div key={r.puuid} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-5 py-2
-                  hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors border-b
-                  border-slate-50 dark:border-white/[0.03] last:border-0">
-                  <span className="text-xs font-semibold text-slate-700 dark:text-white/70 truncate max-w-[130px]">{r.name}</span>
+                <div
+                  key={r.puuid}
+                  onClick={() => r.tagLine && navigate(`/player/${encodeURIComponent(r.name)}/${encodeURIComponent(r.tagLine)}`, { state: { puuid: r.puuid } })}
+                  className={`grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-5 py-2
+                    hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors border-b
+                    border-slate-50 dark:border-white/[0.03] last:border-0
+                    ${r.tagLine ? "cursor-pointer group" : ""}`}
+                >
+                  <span className={`text-xs font-semibold truncate max-w-[130px] transition-colors
+                    ${r.tagLine ? "text-slate-700 dark:text-white/70 group-hover:text-[#c89b3c] dark:group-hover:text-[#c89b3c]" : "text-slate-700 dark:text-white/70"}`}>{r.name}</span>
                   <span className="text-xs text-slate-500 dark:text-white/40 text-right tabular-nums">{r.games}</span>
                   <span className="text-xs text-slate-500 dark:text-white/40 text-right tabular-nums whitespace-nowrap">{r.wins}-{r.games - r.wins}</span>
                   <span className={`text-xs font-bold text-right tabular-nums ${wrColor}`}>{wr}%</span>

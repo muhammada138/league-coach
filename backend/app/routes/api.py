@@ -194,8 +194,8 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
             ace_puuid_g = max(losing_scores,  key=lambda x: x[1])[0].get("puuid") if losing_scores  else None
             mvp_ace = "MVP" if puuid == mvp_puuid_g else ("ACE" if puuid == ace_puuid_g else None)
             player_team_id = player.get("teamId")
-            teammates = [{"gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown", "puuid": p.get("puuid", "")} for p in participants if p.get("puuid") != puuid and p.get("teamId") == player_team_id]
-            opponents = [{"gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown", "puuid": p.get("puuid", "")} for p in participants if p.get("puuid") != puuid and p.get("teamId") != player_team_id]
+            teammates = [{"gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown", "tagLine": p.get("riotIdTagline", ""), "puuid": p.get("puuid", "")} for p in participants if p.get("puuid") != puuid and p.get("teamId") == player_team_id]
+            opponents = [{"gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown", "tagLine": p.get("riotIdTagline", ""), "puuid": p.get("puuid", "")} for p in participants if p.get("puuid") != puuid and p.get("teamId") != player_team_id]
             games.append({
                 "matchId": match_id, "gameEndTimestamp": game_end_timestamp, "playerStats": player_stats, "lobbyAverages": lobby_avgs,
                 "deltas": deltas, "playerCspm": round(player_cspm, 2), "lobbyCspm": round(lobby_cspm, 2), "score": game_score,
@@ -218,6 +218,12 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
     most_common_position = Counter(positions).most_common(1)[0][0]
     champ_names = [g["playerStats"]["championName"] for g in games]
     most_played_champ = Counter(champ_names).most_common(1)[0][0]
+    champ_counter = Counter(champ_names)
+    champ_wins = Counter(g["playerStats"]["championName"] for g in games if g["playerStats"]["win"])
+    champ_breakdown = ", ".join(
+        f"{champ} ({champ_wins.get(champ, 0)}W/{count - champ_wins.get(champ, 0)}L)"
+        for champ, count in champ_counter.most_common()
+    )
 
     # Groq Logic
     system_prompt = (
@@ -226,14 +232,15 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
         "Be blunt and human. No corporate filler. Give 3-4 weaknesses where they are underperforming vs their lobby. "
         "Each tip: 1-2 sentences max. Lead with the problem, end with one concrete fix. "
         "Bold (**) every stat number and every key concept/stat name. "
-        f"The player is mainly playing **{most_played_champ}** — where relevant, reference this champion's specific kit, "
-        "abilities, and win conditions in your tips rather than giving generic advice. "
+        f"The player is mainly playing **{most_played_champ}** — reference this champion's specific kit, "
+        "abilities, and win conditions in your tips. If they play multiple champions, tailor advice to each "
+        "champion's unique strengths and how to leverage them to improve the weak stats. "
         "FORMATTING RULES: Start each tip with a number and a period (e.g., '1. ', '2. '). "
         "Each numbered tip must be on its own new line. No intro sentence."
     )
     user_prompt = (
         f"Player: {game_name}\n"
-        f"Most played champion: {most_played_champ}\n"
+        f"Champions played: {champ_breakdown}\n"
         f"Most played role: {most_common_position}\n"
         f"Win rate last {n} games: {win_rate}%\n\n"
         f"Player averages vs lobby averages:\n"
@@ -302,8 +309,8 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
             "kills": player["kills"], "deaths": player["deaths"], "assists": player["assists"], "cspm": cspm, "visionScore": player["visionScore"],
             "win": player["win"], "gameDuration": info["gameDuration"], "score": player_score_h, "mvpAce": "MVP" if puuid == mvp_h else ("ACE" if puuid == ace_h else None),
             "diffedLane": _compute_diffed_lane(participants, None, info["gameDuration"]),
-            "teammates": [{"gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown", "puuid": p.get("puuid", "")} for p in participants if p.get("puuid") != puuid and p.get("teamId") == player_team_id],
-            "opponents": [{"gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown", "puuid": p.get("puuid", "")} for p in participants if p.get("puuid") != puuid and p.get("teamId") != player_team_id],
+            "teammates": [{"gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown", "tagLine": p.get("riotIdTagline", ""), "puuid": p.get("puuid", "")} for p in participants if p.get("puuid") != puuid and p.get("teamId") == player_team_id],
+            "opponents": [{"gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown", "tagLine": p.get("riotIdTagline", ""), "puuid": p.get("puuid", "")} for p in participants if p.get("puuid") != puuid and p.get("teamId") != player_team_id],
         })
     route_cache.set(cache_key, games)
     return games
