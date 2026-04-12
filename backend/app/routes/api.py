@@ -21,6 +21,58 @@ NUMERIC_STATS = [
     "wardsPlaced", "wardsKilled",
 ]
 
+async def backfill_if_needed(puuid: str, tier: str, division: str, lp: int, wins: int, losses: int):
+    if await db.has_history(puuid):
+        return
+    
+    # Simple backfill: Fetch last 20 games and estimate LP path
+    # NOTE: This is an estimation. Real LP gain/loss depends on MMR.
+    async with httpx.AsyncClient() as client:
+        try:
+            match_ids = await riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=20&queue=420")
+            if not match_ids: return
+            
+            match_tasks = [riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}") for mid in match_ids]
+            match_datas = await asyncio.gather(*match_tasks, return_exceptions=True)
+            
+            snapshots = []
+            curr_lp = lp
+            curr_wins = wins
+            curr_losses = losses
+            
+            # Process newest to oldest to build the snapshots list
+            # Then we'll save them.
+            for match_data in match_datas:
+                if isinstance(match_data, Exception): continue
+                info = match_data["info"]
+                p = next((p for p in info["participants"] if p["puuid"] == puuid), None)
+                if not p: continue
+                
+                # Timestamp of the game end
+                ts = int((info.get("gameEndTimestamp") or (info.get("gameCreation", 0) + info["gameDuration"] * 1000)) / 1000)
+                
+                # Add snapshot BEFORE this game result
+                # But actually it's easier to add snapshot AFTER this game result
+                # and work backwards.
+                snapshots.append((puuid, tier, division, curr_lp, curr_wins, curr_losses, ts))
+                
+                # Reverse the result for the next (older) game
+                if p["win"]:
+                    curr_lp -= 20
+                    curr_wins -= 1
+                else:
+                    curr_lp += 17
+                    curr_losses -= 1
+                
+                # Clamp LP
+                if curr_lp < 0: curr_lp = 0
+                if curr_lp > 100: curr_lp = 100 # Simplification: doesn't handle tier demotion/promotion backfill perfectly
+            
+            # Save all at once
+            await db.record_many_lp_snapshots(snapshots)
+        except Exception as e:
+            print(f"Backfill failed: {e}")
+
 @router.get("/summoner/{game_name}/{tag_line}")
 async def get_summoner(game_name: str, tag_line: str):
     url = f"https://{RIOT_ROUTING}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{game_name}/{tag_line}"
@@ -44,8 +96,13 @@ async def get_profile(puuid: str):
             return {"tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0}
         return {"tier": e["tier"], "division": e["rank"], "lp": e["leaguePoints"], "wins": e["wins"], "losses": e["losses"]}
     ranked_data = entry_data(ranked)
-    # Fire-and-forget LP snapshot — doesn't block the response
+    # Fire-and-forget LP snapshot & backfill — doesn't block the response
     asyncio.create_task(db.record_lp_snapshot(
+        puuid,
+        ranked_data["tier"], ranked_data["division"],
+        ranked_data["lp"], ranked_data["wins"], ranked_data["losses"],
+    ))
+    asyncio.create_task(backfill_if_needed(
         puuid,
         ranked_data["tier"], ranked_data["division"],
         ranked_data["lp"], ranked_data["wins"], ranked_data["losses"],

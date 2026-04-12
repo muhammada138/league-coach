@@ -43,10 +43,10 @@ def init_db() -> None:
 # Write
 # ---------------------------------------------------------------------------
 
-def _record_sync(puuid: str, tier: str, division: str, lp: int, wins: int, losses: int) -> None:
+def _record_sync(puuid: str, tier: str, division: str, lp: int, wins: int, losses: int, timestamp: int = None) -> None:
     if tier == "UNRANKED":
         return
-    now = int(time.time())
+    now = timestamp or int(time.time())
     with sqlite3.connect(DB_PATH) as conn:
         row = conn.execute(
             "SELECT tier, division, lp, timestamp FROM lp_history "
@@ -59,8 +59,8 @@ def _record_sync(puuid: str, tier: str, division: str, lp: int, wins: int, losse
             # Skip if rank hasn't changed at all
             if last_tier == tier and last_div == division and last_lp == lp:
                 return
-            # Rate-limit: no more than one write per 5 minutes per player
-            if (now - last_ts) < 300:
+            # Rate-limit: no more than one write per 5 minutes per player (unless timestamp is manual)
+            if not timestamp and (now - last_ts) < 300:
                 return
 
         conn.execute(
@@ -72,9 +72,25 @@ def _record_sync(puuid: str, tier: str, division: str, lp: int, wins: int, losse
 
 
 async def record_lp_snapshot(
-    puuid: str, tier: str, division: str, lp: int, wins: int, losses: int
+    puuid: str, tier: str, division: str, lp: int, wins: int, losses: int, timestamp: int = None
 ) -> None:
-    await asyncio.to_thread(_record_sync, puuid, tier, division, lp, wins, losses)
+    await asyncio.to_thread(_record_sync, puuid, tier, division, lp, wins, losses, timestamp)
+
+
+def _record_many_sync(snapshots: list[tuple]) -> None:
+    """snapshots: list of (puuid, tier, division, lp, wins, losses, timestamp)"""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.executemany(
+            "INSERT INTO lp_history (puuid, tier, division, lp, wins, losses, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            snapshots,
+        )
+        conn.commit()
+
+
+async def record_many_lp_snapshots(snapshots: list[tuple]) -> None:
+    if not snapshots: return
+    await asyncio.to_thread(_record_many_sync, snapshots)
 
 
 # ---------------------------------------------------------------------------
@@ -99,3 +115,16 @@ def _history_sync(puuid: str, days: int) -> list[dict]:
 
 async def get_lp_history(puuid: str, days: int = 30) -> list[dict]:
     return await asyncio.to_thread(_history_sync, puuid, days)
+
+
+def _has_history_sync(puuid: str) -> bool:
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM lp_history WHERE puuid = ? LIMIT 1",
+            (puuid,),
+        ).fetchone()
+    return row is not None
+
+
+async def has_history(puuid: str) -> bool:
+    return await asyncio.to_thread(_has_history_sync, puuid)
