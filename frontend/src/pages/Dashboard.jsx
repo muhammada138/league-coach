@@ -619,8 +619,8 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
             <span className="text-slate-400 dark:text-white/30 font-normal">{p.tagLine ? `#${p.tagLine}` : ""}</span>
           </span>
           {rankLabel ? (
-            <div className="flex items-center gap-1 mt-0.5 text-[10px] text-slate-400 dark:text-white/30 leading-none">
-              <span>{rankLabel}</span>
+            <div className="flex items-center gap-1 mt-0.5 text-[10px] leading-none">
+              <span className={TIER_COLORS[stats?.tier] ?? "text-slate-400 dark:text-white/30"}>{rankLabel}</span>
               {stats?.last5?.length > 0 && (
                 <>
                   <span>·</span>
