@@ -148,15 +148,20 @@ def _player_features(stats: dict, champion_id: int) -> np.ndarray:
     wins = stats.get("wins", 0)
     losses = stats.get("losses", 0)
 
-    # Completely unknown / hidden profile → neutral baseline
-    if not stats or (tier == "UNRANKED" and wins == 0 and losses == 0):
+    # Completely unknown / hidden profile (streamer mode — no data at all) → neutral baseline
+    if not stats or (tier == "UNRANKED" and wins == 0 and losses == 0 and not stats.get("last5")):
         return _NEUTRAL.copy()
 
     # 1. Rank score with LP  (0 → 1)
-    tier_val   = TIER_SCORE.get(tier, 3.5) if tier != "UNRANKED" else 3.5
-    div_val    = DIV_BONUS.get(stats.get("division", ""), 0.0)
-    lp_bonus   = (stats.get("lp", 0) / 100.0) * 0.25   # up to +0.25 within a tier
-    rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.0)
+    if tier == "UNRANKED":
+        # Unranked but has recent game data — treat as low Iron for rank purposes
+        # (don't penalise too hard; they may be a smurf, but form score will reflect that)
+        rank_score = 1.5 / MAX_RANK
+    else:
+        tier_val   = TIER_SCORE.get(tier, 3.5)
+        div_val    = DIV_BONUS.get(stats.get("division", ""), 0.0)
+        lp_bonus   = (stats.get("lp", 0) / 100.0) * 0.25   # up to +0.25 within a tier
+        rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.0)
 
     # 2. Season WR with games-played confidence weighting
     #    Smurf / new accounts are regressed toward 0.5 until 200 games
