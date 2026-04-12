@@ -8,7 +8,7 @@ from ..services.riot import (
     _compute_perf_score, _compute_diffed_lane
 )
 from ..services.groq import get_coaching_feedback, ask_coach_question
-from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, enrich_semaphore, CACHE_VERSION
+from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, CACHE_VERSION
 from ..models.requests import LiveEnrichRequest, AskRequest, WinPredictRequest
 from ..services import win_predictor
 from ..services import db
@@ -364,62 +364,100 @@ async def get_live_game(puuid: str):
 @router.post("/live-enrich")
 async def live_enrich(body: LiveEnrichRequest):
     # Map live queueId → match history queue filter and rank entry type
-    # For ranked modes use that queue's rank entry; for non-ranked fall back to solo rank as skill proxy
     _RANKED_RANK_TYPE = {420: "RANKED_SOLO_5x5", 440: "RANKED_FLEX_SR"}
     rank_type = _RANKED_RANK_TYPE.get(body.queue_id, "RANKED_SOLO_5x5")
     is_ranked_queue = body.queue_id in _RANKED_RANK_TYPE
-    match_queue_filter = body.queue_id  # always fetch from the same queue the game is in
+    match_queue_filter = body.queue_id
+
+    # Single semaphore shared across all concurrent players — caps total simultaneous
+    # match-detail fetches so we stay within the dev key 100 req/2 min limit.
+    _match_sem = asyncio.Semaphore(8)
 
     async def enrich_one(puuid: str):
         cache_key = f"{puuid}:{body.queue_id}"
         cached = enriched_cache.get(cache_key)
         if cached: return cached
 
-        base = {"puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0, "last5": [], "avg_score": 50, "main_champs": [], "streak": 0}
+        base = {
+            "puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0,
+            "wins": 0, "losses": 0, "last5": [], "avg_score": 50,
+            "recent_wr": 0.5, "champ_wr_map": {}, "main_champs": [], "streak": 0,
+        }
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
+            async with httpx.AsyncClient(timeout=25.0) as client:
                 entries, match_ids = await asyncio.gather(
                     riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                    riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
+                    riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
+
+                # Rank lookup — ranked queues use the matching entry; normals fall back to solo rank as skill proxy
                 if not isinstance(entries, Exception):
-                    # For ranked queues use the matching rank entry; for normals/ARAM fall back to solo rank as skill proxy
                     ranked = next((e for e in entries if e.get("queueType") == rank_type), None)
                     if not ranked and not is_ranked_queue:
                         ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
                     if ranked:
-                        base.update({"tier": ranked["tier"], "division": ranked.get("rank", ""), "lp": ranked.get("leaguePoints", 0), "wins": ranked.get("wins", 0), "losses": ranked.get("losses", 0)})
+                        base.update({
+                            "tier": ranked["tier"], "division": ranked.get("rank", ""),
+                            "lp": ranked.get("leaguePoints", 0),
+                            "wins": ranked.get("wins", 0), "losses": ranked.get("losses", 0),
+                        })
 
                 if not isinstance(match_ids, Exception) and match_ids:
-                    # Use module-level semaphore to prevent heavy fan-out rate limits
-                    async with enrich_semaphore:
-                        match_datas = await asyncio.gather(*[
-                            riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
-                            for mid in match_ids
-                        ], return_exceptions=True)
-                    last5, champ_ids = [], []
+                    # Rate-limited match detail fetches — each call acquires the shared semaphore
+                    async def _fetch(mid):
+                        async with _match_sem:
+                            return await riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
+
+                    match_datas = await asyncio.gather(*[_fetch(mid) for mid in match_ids], return_exceptions=True)
+
+                    recent_games, champ_ids = [], []
+                    # champ_wr_map: {championId_str: [wins, total]}
+                    champ_wr_map: dict[str, list[int]] = {}
+
                     for md in match_datas:
                         if isinstance(md, Exception): continue
                         participants = md["info"]["participants"]
                         player = next((p for p in participants if p.get("puuid") == puuid), None)
                         if not player: continue
+
                         score = float(_compute_perf_score(player, participants, None, md["info"]["gameDuration"]))
-                        last5.append({"win": player["win"], "score": round(score, 1)})
-                        champ_ids.append(str(player.get("championId", "")))
-                    avg_score = round(sum(g["score"] for g in last5) / len(last5), 1) if last5 else 50
-                    streak = 0
-                    if last5:
-                        direction = 1 if last5[0]["win"] else -1
-                        for g in last5:
-                            if (g["win"] and direction == 1) or (not g["win"] and direction == -1): streak += direction
-                            else: break
-                    from collections import Counter as _Counter
-                    main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
-                    base.update({"last5": last5, "avg_score": avg_score, "main_champs": main_champs, "streak": streak})
-        except Exception: pass
+                        won = bool(player["win"])
+                        recent_games.append({"win": won, "score": round(score, 1)})
+
+                        cid = str(player.get("championId", ""))
+                        champ_ids.append(cid)
+                        if cid not in champ_wr_map:
+                            champ_wr_map[cid] = [0, 0]
+                        champ_wr_map[cid][1] += 1
+                        if won:
+                            champ_wr_map[cid][0] += 1
+
+                    if recent_games:
+                        avg_score  = round(sum(g["score"] for g in recent_games) / len(recent_games), 1)
+                        recent_wr  = round(sum(1 for g in recent_games if g["win"]) / len(recent_games), 3)
+                        streak = 0
+                        direction = 1 if recent_games[0]["win"] else -1
+                        for g in recent_games:
+                            if (g["win"] and direction == 1) or (not g["win"] and direction == -1):
+                                streak += direction
+                            else:
+                                break
+                        from collections import Counter as _Counter
+                        main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
+                        base.update({
+                            "last5": recent_games[:5],   # first 5 shown as dots in UI
+                            "avg_score": avg_score,
+                            "recent_wr": recent_wr,
+                            "champ_wr_map": champ_wr_map,
+                            "main_champs": main_champs,
+                            "streak": streak,
+                        })
+        except Exception:
+            pass
         enriched_cache.set(cache_key, base)
         return base
+
     results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])
     return {r["puuid"]: r for r in results}
 

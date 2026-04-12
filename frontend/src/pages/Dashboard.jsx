@@ -699,7 +699,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
               </div>
               <div className="flex justify-between px-10">
                 <span className="text-[9px] text-blue-300 dark:text-blue-400/60 font-semibold">Blue</span>
-                <span className="text-[9px] text-slate-400 dark:text-white/20">rank · form · WR · champ · streak</span>
+                <span className="text-[9px] text-slate-400 dark:text-white/20">rank · form · recent WR · champ WR · streak</span>
                 <span className="text-[9px] text-red-300 dark:text-red-400/60 font-semibold">Red</span>
               </div>
             </>
