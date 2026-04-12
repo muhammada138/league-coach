@@ -1449,21 +1449,10 @@ function SummaryStrip({ analysis, games }) {
 }
 
 // ── Teammates Content ───────────────────────────────────────────────────────
-function TeammatesContent({ games, backendTeammates, loading }) {
+function TeammatesContent({ games }) {
   const [tab, setTab] = useState("with");
   
-  if (loading) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-10">
-        <div className="w-5 h-5 rounded-full border-2 border-t-[#c89b3c] border-[#c89b3c]/20 animate-spin" />
-        <p className="text-xs text-slate-400 dark:text-white/25 text-center">Analyzing past 30 days...</p>
-      </div>
-    );
-  }
-
-  const rows = backendTeammates 
-    ? backendTeammates[tab] 
-    : aggregateTeammates(games, tab).filter((r) => r.games > 1);
+  const rows = aggregateTeammates(games, tab).filter((r) => r.games >= 2);
 
   return (
     <div className="flex flex-col h-full">
@@ -1676,8 +1665,6 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
           <div className="lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
             <TeammatesContent 
               games={games} 
-              backendTeammates={teammatesData}
-              loading={teammatesLoading}
             />
           </div>
         )}
@@ -1756,18 +1743,7 @@ export default function Dashboard() {
     getLpHistory(resolvedPuuid, queue).then(setLpHistory).catch(() => {});
   }, [resolvedPuuid, queueTab]);
 
-  const [teammatesData, setTeammatesData] = useState(null);
-  const [teammatesLoading, setTeammatesLoading] = useState(false);
-
-  // Fetch 30-day teammate patterns when needed
-  useEffect(() => {
-    if (!resolvedPuuid || teammatesData) return;
-    setTeammatesLoading(true);
-    getTeammates(resolvedPuuid)
-      .then(setTeammatesData)
-      .catch(() => setTeammatesData({ with: [], against: [] }))
-      .finally(() => setTeammatesLoading(false));
-  }, [resolvedPuuid, teammatesData]);
+  // Teammates and opponents data is now aggregated locally from 'games' prop in RightPanel
 
   useEffect(() => {
     if (!gameName || !tagLine) { navigate("/"); return; }
@@ -2095,8 +2071,6 @@ export default function Dashboard() {
                 lobbyAverages={analysis.lobbyAverages}
                 deltas={analysis.deltas}
                 games={[...analysis.games, ...extraGames]}
-                teammatesData={teammatesData}
-                teammatesLoading={teammatesLoading}
                 playerContext={[
                   `Player: ${gameName}`,
                   `Role: ${analysis.mostPlayedPosition}`,
