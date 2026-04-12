@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 import httpx
 import asyncio
-import time
 from collections import Counter
 from typing import List
 from ..services.riot import (
@@ -9,7 +8,7 @@ from ..services.riot import (
     _compute_perf_score, _compute_diffed_lane
 )
 from ..services.groq import get_coaching_feedback, ask_coach_question
-from ..state import RIOT_REGION, RIOT_ROUTING, _cache, _CACHE_TTL
+from ..state import RIOT_REGION, RIOT_ROUTING, route_cache
 from ..models.requests import LiveEnrichRequest, AskRequest
 
 router = APIRouter()
@@ -19,15 +18,6 @@ NUMERIC_STATS = [
     "visionScore", "totalDamageDealtToChampions", "goldEarned",
     "wardsPlaced", "wardsKilled",
 ]
-
-def _cache_get(key: str):
-    entry = _cache.get(key)
-    if entry and time.time() - entry[1] < _CACHE_TTL:
-        return entry[0]
-    return None
-
-def _cache_set(key: str, value):
-    _cache[key] = (value, time.time())
 
 @router.get("/summoner/{game_name}/{tag_line}")
 async def get_summoner(game_name: str, tag_line: str):
@@ -61,7 +51,7 @@ async def get_profile(puuid: str):
 @router.get("/analyze/{puuid}")
 async def analyze(puuid: str, game_name: str = "Summoner"):
     cache_key = f"analyze:{puuid}"
-    cached = _cache_get(cache_key)
+    cached = route_cache.get(cache_key)
     if cached is not None: return cached
     async with httpx.AsyncClient(timeout=30.0) as client:
         queue_priorities = [420, 440, 400]
@@ -174,14 +164,14 @@ async def analyze(puuid: str, game_name: str = "Summoner"):
         "deltas": {stat: round(player_avgs[stat] - lobby_avgs_agg[stat], 2) for stat in NUMERIC_STATS} | {"cspm": round(player_cspm - lobby_cspm, 2), "kda": round(player_kda - lobby_kda, 2)},
         "coaching": coaching, "games": game_summaries,
     }
-    _cache_set(cache_key, result)
+    route_cache.set(cache_key, result)
     return result
 
 @router.get("/history/{puuid}")
 async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 420):
     count = min(count, 10)
     cache_key = f"history:{puuid}:{start}:{count}:{queue}"
-    cached = _cache_get(cache_key)
+    cached = route_cache.get(cache_key)
     if cached is not None: return cached
     async with httpx.AsyncClient(timeout=30.0) as client:
         match_ids = await riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?start={start}&count={count}&queue={queue}")
@@ -213,7 +203,7 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
             "teammates": [{"gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown", "puuid": p.get("puuid", "")} for p in participants if p.get("puuid") != puuid and p.get("teamId") == player_team_id],
             "opponents": [{"gameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown", "puuid": p.get("puuid", "")} for p in participants if p.get("puuid") != puuid and p.get("teamId") != player_team_id],
         })
-    _cache_set(cache_key, games)
+    route_cache.set(cache_key, games)
     return games
 
 @router.get("/match/{match_id}/scoreboard")
