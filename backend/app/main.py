@@ -1,13 +1,24 @@
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routes import api
 from .state import ALLOWED_ORIGINS
+from .services import win_predictor
+from .services.db import init_db
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="League Coach API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    win_predictor.load_or_train_model()
+    yield
+
+
+app = FastAPI(title="League Coach API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

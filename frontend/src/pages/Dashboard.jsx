@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich } from "../api/riot";
+import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory } from "../api/riot";
 import { readSaved, writeSaved } from "../components/Navbar";
 
 const TIER_COLORS = {
@@ -407,7 +407,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
         <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">
           LP Trend · Last {games.length}
         </span>
-        <span className="text-xs font-bold text-slate-700 dark:text-white/80 transition-colors duration-200">
+        <span className={`text-xs font-bold ${TIER_COLORS[profile?.tier] ?? "text-slate-700 dark:text-white/80"} transition-colors duration-200`}>
           {hoveredIdx !== null ? `${rankLabel} · ${series[hoveredIdx]} LP` : `${rankLabel} · ${currentLP} LP`}
         </span>
       </div>
@@ -521,13 +521,11 @@ function LaneIcon({ lane }) {
 }
 
 // ── Live Game Banner ────────────────────────────────────────────────────────
-const TIER_SCORE = { IRON: 1, BRONZE: 2, SILVER: 3, GOLD: 4, PLATINUM: 5, EMERALD: 6, DIAMOND: 7, MASTER: 8, GRANDMASTER: 9, CHALLENGER: 10 };
-const DIV_BONUS  = { I: 0.75, II: 0.5, III: 0.25, IV: 0 };
-
 function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
   const [champMap, setChampMap] = useState(null);
   const [elapsed, setElapsed] = useState(liveGame.gameLength ?? 0);
   const [liveStats, setLiveStats] = useState(null);
+  const [predictor, setPredictor] = useState(null);
 
   useEffect(() => { getChampIdMap(ddVersion).then(setChampMap); }, [ddVersion]);
   useEffect(() => {
@@ -547,47 +545,27 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
     }
   }, [liveGame]);
 
+  // Call backend ML win predictor once we have both live stats and champion names
+  useEffect(() => {
+    if (!liveStats || !champMap) return;
+    const participants = liveGame.participants
+      .filter((p) => p.puuid)
+      .map((p) => ({
+        puuid: p.puuid,
+        championId: p.championId,
+        teamId: p.teamId,
+      }));
+    if (participants.length === 0) return;
+    getWinPredict(participants, liveStats)
+      .then(setPredictor)
+      .catch(() => {});
+  }, [liveStats, champMap, liveGame]);
+
   const mins = Math.floor(elapsed / 60);
   const secs = String(elapsed % 60).padStart(2, "0");
   const queueLabel = QUEUE_LABELS[liveGame.queueId] ?? liveGame.gameMode ?? "Live Game";
   const blueTeam = liveGame.participants.filter((p) => p.teamId === 100);
   const redTeam  = liveGame.participants.filter((p) => p.teamId === 200);
-
-  // Win predictor: rank 40% + recent form 30% + season WR 20% + champ comfort 10% + streak ±5%
-  const predictor = liveStats ? (() => {
-    const MAX_RANK = 10.75; // Challenger I
-    const playerScore = (p) => {
-      const s = liveStats[p.puuid];
-      // Treat missing data or completely hidden/unranked profiles as a neutral 50% baseline
-      if (!s || (s.tier === "UNRANKED" && s.wins === 0 && s.losses === 0)) return 0.5;
-
-      // 1. Rank (40%) - normalized 0→1
-      const rankRaw = s.tier === "UNRANKED" ? 3.5 : (TIER_SCORE[s.tier] ?? 3.5) + (DIV_BONUS[s.division] ?? 0);
-      const rankNorm = rankRaw / MAX_RANK;
-
-      // 2. Season WR (20%)
-      const total = s.wins + s.losses;
-      const seasonWR = total > 0 ? s.wins / total : 0.5;
-
-      // 3. Recent form - avg perf score of last 5 games (30%)
-      const formNorm = (s.avg_score ?? 50) / 100;
-
-      // 4. Champ comfort - is the player on a champ they've played recently? (10%)
-      const onMainChamp = (s.main_champs ?? []).includes(String(p.championId));
-      const champComfort = onMainChamp ? 0.10 : 0.0;
-
-      // 5. Streak momentum (±5%) - capped at ±3 games
-      const streakClamped = Math.max(-3, Math.min(3, s.streak ?? 0));
-      const streakBonus = (streakClamped / 3) * 0.05;
-
-      return rankNorm * 0.40 + seasonWR * 0.20 + formNorm * 0.30 + champComfort + streakBonus;
-    };
-    const blueAvg = blueTeam.reduce((sum, p) => sum + playerScore(p), 0) / Math.max(blueTeam.length, 1);
-    const redAvg  = redTeam.reduce((sum, p) => sum + playerScore(p), 0) / Math.max(redTeam.length, 1);
-    const total = blueAvg + redAvg;
-    const bluePct = Math.round(blueAvg / total * 100);
-    return { bluePct, redPct: 100 - bluePct };
-  })() : null;
 
   const renderPlayer = (p) => {
     const isMe = p.puuid === puuid;
@@ -718,7 +696,87 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
 }
 
 // ── Profile Card ───────────────────────────────────────────────────────────
-function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked" }) {
+// ── 30-Day LP History Graph ─────────────────────────────────────────────────
+const TIER_BASE_LP = { IRON: 0, BRONZE: 400, SILVER: 800, GOLD: 1200, PLATINUM: 1600, EMERALD: 2000, DIAMOND: 2400, MASTER: 2800, GRANDMASTER: 2800, CHALLENGER: 2800 };
+const DIV_BASE_LP  = { I: 300, II: 200, III: 100, IV: 0 };
+const toAbsLP = (tier, div, lp) => (TIER_BASE_LP[tier] ?? 1200) + (DIV_BASE_LP[div] ?? 0) + (lp || 0);
+
+function LpHistoryGraph({ history }) {
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+  if (!history || history.length < 2) return null;
+
+  const series = history.map((h) => ({ ...h, absLp: toAbsLP(h.tier, h.division, h.lp) }));
+
+  const W = 260, H = 56, padX = 8, padY = 8;
+  const innerW = W - 2 * padX, innerH = H - 2 * padY;
+
+  const minTs   = series[0].timestamp;
+  const maxTs   = series[series.length - 1].timestamp;
+  const allLp   = series.map((s) => s.absLp);
+  const minAbsLp = Math.min(...allLp);
+  const maxAbsLp = Math.max(...allLp);
+  const lpRange  = Math.max(maxAbsLp - minAbsLp, 200);
+
+  const toX = (ts) => maxTs === minTs ? padX + innerW / 2 : padX + ((ts - minTs) / (maxTs - minTs)) * innerW;
+  const toY = (v)  => padY + innerH - ((v - minAbsLp) / lpRange) * innerH;
+
+  const pathD = series.map((s, i) => `${i === 0 ? "M" : "L"} ${toX(s.timestamp).toFixed(1)} ${toY(s.absLp).toFixed(1)}`).join(" ");
+  const last  = series[series.length - 1];
+  const first = series[0];
+  const lineColor = last.absLp >= first.absLp ? "#10b981" : "#ef4444";
+  const areaD = `${pathD} L ${toX(last.timestamp).toFixed(1)} ${(padY + innerH).toFixed(1)} L ${toX(first.timestamp).toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
+
+  const hovered = hoveredIdx !== null ? series[hoveredIdx] : null;
+  const display = hovered ?? last;
+  const rankLabel = (s) =>
+    s.tier === "UNRANKED" ? "Unranked"
+      : `${s.tier.charAt(0) + s.tier.slice(1).toLowerCase()} ${s.division} · ${s.lp} LP`;
+  const dateLabel = (ts) => new Date(ts * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  return (
+    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06]">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">
+          LP Trend · Last 30d
+        </span>
+        <span className={`text-xs font-bold ${TIER_COLORS[display.tier] ?? "text-slate-700 dark:text-white/80"} transition-colors duration-200`}>
+          {rankLabel(display)}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
+        <defs>
+          <linearGradient id="lpHistFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={lineColor} stopOpacity="0.18" />
+            <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={areaD} fill="url(#lpHistFill)" />
+        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        {series.map((s, i) => {
+          const cx = toX(s.timestamp);
+          const cy = toY(s.absLp);
+          const hov = hoveredIdx === i;
+          return (
+            <g key={i} transform={`translate(${cx.toFixed(1)},${cy.toFixed(1)})`}
+              onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)}>
+              <circle r="7" fill={lineColor} fillOpacity={hov ? 0.15 : 0}
+                style={{ transition: "fill-opacity 0.15s" }} />
+              <circle r={hov ? 3.5 : 2} fill={lineColor} stroke="white" strokeWidth="1.2"
+                style={{ transition: "r 0.15s" }} />
+            </g>
+          );
+        })}
+      </svg>
+      <div className="flex justify-between mt-0.5">
+        <span className="text-[9px] text-slate-400 dark:text-white/20">{dateLabel(minTs)}</span>
+        {hovered && <span className="text-[9px] text-slate-400 dark:text-white/20">{dateLabel(hovered.timestamp)}</span>}
+        <span className="text-[9px] text-slate-400 dark:text-white/20">Now</span>
+      </div>
+    </div>
+  );
+}
+
+function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked" }) {
   const displayProfile = queueTab === "flex" && profile.flex
     ? { ...profile, ...profile.flex }
     : profile;
@@ -828,7 +886,10 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
           </div>
         </div>
       </div>
-      {games && games.length > 0 && <LPGraph games={games} profile={displayProfile} puuid={puuid} cachePrefix={queueTab === "flex" ? "lp_flex" : "lp"} />}
+      {lpHistory && lpHistory.length >= 2
+        ? <LpHistoryGraph history={lpHistory} />
+        : games && games.length > 0 && <LPGraph games={games} profile={displayProfile} puuid={puuid} cachePrefix={queueTab === "flex" ? "lp_flex" : "lp"} />
+      }
     </div>
   );
 }
@@ -1602,9 +1663,11 @@ export default function Dashboard() {
 
   const { state } = useLocation();
   const navigate = useNavigate();
+  const gameCount = state?.gameCount ?? 10;
 
   const [resolvedPuuid, setResolvedPuuid] = useState(state?.puuid ?? null);
   const [profile, setProfile] = useState(null);
+  const [lpHistory, setLpHistory] = useState([]);
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1654,6 +1717,12 @@ export default function Dashboard() {
     return puuidResolved;
   };
 
+  // Fetch LP history whenever the resolved puuid changes
+  useEffect(() => {
+    if (!resolvedPuuid) return;
+    getLpHistory(resolvedPuuid).then(setLpHistory).catch(() => {});
+  }, [resolvedPuuid]);
+
   useEffect(() => {
     if (!gameName || !tagLine) { navigate("/"); return; }
     window.scrollTo(0, 0);
@@ -1661,6 +1730,7 @@ export default function Dashboard() {
     setAnalysisLoading(true);
     setProfile(null);
     setAnalysis(null);
+    setLpHistory([]);
     setError("");
     setExpandedMatchId(null);
     setScoreboard(null);
@@ -1669,7 +1739,7 @@ export default function Dashboard() {
     doFetch(state?.puuid)
       .then((puuid) => {
         setLoading(false); // profile card renders immediately
-        return analyzeSummoner(puuid, gameName);
+        return analyzeSummoner(puuid, gameName, gameCount);
       })
       .then((anal) => {
         setAnalysis(anal);
@@ -1690,7 +1760,7 @@ export default function Dashboard() {
     setExpandedMatchId(null);
     setScoreboard(null);
     doFetch(resolvedPuuid)
-      .then((puuid) => analyzeSummoner(puuid, gameName))
+      .then((puuid) => analyzeSummoner(puuid, gameName, gameCount))
       .then((anal) => {
         setAnalysis(anal);
         setAnalysisLoading(false);
@@ -1834,6 +1904,7 @@ export default function Dashboard() {
               games={queueTab === "flex"
                 ? (tabGames.flex ?? [])
                 : (analysis ? [...analysis.games, ...extraGames] : [])}
+              lpHistory={queueTab === "ranked" ? lpHistory : []}
               ddVersion={ddVersion}
               onLiveCheck={handleLiveCheck}
               liveStatus={liveStatus}
