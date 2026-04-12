@@ -36,8 +36,8 @@ export const askCoach = (question, context, history) =>
 export const getLiveGame = (puuid) =>
   api.get(`/live/${puuid}`).then((r) => r.data);
 
-export const getLiveEnrich = (puuids) =>
-  api.post("/live-enrich", { puuids }).then((r) => r.data);
+export const getLiveEnrich = (puuids, queueId = 420) =>
+  api.post("/live-enrich", { puuids, queue_id: queueId }).then((r) => r.data);
 
 export const getWinPredict = (participants, live_stats) =>
   api.post("/win-predict", { participants, live_stats }).then((r) => r.data);

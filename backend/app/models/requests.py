@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 
 class LiveEnrichRequest(BaseModel):
     puuids: List[str]
+    queue_id: int = 420  # live game queueId — determines which match history queue to pull
 
 class WinPredictParticipant(BaseModel):
     puuid: str
