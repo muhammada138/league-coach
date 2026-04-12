@@ -892,10 +892,7 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVe
           </div>
         </div>
       </div>
-      {lpHistory && lpHistory.length >= 2
-        ? <LpHistoryGraph history={lpHistory} />
-        : games && games.length > 0 && <LPGraph games={games} profile={displayProfile} puuid={puuid} cachePrefix={queueTab === "flex" ? "lp_flex" : "lp"} />
-      }
+      {games && games.length > 0 && <LPGraph games={games} profile={displayProfile} puuid={puuid} cachePrefix={queueTab === "flex" ? "lp_flex" : "lp"} />}
     </div>
   );
 }
