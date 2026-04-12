@@ -1919,7 +1919,7 @@ export default function Dashboard() {
               games={queueTab === "flex"
                 ? (tabGames.flex ?? [])
                 : (analysis ? [...analysis.games, ...extraGames] : [])}
-              lpHistory={queueTab === "ranked" ? lpHistory : []}
+              lpHistory={lpHistory}
               ddVersion={ddVersion}
               onLiveCheck={handleLiveCheck}
               liveStatus={liveStatus}
