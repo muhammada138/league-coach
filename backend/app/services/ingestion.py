@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 _sem = asyncio.Semaphore(1)
 
 # Seconds to sleep after every successful Riot request
-_CALL_DELAY = 2.0
+_CALL_DELAY = 1.25
 
 # Ladder tiers cycled in order; restarts from the top when exhausted
 _SEED_TIERS = [
