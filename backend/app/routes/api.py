@@ -475,6 +475,16 @@ async def win_predict(body: WinPredictRequest):
     participants = [p.model_dump() for p in body.participants]
     return win_predictor.predict(participants, body.live_stats)
 
+@router.get("/ingest/status")
+async def ingest_status():
+    return await db.get_ingestion_status()
+
+
+@router.post("/ingest/toggle")
+async def ingest_toggle():
+    return await db.toggle_ingestion()
+
+
 @router.post("/ask")
 async def ask_coach(body: AskRequest):
     system_prompt = f"You are a League of Legends coach. Be casual, direct, human. Bold stats. 2-3 sentences max.\n\nPlayer context:\n{body.context}"

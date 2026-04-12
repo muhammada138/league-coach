@@ -47,3 +47,9 @@ export const getLpHistory = (puuid, queue = 'RANKED_SOLO_5x5') =>
 
 export const getTeammates = (puuid) =>
   api.get(`/teammates/${puuid}`).then((r) => r.data);
+
+export const getIngestStatus = () =>
+  api.get("/ingest/status").then((r) => r.data);
+
+export const toggleIngest = () =>
+  api.post("/ingest/toggle").then((r) => r.data);

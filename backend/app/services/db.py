@@ -45,6 +45,30 @@ def init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_lp_puuid_q_ts ON lp_history(puuid, queue, timestamp)"
         )
+
+        # --- ML training data tables ---
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS training_matches (
+                match_id   TEXT    PRIMARY KEY,
+                blue_feats TEXT    NOT NULL,
+                red_feats  TEXT    NOT NULL,
+                blue_won   INTEGER NOT NULL,
+                timestamp  INTEGER NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ingestion_status (
+                id              INTEGER PRIMARY KEY,
+                processed_count INTEGER NOT NULL DEFAULT 0,
+                total_target    INTEGER NOT NULL DEFAULT 50000,
+                is_paused       INTEGER NOT NULL DEFAULT 1
+            )
+        """)
+        # Ensure singleton status row exists
+        conn.execute("""
+            INSERT OR IGNORE INTO ingestion_status (id, processed_count, total_target, is_paused)
+            VALUES (1, 0, 50000, 1)
+        """)
         conn.commit()
 
 
@@ -137,3 +161,77 @@ def _has_history_sync(puuid: str) -> bool:
 
 async def has_history(puuid: str) -> bool:
     return await asyncio.to_thread(_has_history_sync, puuid)
+
+
+# ---------------------------------------------------------------------------
+# Ingestion status
+# ---------------------------------------------------------------------------
+
+def _get_ingestion_status_sync() -> dict:
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute(
+            "SELECT processed_count, total_target, is_paused FROM ingestion_status WHERE id = 1"
+        ).fetchone()
+    if row is None:
+        return {"processed_count": 0, "total_target": 50000, "is_paused": True}
+    return {"processed_count": row[0], "total_target": row[1], "is_paused": bool(row[2])}
+
+
+def _toggle_ingestion_sync() -> dict:
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "UPDATE ingestion_status SET is_paused = CASE WHEN is_paused = 1 THEN 0 ELSE 1 END WHERE id = 1"
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT processed_count, total_target, is_paused FROM ingestion_status WHERE id = 1"
+        ).fetchone()
+    return {"processed_count": row[0], "total_target": row[1], "is_paused": bool(row[2])}
+
+
+async def get_ingestion_status() -> dict:
+    return await asyncio.to_thread(_get_ingestion_status_sync)
+
+
+async def toggle_ingestion() -> dict:
+    return await asyncio.to_thread(_toggle_ingestion_sync)
+
+
+# ---------------------------------------------------------------------------
+# Training matches
+# ---------------------------------------------------------------------------
+
+def _has_training_match_sync(match_id: str) -> bool:
+    with sqlite3.connect(DB_PATH) as conn:
+        return conn.execute(
+            "SELECT 1 FROM training_matches WHERE match_id = ?", (match_id,)
+        ).fetchone() is not None
+
+
+def _save_training_match_sync(
+    match_id: str, blue_feats: list, red_feats: list, blue_won: bool
+) -> None:
+    import json as _json
+    with sqlite3.connect(DB_PATH) as conn:
+        # INSERT OR IGNORE so duplicates are silently skipped
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO training_matches (match_id, blue_feats, red_feats, blue_won, timestamp) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (match_id, _json.dumps(blue_feats), _json.dumps(red_feats), int(blue_won), int(time.time())),
+        )
+        if cur.rowcount:
+            # Only increment counter when a new row was actually inserted
+            conn.execute(
+                "UPDATE ingestion_status SET processed_count = processed_count + 1 WHERE id = 1"
+            )
+        conn.commit()
+
+
+async def has_training_match(match_id: str) -> bool:
+    return await asyncio.to_thread(_has_training_match_sync, match_id)
+
+
+async def save_training_match(
+    match_id: str, blue_feats: list, red_feats: list, blue_won: bool
+) -> None:
+    await asyncio.to_thread(_save_training_match_sync, match_id, blue_feats, red_feats, blue_won)
