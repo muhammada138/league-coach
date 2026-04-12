@@ -9,14 +9,17 @@ logger = logging.getLogger(__name__)
 
 async def riot_get(client: httpx.AsyncClient, url: str) -> dict:
     async with api_semaphore:
-        response = await client.get(url, headers=RIOT_HEADERS)
-        if response.status_code == 429:
-            retry_after = int(response.headers.get("Retry-After", 1))
-            await asyncio.sleep(retry_after + 0.2)
+        for attempt in range(3):
             response = await client.get(url, headers=RIOT_HEADERS)
-        if response.status_code != 200:
-            raise HTTPException(status_code=response.status_code, detail=response.text)
-        return response.json()
+            if response.status_code == 429:
+                retry_after = int(response.headers.get("Retry-After", 1))
+                logger.warning("Riot API 429 (attempt %d). Retrying after %d s", attempt + 1, retry_after)
+                await asyncio.sleep(retry_after + 0.5 * (attempt + 1))
+                continue
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail=response.text)
+            return response.json()
+        raise HTTPException(status_code=429, detail="Too many requests after multiple retries")
 
 async def get_cached_rank(client: httpx.AsyncClient, puuid: str):
     if not puuid:
