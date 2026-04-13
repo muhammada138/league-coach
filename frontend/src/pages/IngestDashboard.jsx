@@ -48,9 +48,9 @@ export default function IngestDashboard() {
   // ETA rough estimate — shown only when running and some progress exists
   const etaText = (() => {
     if (isPaused || processed === 0) return null;
-    // ~51 calls/player (match IDs + details + ~40 rank lookups) → ~9 matches/min
+    // 9 matches/min cold → ~43/min once rank cache warms (shared TTL cache)
     const remaining = target - processed;
-    const minsLeft  = Math.round(remaining / 9);
+    const minsLeft  = Math.round(remaining / 20); // avg across warm-up
     if (minsLeft > 1440) return `~${Math.round(minsLeft / 1440)}d remaining`;
     if (minsLeft > 60)   return `~${Math.round(minsLeft / 60)}h remaining`;
     return `~${minsLeft}m remaining`;
@@ -186,7 +186,7 @@ export default function IngestDashboard() {
 
         {/* Footer note */}
         <p className="text-center text-white/20 text-xs mt-6 leading-relaxed">
-          Dev key: ~48 req/min · Semaphore(1) · 1.25s between calls · ~9 matches/min · rank fetched for all 10 players
+          Dev key: ~48 req/min · Semaphore(1) · 1.25s between calls · 9→43 matches/min (rank cache warming)
           <br />
           Cycling BRONZE → SILVER → GOLD → PLATINUM → EMERALD → DIAMOND → MASTER
         </p>

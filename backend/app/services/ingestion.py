@@ -6,7 +6,8 @@ Strategy
 Cycles through BRONZE→SILVER→GOLD→PLATINUM→EMERALD→DIAMOND→MASTER ladder pages.
 For each seed player it fetches their last 10 ranked match IDs, then for each
 new match:
-  - Fetches rank (tier/WR) for ALL 10 participants (cached across the batch)
+  - Fetches rank (tier/WR) for ALL 10 participants — cached globally with 1hr TTL
+    so repeat participants across seed players cost zero extra calls
   - Computes seed player's form_score from their PREVIOUS matches in the batch
     (e.g. training on match[0] uses perf from match[1]-match[5]) — no leakage
   - Other 9 players get neutral form (0.5) — real rank/WR is the key signal
@@ -17,12 +18,14 @@ Feature vector per player (7-dim):
 Rate limiting
 -------------
 Semaphore(1) + 1.25s sleep between every Riot API call.
-Per seed player: ~51 calls (1 match IDs + 10 match details + ~40 rank lookups)
-Throughput: ~9 matches/min on a dev key.
+Throughput: ~9 matches/min cold start → ~43 matches/min once rank cache warms up.
+Cache holds ~50k PUUIDs (≈15 MB) with 1hr TTL — most participants seen in the same
+rank tier repeat frequently, so hit rate climbs quickly after the first few pages.
 """
 
 import asyncio
 import logging
+import time as _time
 
 import httpx
 import numpy as np
@@ -76,6 +79,24 @@ _SEED_TIERS = [
 
 _tier_idx  = 0
 _tier_page = 1
+
+# ---------------------------------------------------------------------------
+# Persistent rank cache — shared across all seed players, survives page loops
+# ---------------------------------------------------------------------------
+# puuid -> (rank_entry | None, fetched_at_timestamp)
+_rank_cache: dict[str, tuple] = {}
+_RANK_TTL = 3600  # 1 hour — rank changes rarely during a session
+
+
+def _rank_cache_get(puuid: str) -> tuple[bool, dict | None]:
+    item = _rank_cache.get(puuid)
+    if item and (_time.time() - item[1]) < _RANK_TTL:
+        return True, item[0]
+    return False, None
+
+
+def _rank_cache_set(puuid: str, entry: dict | None) -> None:
+    _rank_cache[puuid] = (entry, _time.time())
 
 
 # ---------------------------------------------------------------------------
@@ -199,12 +220,22 @@ async def _process_player(
             if uid and uid != puuid:
                 other_puuids.add(uid)
 
-    # Step 4: Fetch rank for every unique non-seed participant (cached)
+    # Step 4: Resolve rank for every unique non-seed participant.
+    # Check the global TTL cache first — participants repeat across seed players
+    # within the same rank tier, so cache hit rate climbs quickly after warmup.
+    _rank_cache_set(puuid, seed_rank_entry)  # seed is already fresh
     rank_cache: dict[str, dict | None] = {puuid: seed_rank_entry}
+
     for other_puuid in other_puuids:
+        hit, cached_entry = _rank_cache_get(other_puuid)
+        if hit:
+            rank_cache[other_puuid] = cached_entry
+            continue
+
         status = db._get_ingestion_status_sync()
         if status["is_paused"]:
             return 0
+
         async with _sem:
             try:
                 entries = await _riot_get(
@@ -214,9 +245,10 @@ async def _process_player(
             except Exception:
                 entries = []
         await asyncio.sleep(_CALL_DELAY)
-        rank_cache[other_puuid] = next(
-            (e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None
-        )
+
+        entry = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
+        _rank_cache_set(other_puuid, entry)
+        rank_cache[other_puuid] = entry
 
     # Step 5: Build ordered list of new match IDs (newest → oldest, API order)
     ordered = [mid for mid in match_ids if mid in match_details]
