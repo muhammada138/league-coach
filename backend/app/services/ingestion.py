@@ -4,21 +4,21 @@ ML Data Ingestion Worker — accumulates real match data for win predictor retra
 Strategy
 --------
 Cycles through BRONZE→SILVER→GOLD→PLATINUM→EMERALD→DIAMOND→MASTER ladder pages.
-For each player it fetches rank + last 10 ranked match IDs + each match detail,
-then extracts a 7-dim feature vector per participant and saves
-(blue_feats, red_feats, blue_won) to the training_matches table.
+For each seed player it fetches their last 10 ranked match IDs, then for each
+new match:
+  - Fetches rank (tier/WR) for ALL 10 participants (cached across the batch)
+  - Computes seed player's form_score from their PREVIOUS matches in the batch
+    (e.g. training on match[0] uses perf from match[1]-match[5]) — no leakage
+  - Other 9 players get neutral form (0.5) — real rank/WR is the key signal
 
-Feature extraction
-------------------
-For the seed player (whose rank we fetched): all features from API data.
-For the other 9 participants: form_score from match data, neutral (0.5) for
-rank/WR fields — real form data is more valuable than random synthetic.
+Feature vector per player (7-dim):
+  [rank_score, season_wr, form_score, 0.5, 0.5, 0.0, 0.0]
 
 Rate limiting
 -------------
-Semaphore(1) + 2 s sleep between every Riot API call ≈ 30 req/min.
-Dev-key budget: 50 req/min (100 per 2 min).  30 + normal app usage ≈ safe.
-The worker checks is_paused from DB before every call and sleeps if set.
+Semaphore(1) + 1.25s sleep between every Riot API call.
+Per seed player: ~51 calls (1 match IDs + 10 match details + ~40 rank lookups)
+Throughput: ~9 matches/min on a dev key.
 """
 
 import asyncio
@@ -38,14 +38,9 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-# One request at a time — no burst
 _sem = asyncio.Semaphore(1)
-
-# Seconds to sleep after every successful Riot request
 _CALL_DELAY = 1.25
 
-# Ladder tiers cycled in order; restarts from the top when exhausted.
-# MASTER uses None as division — handled via the masterleagues endpoint (no pagination).
 _SEED_TIERS = [
     # Bronze — lower-elo representation
     ("BRONZE",   "I"),
@@ -79,7 +74,6 @@ _SEED_TIERS = [
     ("MASTER",   None),
 ]
 
-# Mutable state — survives across loop iterations, resets on restart (ok: dedup by match_id)
 _tier_idx  = 0
 _tier_page = 1
 
@@ -103,35 +97,47 @@ async def _riot_get(client: httpx.AsyncClient, url: str):
     raise RuntimeError("Max retries exceeded")
 
 
-def _player_feats(
-    p: dict,
-    all_players: list,
-    game_duration: int,
-    rank_entry: dict | None,
-) -> list[float]:
-    """
-    7-dim feature vector for one match participant.
-    rank_entry: the player's LeagueEntry if available, else None → neutral rank/WR.
-    """
-    if rank_entry:
-        tier_val   = TIER_SCORE.get(rank_entry.get("tier", "SILVER"), 3.5)
-        div_val    = DIV_BONUS.get(rank_entry.get("rank", ""), 0.0)
-        lp_bonus   = (rank_entry.get("leaguePoints", 0) / 100.0) * 0.25
-        rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.0)
+def _rank_score_from_entry(entry: dict | None) -> tuple[float, float]:
+    """Return (rank_score, season_wr) from a LeagueEntry dict, or (0.5, 0.5)."""
+    if not entry:
+        return 0.5, 0.5
+    tier_val   = TIER_SCORE.get(entry.get("tier", "SILVER"), 3.5)
+    div_val    = DIV_BONUS.get(entry.get("rank", ""), 0.0)
+    lp_bonus   = (entry.get("leaguePoints", 0) / 100.0) * 0.25
+    rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.0)
 
-        w = rank_entry.get("wins", 0)
-        l = rank_entry.get("losses", 0)
-        raw_wr    = w / (w + l) if (w + l) > 0 else 0.5
-        conf      = min((w + l) / 100.0, 1.0)
-        season_wr = raw_wr * conf + 0.5 * (1.0 - conf)
-    else:
-        rank_score = 0.5
-        season_wr  = 0.5
+    w = entry.get("wins", 0)
+    l = entry.get("losses", 0)
+    raw_wr    = w / (w + l) if (w + l) > 0 else 0.5
+    conf      = min((w + l) / 100.0, 1.0)
+    season_wr = raw_wr * conf + 0.5 * (1.0 - conf)
+    return rank_score, season_wr
 
-    # form_score omitted — in-match performance leaks the outcome label.
-    # Only pre-game signals (rank, season WR) are valid training features.
-    # remaining dims neutral
-    return [rank_score, season_wr, 0.5, 0.5, 0.5, 0.0, 0.0]
+
+def _player_feats(rank_entry: dict | None, form: float = 0.5) -> list[float]:
+    """7-dim feature vector. form should come from previous matches (no leakage)."""
+    rank_score, season_wr = _rank_score_from_entry(rank_entry)
+    return [rank_score, season_wr, form, 0.5, 0.5, 0.0, 0.0]
+
+
+def _compute_seed_form(puuid: str, prior_match_data: list[dict]) -> float:
+    """
+    Avg performance score of the seed player across prior_match_data.
+    Uses match data from OLDER matches in the batch — no outcome leakage.
+    """
+    scores = []
+    for match_data in prior_match_data:
+        try:
+            info         = match_data["info"]
+            participants = info["participants"]
+            duration     = info["gameDuration"]
+            p = next((x for x in participants if x.get("puuid") == puuid), None)
+            if p:
+                score = float(_compute_perf_score(p, participants, None, duration)) / 100.0
+                scores.append(score)
+        except Exception:
+            continue
+    return sum(scores) / len(scores) if scores else 0.5
 
 
 async def _process_player(
@@ -141,33 +147,17 @@ async def _process_player(
 ) -> int:
     """
     Fetch and persist training samples from one player's recent matches.
+
+    Improvements over v1:
+    - Rank fetched for ALL 10 participants per match (real rank/WR signal for everyone)
+    - Seed player's form computed from previous matches in batch (no leakage)
     Returns the number of new matches saved.
     """
     status = db._get_ingestion_status_sync()
     if status["is_paused"] or status["processed_count"] >= status["total_target"]:
         return 0
 
-    # Prefer the rank entry we already have from the ladder response; only
-    # make an extra call if we don't have one (shouldn't normally happen).
-    ranked = seed_rank_entry
-    if not ranked:
-        async with _sem:
-            try:
-                entries = await _riot_get(
-                    client,
-                    f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}",
-                )
-            except Exception as exc:
-                logger.debug("Rank fetch failed for %.12s: %s", puuid, exc)
-                entries = []
-        await asyncio.sleep(_CALL_DELAY)
-        ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
-
-    # Match IDs
-    status = db._get_ingestion_status_sync()
-    if status["is_paused"]:
-        return 0
-
+    # Step 1: Fetch match IDs
     async with _sem:
         try:
             match_ids = await _riot_get(
@@ -180,29 +170,66 @@ async def _process_player(
             return 0
     await asyncio.sleep(_CALL_DELAY)
 
-    saved = 0
+    # Step 2: Fetch match details for all new matches
+    match_details: dict[str, dict] = {}
     for mid in match_ids:
         status = db._get_ingestion_status_sync()
         if status["is_paused"] or status["processed_count"] >= status["total_target"]:
             break
-
         if db._has_training_match_sync(mid):
-            continue  # already processed — skip API call entirely
-
+            continue
         async with _sem:
             try:
-                match_data = await _riot_get(
+                match_details[mid] = await _riot_get(
                     client,
                     f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}",
                 )
             except Exception as exc:
                 logger.debug("Match fetch failed %s: %s", mid, exc)
-                await asyncio.sleep(_CALL_DELAY)
-                continue
         await asyncio.sleep(_CALL_DELAY)
 
+    if not match_details:
+        return 0
+
+    # Step 3: Collect all unique non-seed PUUIDs across all fetched matches
+    other_puuids: set[str] = set()
+    for data in match_details.values():
+        for p in data["info"]["participants"]:
+            uid = p.get("puuid")
+            if uid and uid != puuid:
+                other_puuids.add(uid)
+
+    # Step 4: Fetch rank for every unique non-seed participant (cached)
+    rank_cache: dict[str, dict | None] = {puuid: seed_rank_entry}
+    for other_puuid in other_puuids:
+        status = db._get_ingestion_status_sync()
+        if status["is_paused"]:
+            return 0
+        async with _sem:
+            try:
+                entries = await _riot_get(
+                    client,
+                    f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{other_puuid}",
+                )
+            except Exception:
+                entries = []
+        await asyncio.sleep(_CALL_DELAY)
+        rank_cache[other_puuid] = next(
+            (e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None
+        )
+
+    # Step 5: Build ordered list of new match IDs (newest → oldest, API order)
+    ordered = [mid for mid in match_ids if mid in match_details]
+
+    # Step 6: Save training samples — seed player's form from older matches in batch
+    saved = 0
+    for i, mid in enumerate(ordered):
+        status = db._get_ingestion_status_sync()
+        if status["is_paused"] or status["processed_count"] >= status["total_target"]:
+            break
+
         try:
-            info         = match_data["info"]
+            info         = match_details[mid]["info"]
             participants = info["participants"]
             duration     = info["gameDuration"]
 
@@ -211,11 +238,15 @@ async def _process_player(
             if len(blue) < 1 or len(red) < 1:
                 continue
 
+            # Seed player form = avg perf in matches[i+1 … i+5] (older = higher index)
+            prior = [match_details[ordered[j]] for j in range(i + 1, min(i + 6, len(ordered)))]
+            seed_form = _compute_seed_form(puuid, prior)
+
             def team_vec(players: list) -> list[float]:
                 feats = [
                     _player_feats(
-                        p, participants, duration,
-                        ranked if p.get("puuid") == puuid else None,
+                        rank_cache.get(p.get("puuid")),
+                        seed_form if p.get("puuid") == puuid else 0.5,
                     )
                     for p in players
                 ]
@@ -240,8 +271,8 @@ async def _process_player(
 
 async def ingestion_worker() -> None:
     """
-    Long-running background task.  Paused by default — resume via
-    POST /ingest/toggle.  Safely handles cancellation on shutdown.
+    Long-running background task. Paused by default — resume via POST /ingest/toggle.
+    Safely handles cancellation on shutdown.
     """
     global _tier_idx, _tier_page
     logger.info("ML ingestion worker started (paused by default)")
@@ -265,18 +296,15 @@ async def ingestion_worker() -> None:
             tier, division = _SEED_TIERS[_tier_idx % len(_SEED_TIERS)]
 
             async with httpx.AsyncClient(timeout=15.0) as client:
-                # Fetch one page of ladder entries
                 async with _sem:
                     try:
                         if division is None:
-                            # Master uses a separate non-paginated endpoint
                             data = await _riot_get(
                                 client,
                                 f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4"
                                 f"/masterleagues/by-queue/RANKED_SOLO_5x5",
                             )
                             entries = data.get("entries", [])
-                            # Inject tier since master entries omit it
                             for e in entries:
                                 e.setdefault("tier", "MASTER")
                         else:
@@ -291,20 +319,18 @@ async def ingestion_worker() -> None:
                 await asyncio.sleep(_CALL_DELAY)
 
                 if not entries:
-                    # Exhausted this tier/page — move to next tier
                     _tier_idx += 1
                     _tier_page = 1
                     logger.debug("Ladder exhausted for %s %s – advancing tier", tier, division)
                     continue
 
                 if division is None:
-                    # Master has no pages — advance tier after one fetch
                     _tier_idx += 1
                     _tier_page = 1
                 else:
                     _tier_page += 1
 
-                for entry in entries[:8]:   # process 8 players per ladder page
+                for entry in entries[:8]:
                     puuid = entry.get("puuid")
                     if not puuid:
                         continue

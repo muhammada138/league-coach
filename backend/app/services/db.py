@@ -47,6 +47,18 @@ def init_db() -> None:
         )
 
         # --- ML training data tables ---
+
+        # One-time migration: rename old leaky training_matches → training_matches_v1
+        tables = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()}
+        if "training_matches" in tables and "training_matches_v1" not in tables:
+            count = conn.execute("SELECT COUNT(*) FROM training_matches").fetchone()[0]
+            if count > 0:
+                conn.execute("ALTER TABLE training_matches RENAME TO training_matches_v1")
+                conn.execute("UPDATE ingestion_status SET processed_count = 0 WHERE id = 1")
+
+        # Fresh clean training_matches table
         conn.execute("""
             CREATE TABLE IF NOT EXISTS training_matches (
                 match_id   TEXT    PRIMARY KEY,
@@ -238,9 +250,23 @@ async def save_training_match(
 
 
 def get_all_training_matches_sync() -> list[dict]:
-    """Return all rows from training_matches as a list of dicts."""
+    """Return all rows from training_matches (clean data) as a list of dicts."""
     with sqlite3.connect(DB_PATH) as conn:
         rows = conn.execute(
             "SELECT blue_feats, red_feats, blue_won FROM training_matches"
+        ).fetchall()
+    return [{"blue_feats": row[0], "red_feats": row[1], "blue_won": row[2]} for row in rows]
+
+
+def get_v1_training_matches_sync() -> list[dict]:
+    """Return rows from training_matches_v1 (legacy data, form feature is leaky)."""
+    with sqlite3.connect(DB_PATH) as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='training_matches_v1'"
+        ).fetchone()
+        if not exists:
+            return []
+        rows = conn.execute(
+            "SELECT blue_feats, red_feats, blue_won FROM training_matches_v1"
         ).fetchall()
     return [{"blue_feats": row[0], "red_feats": row[1], "blue_won": row[2]} for row in rows]

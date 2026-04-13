@@ -69,73 +69,63 @@ def load_or_train_model() -> None:
         logger.warning("Model load failed (%s) – using linear fallback", exc)
 
 
-def _train_and_save() -> None:
+def _generate_synthetic(n: int, seed: int = 42) -> tuple:
     """
-    Generate 20 000 synthetic matches and fit an XGBClassifier.
+    Generate n synthetic match rows. Returns (X, y) numpy arrays.
+    All 7 features vary — teaches the model to weight form/streak/champ_wr
+    in addition to rank and season WR.
+    """
+    rng = np.random.RandomState(seed)
+    WEIGHTS = np.array([0.30, 0.10, 0.25, 0.20, 0.08, 0.04, 0.03])
+    mastery_choices = [0.0, 0.02, 0.04, 0.06]
+    mastery_probs   = [0.55, 0.15, 0.15, 0.15]
 
-    7 features per player: rank_score, season_wr, form_score, recent_wr,
-    champ_wr, mastery_score, streak_norm.  Model input = 21-dim
-    [blue_mean, red_mean, diff].
-    """
+    X_list, y_list = [], []
+    for _ in range(n):
+        b_feats, r_feats = [], []
+        for _p in range(5):
+            b_feats.append([
+                rng.beta(4, 4),
+                rng.beta(5, 5),
+                rng.beta(4, 4),
+                rng.beta(4, 4),
+                rng.beta(4, 4),
+                rng.choice(mastery_choices, p=mastery_probs),
+                rng.uniform(-1.0, 1.0),
+            ])
+            r_feats.append([
+                rng.beta(4, 4),
+                rng.beta(5, 5),
+                rng.beta(4, 4),
+                rng.beta(4, 4),
+                rng.beta(4, 4),
+                rng.choice(mastery_choices, p=mastery_probs),
+                rng.uniform(-1.0, 1.0),
+            ])
+        blue = np.mean(b_feats, axis=0)
+        red  = np.mean(r_feats, axis=0)
+        diff = blue - red
+        prob = 1.0 / (1.0 + np.exp(-np.dot(diff, WEIGHTS) * 25.0))
+        prob = 0.10 + prob * 0.80
+        y_list.append(int(rng.random() < prob))
+        X_list.append(np.concatenate([blue, red, diff]))
+    return np.array(X_list), np.array(y_list)
+
+
+def _train_and_save() -> None:
+    """Train on synthetic data and save. Used when no real data exists yet."""
     try:
         import joblib          # noqa: PLC0415
         import xgboost as xgb  # noqa: PLC0415
         from sklearn.model_selection import train_test_split  # noqa: PLC0415
 
-        rng = np.random.RandomState(42)
-        # Feature weights mirror _player_features ordering
-        WEIGHTS = np.array([0.30, 0.10, 0.25, 0.20, 0.08, 0.04, 0.03])
-
-        X_list, y_list = [], []
-        mastery_choices = [0.0, 0.02, 0.04, 0.06]
-        mastery_probs   = [0.55, 0.15, 0.15, 0.15]
-
-        for _ in range(20_000):
-            b_feats, r_feats = [], []
-            for _p in range(5):
-                b_feats.append([
-                    rng.beta(4, 4),                                # rank_score
-                    rng.beta(5, 5),                                # season_wr
-                    rng.beta(4, 4),                                # form_score
-                    rng.beta(4, 4),                                # recent_wr
-                    rng.beta(4, 4),                                # champ_wr
-                    rng.choice(mastery_choices, p=mastery_probs),  # mastery_score
-                    rng.uniform(-1.0, 1.0),                        # streak_norm
-                ])
-                r_feats.append([
-                    rng.beta(4, 4),
-                    rng.beta(5, 5),
-                    rng.beta(4, 4),
-                    rng.beta(4, 4),
-                    rng.beta(4, 4),
-                    rng.choice(mastery_choices, p=mastery_probs),
-                    rng.uniform(-1.0, 1.0),
-                ])
-            
-            blue = np.mean(b_feats, axis=0)
-            red = np.mean(r_feats, axis=0)
-
-            diff = blue - red
-            # Since diff is smaller (averaged over 5 players), we increase the multiplier 
-            # from 10.0 to 25.0 to maintain a healthy spread of win probabilities.
-            prob = 1.0 / (1.0 + np.exp(-np.dot(diff, WEIGHTS) * 25.0))
-            prob = 0.10 + prob * 0.80   # compress to [0.10, 0.90] — upsets exist
-
-            y_list.append(int(rng.random() < prob))
-            X_list.append(np.concatenate([blue, red, diff]))
-
-        X = np.array(X_list)
-        y = np.array(y_list)
+        X, y = _generate_synthetic(20_000)
         X_train, _, y_train, _ = train_test_split(X, y, test_size=0.1, random_state=42)
 
         model = xgb.XGBClassifier(
-            n_estimators=150,
-            max_depth=4,
-            learning_rate=0.05,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            eval_metric="logloss",
-            random_state=42,
+            n_estimators=150, max_depth=4, learning_rate=0.05,
+            subsample=0.8, colsample_bytree=0.8,
+            eval_metric="logloss", random_state=42,
         )
         model.fit(X_train, y_train)
 
@@ -273,8 +263,13 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
 # ---------------------------------------------------------------------------
 def retrain_on_real_data() -> dict:
     """
-    Read all rows from training_matches, fit a new XGBClassifier, save to disk,
-    and hot-swap the in-memory model. Returns a summary dict.
+    Hybrid retrain strategy:
+    - If clean training_matches has >= 5k rows: train on clean data + 5k synthetic
+    - Otherwise: fall back to v1 legacy data (form zeroed) + 20k synthetic
+
+    Synthetic data teaches the model to weight form/streak/champ_wr correctly
+    for live game prediction, while real data anchors rank and season_WR signal.
+    Hot-swaps the in-memory model on success.
     """
     global _model
     try:
@@ -282,39 +277,55 @@ def retrain_on_real_data() -> dict:
         import joblib
         import xgboost as xgb
         from sklearn.model_selection import train_test_split
-        from ..services.db import get_all_training_matches_sync
+        from ..services.db import get_all_training_matches_sync, get_v1_training_matches_sync
 
-        rows = get_all_training_matches_sync()
-        if len(rows) < 100:
-            return {"ok": False, "error": f"Not enough data ({len(rows)} rows — need at least 100)"}
+        clean_rows = get_all_training_matches_sync()
+        v1_rows    = get_v1_training_matches_sync()
 
-        X_list, y_list = [], []
-        for row in rows:
+        if len(clean_rows) >= 5000:
+            real_rows  = clean_rows
+            zero_form  = False        # clean data has non-leaking form
+            synth_n    = 5000
+            source     = "clean"
+        elif len(v1_rows) >= 100:
+            real_rows  = v1_rows
+            zero_form  = True         # v1 form leaks outcome, zero it
+            synth_n    = 20000
+            source     = "v1+synthetic"
+        else:
+            real_rows  = []
+            zero_form  = False
+            synth_n    = 20000
+            source     = "synthetic-only"
+
+        # Build feature matrix from real rows
+        X_real, y_real = [], []
+        for row in real_rows:
             blue = np.array(json.loads(row["blue_feats"]), dtype=float)
             red  = np.array(json.loads(row["red_feats"]),  dtype=float)
-            # Index 2 is form_score — computed from the outcome match itself,
-            # so it leaks the label. Zero it out to avoid spurious accuracy.
-            blue[2] = 0.5
-            red[2]  = 0.5
+            if zero_form:
+                blue[2] = 0.5
+                red[2]  = 0.5
             diff = blue - red
-            X_list.append(np.concatenate([blue, red, diff]))
-            y_list.append(int(row["blue_won"]))
+            X_real.append(np.concatenate([blue, red, diff]))
+            y_real.append(int(row["blue_won"]))
 
-        X = np.array(X_list)
-        y = np.array(y_list)
+        # Combine with synthetic
+        X_syn, y_syn = _generate_synthetic(synth_n, seed=99)
+        if X_real:
+            X = np.vstack([np.array(X_real), X_syn])
+            y = np.concatenate([np.array(y_real), y_syn])
+        else:
+            X, y = X_syn, y_syn
 
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.1, random_state=42
         )
 
         model = xgb.XGBClassifier(
-            n_estimators=200,
-            max_depth=4,
-            learning_rate=0.05,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            eval_metric="logloss",
-            random_state=42,
+            n_estimators=200, max_depth=4, learning_rate=0.05,
+            subsample=0.8, colsample_bytree=0.8,
+            eval_metric="logloss", random_state=42,
         )
         model.fit(X_train, y_train)
 
@@ -324,8 +335,17 @@ def retrain_on_real_data() -> dict:
         joblib.dump(model, MODEL_PATH)
         _model = model
 
-        logger.info("Retrained on %d real matches — test accuracy %.3f", len(rows), acc)
-        return {"ok": True, "rows": len(rows), "test_accuracy": round(acc, 4)}
+        logger.info(
+            "Retrained (%s) on %d real + %d synthetic — test acc %.3f",
+            source, len(real_rows), synth_n, acc,
+        )
+        return {
+            "ok": True,
+            "source": source,
+            "real_rows": len(real_rows),
+            "synthetic_rows": synth_n,
+            "test_accuracy": round(acc, 4),
+        }
 
     except Exception as exc:
         logger.error("Retrain failed: %s", exc)
