@@ -292,6 +292,10 @@ def retrain_on_real_data() -> dict:
         for row in rows:
             blue = np.array(json.loads(row["blue_feats"]), dtype=float)
             red  = np.array(json.loads(row["red_feats"]),  dtype=float)
+            # Index 2 is form_score — computed from the outcome match itself,
+            # so it leaks the label. Zero it out to avoid spurious accuracy.
+            blue[2] = 0.5
+            red[2]  = 0.5
             diff = blue - red
             X_list.append(np.concatenate([blue, red, diff]))
             y_list.append(int(row["blue_won"]))
