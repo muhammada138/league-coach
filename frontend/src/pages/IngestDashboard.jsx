@@ -23,7 +23,7 @@ export default function IngestDashboard() {
 
   useEffect(() => {
     fetchStatus();
-    intervalRef.current = setInterval(fetchStatus, 3000);
+    intervalRef.current = setInterval(fetchStatus, 10000);
     return () => clearInterval(intervalRef.current);
   }, []);
 
