@@ -113,8 +113,6 @@ def _player_feats(
     7-dim feature vector for one match participant.
     rank_entry: the player's LeagueEntry if available, else None → neutral rank/WR.
     """
-    form = float(_compute_perf_score(p, all_players, None, game_duration)) / 100.0
-
     if rank_entry:
         tier_val   = TIER_SCORE.get(rank_entry.get("tier", "SILVER"), 3.5)
         div_val    = DIV_BONUS.get(rank_entry.get("rank", ""), 0.0)
@@ -130,8 +128,10 @@ def _player_feats(
         rank_score = 0.5
         season_wr  = 0.5
 
-    # recent_wr / champ_wr / mastery / streak → neutral (single-match context)
-    return [rank_score, season_wr, form, 0.5, 0.5, 0.0, 0.0]
+    # form_score omitted — in-match performance leaks the outcome label.
+    # Only pre-game signals (rank, season WR) are valid training features.
+    # remaining dims neutral
+    return [rank_score, season_wr, 0.5, 0.5, 0.5, 0.0, 0.0]
 
 
 async def _process_player(
