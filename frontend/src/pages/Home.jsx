@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { getSummoner } from "../api/riot";
 
 const DOT_GRID = `url("data:image/svg+xml,%3Csvg width='28' height='28' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='1' fill='%23c89b3c'/%3E%3C/svg%3E")`;
@@ -341,6 +341,18 @@ export default function Home() {
               {tag}
             </span>
           ))}
+        </div>
+
+        <div className="flex items-center justify-center gap-6 mt-6 pt-6 border-t border-slate-100 dark:border-white/[0.05]">
+          <Link to="/terms" className="text-[11px] text-slate-400 dark:text-white/20 hover:text-[#c89b3c] transition-colors">
+            Terms of Service
+          </Link>
+          <Link to="/privacy" className="text-[11px] text-slate-400 dark:text-white/20 hover:text-[#c89b3c] transition-colors">
+            Privacy Policy
+          </Link>
+          <span className="text-[11px] text-slate-400 dark:text-white/20">
+            Not affiliated with Riot Games
+          </span>
         </div>
 
       </div>
