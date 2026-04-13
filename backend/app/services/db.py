@@ -235,3 +235,12 @@ async def save_training_match(
     match_id: str, blue_feats: list, red_feats: list, blue_won: bool
 ) -> None:
     await asyncio.to_thread(_save_training_match_sync, match_id, blue_feats, red_feats, blue_won)
+
+
+def get_all_training_matches_sync() -> list[dict]:
+    """Return all rows from training_matches as a list of dicts."""
+    with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT blue_feats, red_feats, blue_won FROM training_matches"
+        ).fetchall()
+    return [{"blue_feats": row[0], "red_feats": row[1], "blue_won": row[2]} for row in rows]

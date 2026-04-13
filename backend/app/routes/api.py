@@ -485,6 +485,12 @@ async def ingest_toggle():
     return await db.toggle_ingestion()
 
 
+@router.post("/admin/retrain")
+async def admin_retrain():
+    result = await asyncio.to_thread(win_predictor.retrain_on_real_data)
+    return result
+
+
 @router.post("/ask")
 async def ask_coach(body: AskRequest):
     system_prompt = f"You are a League of Legends coach. Be casual, direct, human. Bold stats. 2-3 sentences max.\n\nPlayer context:\n{body.context}"
