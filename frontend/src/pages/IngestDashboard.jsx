@@ -48,9 +48,9 @@ export default function IngestDashboard() {
   // ETA rough estimate — shown only when running and some progress exists
   const etaText = (() => {
     if (isPaused || processed === 0) return null;
-    // ~89 calls per ladder page → ~80 new matches in ~111s ≈ 43 matches/min
+    // ~51 calls/player (match IDs + details + ~40 rank lookups) → ~9 matches/min
     const remaining = target - processed;
-    const minsLeft  = Math.round(remaining / 43);
+    const minsLeft  = Math.round(remaining / 9);
     if (minsLeft > 1440) return `~${Math.round(minsLeft / 1440)}d remaining`;
     if (minsLeft > 60)   return `~${Math.round(minsLeft / 60)}h remaining`;
     return `~${minsLeft}m remaining`;
@@ -186,7 +186,7 @@ export default function IngestDashboard() {
 
         {/* Footer note */}
         <p className="text-center text-white/20 text-xs mt-6 leading-relaxed">
-          Dev key: ~48 req/min · Semaphore(1) · 1.25s between calls · ~43 matches/min
+          Dev key: ~48 req/min · Semaphore(1) · 1.25s between calls · ~9 matches/min · rank fetched for all 10 players
           <br />
           Cycling BRONZE → SILVER → GOLD → PLATINUM → EMERALD → DIAMOND → MASTER
         </p>
