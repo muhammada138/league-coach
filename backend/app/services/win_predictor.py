@@ -41,7 +41,7 @@ MAX_RANK  = 11.0  # Challenger I + max LP bonus
 # Approximates a ~53–56% win rate on your main vs 50% on an off-pick.
 _MASTERY_SCORES = [0.06, 0.04, 0.02]  # index 0 = most-played champ
 
-MODEL_PATH = Path(__file__).parent.parent.parent / "model" / "win_predictor_v3.pkl"
+MODEL_PATH = Path(__file__).parent.parent.parent / "model" / "win_predictor_v4.pkl"
 
 # ---------------------------------------------------------------------------
 # Global model handle
@@ -266,3 +266,63 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
 
     blue_pct = max(1, min(99, round(prob * 100)))
     return {"bluePct": blue_pct, "redPct": 100 - blue_pct}
+
+
+# ---------------------------------------------------------------------------
+# Retrain on real ingested data
+# ---------------------------------------------------------------------------
+def retrain_on_real_data() -> dict:
+    """
+    Read all rows from training_matches, fit a new XGBClassifier, save to disk,
+    and hot-swap the in-memory model. Returns a summary dict.
+    """
+    global _model
+    try:
+        import json
+        import joblib
+        import xgboost as xgb
+        from sklearn.model_selection import train_test_split
+        from ..services.db import get_all_training_matches_sync
+
+        rows = get_all_training_matches_sync()
+        if len(rows) < 100:
+            return {"ok": False, "error": f"Not enough data ({len(rows)} rows — need at least 100)"}
+
+        X_list, y_list = [], []
+        for row in rows:
+            blue = np.array(json.loads(row["blue_feats"]), dtype=float)
+            red  = np.array(json.loads(row["red_feats"]),  dtype=float)
+            diff = blue - red
+            X_list.append(np.concatenate([blue, red, diff]))
+            y_list.append(int(row["blue_won"]))
+
+        X = np.array(X_list)
+        y = np.array(y_list)
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.1, random_state=42
+        )
+
+        model = xgb.XGBClassifier(
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            eval_metric="logloss",
+            random_state=42,
+        )
+        model.fit(X_train, y_train)
+
+        acc = float((model.predict(X_test) == y_test).mean())
+
+        MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(model, MODEL_PATH)
+        _model = model
+
+        logger.info("Retrained on %d real matches — test accuracy %.3f", len(rows), acc)
+        return {"ok": True, "rows": len(rows), "test_accuracy": round(acc, 4)}
+
+    except Exception as exc:
+        logger.error("Retrain failed: %s", exc)
+        return {"ok": False, "error": str(exc)}
