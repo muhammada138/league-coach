@@ -8,7 +8,9 @@ AI-powered League of Legends coaching. Enter your Riot ID, get a breakdown of yo
 ![Groq](https://img.shields.io/badge/Groq_AI-LLaMA_3.3_70B-orange?style=flat)
 
 ---
+## Screenshots
 
+![Rift Iq Homepage](./screenshot.png)
 ## What it does
 
 Most coaching tools give you raw stats and leave the interpretation to you. Rift IQ compares your performance **against the other 9 players in each of your games**, identifies where you're falling behind, and generates **3-4 specific, actionable coaching tips** ranked by impact.
