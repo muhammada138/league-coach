@@ -1555,7 +1555,7 @@ function TeammatesContent({ games, region }) {
 }
 
 // ── Right Panel (tabbed: Coaching | Stats | Teams) ──────────────────────────
-function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerContext, games, teammatesData, teammatesLoading }) {
+function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerContext, games, teammatesData, teammatesLoading, region }) {
   const [tab, setTab] = useState("coaching");
   const [chatInput, setChatInput] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
@@ -2160,6 +2160,7 @@ export default function Dashboard() {
                   `Damage: ${(analysis.playerAverages.totalDamageDealtToChampions/1000).toFixed(1)}k (lobby: ${(analysis.lobbyAverages.totalDamageDealtToChampions/1000).toFixed(1)}k)`,
                   `Gold: ${(analysis.playerAverages.goldEarned/1000).toFixed(1)}k (lobby: ${(analysis.lobbyAverages.goldEarned/1000).toFixed(1)}k)`,
                 ].join("\n")}
+                region={region}
               />
             ) : (
               <SkeletonRightPanel />
