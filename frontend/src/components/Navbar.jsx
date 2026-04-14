@@ -214,28 +214,24 @@ export default function Navbar() {
       border-b border-slate-200/60 dark:border-white/[0.04]
       transition-all duration-300 shadow-sm">
       <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
-        {/* Logo Section */}
-        <div className="w-48 flex-shrink-0">
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <img 
-              src="/logo.png" 
-              alt="Rift IQ" 
-              className="w-8 h-8 rounded-lg shadow-lg shadow-[#c89b3c]/10 group-hover:scale-105 transition-transform"
-            />
-            <span className="text-lg font-black tracking-tighter text-slate-900 dark:text-white/90">RIFT IQ</span>
-          </Link>
-        </div>
+        {/* Logo Section (Left) */}
+        <Link to="/" className="flex items-center gap-2.5 group flex-shrink-0">
+          <img 
+            src="/logo.png" 
+            alt="Rift IQ" 
+            className="w-8 h-8 rounded-lg shadow-lg shadow-[#c89b3c]/10 group-hover:scale-105 transition-transform"
+          />
+          <span className="text-lg font-black tracking-tighter text-slate-900 dark:text-white/90">RIFT IQ</span>
+        </Link>
 
-        {/* Centered Search Bar */}
-        <div className="flex-1 flex justify-center max-w-xl mx-auto">
+        {/* Right Actions Cluster (Search + Saved + Theme) */}
+        <div className="flex items-center gap-3 ml-auto">
           <NavSearch />
-        </div>
-
-        {/* Right Section */}
-        <div className="w-48 flex-shrink-0 flex items-center justify-end gap-2.5">
-          <SavedDropdown />
-          <div className="w-px h-4 bg-slate-200 dark:bg-white/10 mx-1 hidden sm:block" />
-          <ThemeToggle />
+          <div className="flex items-center gap-2.5">
+            <SavedDropdown />
+            <div className="w-px h-4 bg-slate-200 dark:bg-white/10 mx-1 hidden sm:block" />
+            <ThemeToggle />
+          </div>
         </div>
       </div>
     </nav>
