@@ -35,22 +35,26 @@ function NavSearch() {
   const navigate = useNavigate();
   const { saveToHistory } = useSearchHistory();
 
-  const handleSearch = async () => {
-    if (!gameName.trim() || !tagLine.trim()) return;
+  const handleSearch = async (suggestion) => {
+    const finalName = suggestion?.gameName || gameName;
+    const finalTag  = suggestion?.tagLine || tagLine;
+    const finalRegion = suggestion?.region || region;
+
+    if (!finalName.trim() || !finalTag.trim()) return;
     setLoading(true);
     setError("");
     try {
-      const data = await getSummoner(gameName.trim(), tagLine.trim(), region);
-      saveToHistory(`${gameName.trim()}#${tagLine.trim()}`);
-      localStorage.setItem("lastRegion", region);
+      const data = await getSummoner(finalName.trim(), finalTag.trim(), finalRegion);
+      saveToHistory(`${finalName.trim()}#${finalTag.trim()}`);
+      localStorage.setItem("lastRegion", finalRegion);
       
       // Clear inputs and navigate
       setGameName("");
       setTagLine("");
       
       navigate(
-        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(tagLine.trim())}`,
-        { state: { puuid: data.puuid, region } }
+        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(finalTag.trim())}`,
+        { state: { puuid: data.puuid, region: finalRegion } }
       );
     } catch (err) {
       setError(err.response?.status === 404 ? "Not found" : "Error");

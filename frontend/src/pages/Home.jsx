@@ -34,18 +34,22 @@ export default function Home() {
   const { saveToHistory } = useSearchHistory();
   const navigate = useNavigate();
 
-  const handleSearch = async () => {
-    if (!gameName.trim() || !tagLine.trim()) return;
+  const handleSearch = async (suggestion) => {
+    const finalName = suggestion?.gameName || gameName;
+    const finalTag  = suggestion?.tagLine || tagLine;
+    const finalRegion = suggestion?.region || region;
+
+    if (!finalName.trim() || !finalTag.trim()) return;
     
     setLoading(true);
     setError("");
     try {
-      const data = await getSummoner(gameName.trim(), tagLine.trim(), region);
-      saveToHistory(`${gameName.trim()}#${tagLine.trim()}`);
-      localStorage.setItem("lastRegion", region);
+      const data = await getSummoner(finalName.trim(), finalTag.trim(), finalRegion);
+      saveToHistory(`${finalName.trim()}#${finalTag.trim()}`);
+      localStorage.setItem("lastRegion", finalRegion);
       navigate(
-        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(tagLine.trim())}`,
-        { state: { puuid: data.puuid, gameCount: 20, region } }
+        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(finalTag.trim())}`,
+        { state: { puuid: data.puuid, gameCount: 20, region: finalRegion } }
       );
     } catch (err) {
       setError(
