@@ -22,6 +22,25 @@ const HOW_IT_WORKS = [
   },
 ];
 
+const REGIONS = [
+  { id: "na1", label: "NA" },
+  { id: "euw1", label: "EUW" },
+  { id: "eun1", label: "EUNE" },
+  { id: "kr", label: "KR" },
+  { id: "jp1", label: "JP" },
+  { id: "br1", label: "BR" },
+  { id: "la1", label: "LAN" },
+  { id: "la2", label: "LAS" },
+  { id: "oc1", label: "OCE" },
+  { id: "tr1", label: "TR" },
+  { id: "ru", label: "RU" },
+  { id: "ph2", label: "PH" },
+  { id: "sg2", label: "SG" },
+  { id: "th2", label: "TH" },
+  { id: "tw2", label: "TW" },
+  { id: "vn2", label: "VN" },
+];
+
 function readHistory() {
   try {
     const parsed = JSON.parse(localStorage.getItem("searchHistory") ?? "[]");
@@ -74,6 +93,7 @@ function getSuggestions(query) {
 export default function Home() {
   const [gameName, setGameName] = useState("");
   const [tagLine, setTagLine]   = useState("");
+  const [region, setRegion]     = useState(localStorage.getItem("lastRegion") || "na1");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
   const [gameCount, setGameCount] = useState(20);
@@ -103,11 +123,12 @@ export default function Home() {
     setLoading(true);
     setError("");
     try {
-      const data = await getSummoner(name, tag);
+      const data = await getSummoner(name, tag, region);
       saveHistory(`${name}#${tag}`);
+      localStorage.setItem("lastRegion", region);
       navigate(
         `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(tag)}`,
-        { state: { puuid: data.puuid, gameCount } }
+        { state: { puuid: data.puuid, gameCount, region } }
       );
     } catch (err) {
       const status = err.response?.status;
@@ -189,6 +210,38 @@ export default function Home() {
           transition-colors duration-300
         ">
           <form onSubmit={handleSubmit} className="space-y-3">
+
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-[11px] font-bold tracking-widest uppercase text-slate-400 dark:text-white/30 mb-2">
+                  Region
+                </label>
+                <div className="relative">
+                  <select
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    className="w-full px-3 py-3.5 rounded-xl appearance-none
+                      border border-slate-200 dark:border-white/10
+                      focus:border-[#c89b3c]/60 dark:focus:border-[#c89b3c]/50
+                      focus:ring-2 focus:ring-[#c89b3c]/10
+                      bg-slate-50 dark:bg-white/[0.04]
+                      text-slate-900 dark:text-white text-sm
+                      transition-all duration-200 shadow-inner"
+                  >
+                    {REGIONS.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 dark:text-white/20">
+                    <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M7 10l5 5 5-5z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <label className="block text-[11px] font-bold tracking-widest uppercase text-slate-400 dark:text-white/30 mb-2">
               Riot ID

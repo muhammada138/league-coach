@@ -22,31 +22,31 @@ async def riot_get(client: httpx.AsyncClient, url: str) -> dict:
         return response.json()
     raise HTTPException(status_code=429, detail="Too many requests after multiple retries")
 
-async def get_cached_rank(client: httpx.AsyncClient, puuid: str):
+async def get_cached_rank(client: httpx.AsyncClient, puuid: str, region: str = RIOT_REGION):
     if not puuid:
         return "Unranked"
     if puuid in rank_cache:
         return rank_cache[puuid]
     try:
-        entries = await riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}")
+        entries = await riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}")
         ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
         rank = f"{ranked['tier'].capitalize()} {ranked['rank']}" if ranked else "Unranked"
         rank_cache[puuid] = rank
         return rank
     except Exception as e:
-        logger.warning("Failed to fetch rank for puuid %s: %s", puuid, e)
+        logger.warning("Failed to fetch rank for puuid %s in %s: %s", puuid, region, e)
         return "Unranked"
 
-async def get_match_timeline(client: httpx.AsyncClient, match_id: str) -> dict:
+async def get_match_timeline(client: httpx.AsyncClient, match_id: str, routing: str = RIOT_ROUTING) -> dict:
     if match_id in timeline_cache:
         return timeline_cache[match_id]
-    url = f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline"
+    url = f"https://{routing}.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline"
     try:
         data = await riot_get(client, url)
         timeline_cache[match_id] = data
         return data
     except Exception as e:
-        logger.warning("Failed to fetch timeline for match %s: %s", match_id, e)
+        logger.warning("Failed to fetch timeline for match %s in %s: %s", match_id, routing, e)
     return None
 
 def _compute_perf_score(player: dict, all_players: list, timeline: dict = None, game_duration: int = 0) -> float:

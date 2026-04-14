@@ -8,6 +8,31 @@ load_dotenv()
 RIOT_API_KEY = os.getenv("RIOT_API_KEY")
 RIOT_REGION = os.getenv("RIOT_REGION", "na1")
 RIOT_ROUTING = os.getenv("RIOT_ROUTING", "americas")
+
+# Mapping of platform sub-regions to their respective routing clusters
+REGION_TO_ROUTING = {
+    "br1": "americas",
+    "eun1": "europe",
+    "euw1": "europe",
+    "jp1": "asia",
+    "kr": "asia",
+    "la1": "americas",
+    "la2": "americas",
+    "na1": "americas",
+    "oc1": "sea",
+    "ph2": "sea",
+    "sg2": "sea",
+    "th2": "sea",
+    "tw2": "sea",
+    "vn2": "sea",
+    "tr1": "europe",
+    "ru": "europe",
+}
+
+def get_routing(region: str) -> str:
+    """Returns the routing cluster (americas, europe, asia, sea) for a given platform region."""
+    return REGION_TO_ROUTING.get(region.lower(), "americas")
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")]
 
