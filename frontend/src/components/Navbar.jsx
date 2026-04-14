@@ -113,27 +113,6 @@ function SavedDropdown() {
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, [open]);
 
-  const handleNavigate = async (p) => {
-    setLoadingId(p.puuid);
-    try {
-      const region = p.region || localStorage.getItem("lastRegion") || "na1";
-      const data = await getSummoner(p.gameName, p.tagLine, region);
-      setOpen(false);
-      navigate(
-        `/player/${region}/${encodeURIComponent(data.gameName)}/${encodeURIComponent(p.tagLine)}`,
-        { state: { puuid: data.puuid, region } }
-      );
-    } catch {
-      setOpen(false);
-      const region = p.region || localStorage.getItem("lastRegion") || "na1";
-      navigate(
-        `/player/${region}/${encodeURIComponent(p.gameName)}/${encodeURIComponent(p.tagLine)}`,
-        { state: { puuid: p.puuid, region } }
-      );
-    } finally {
-      setLoadingId(null);
-    }
-  };
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -174,20 +153,19 @@ function SavedDropdown() {
               {saved.map((p) => (
                 <div
                   key={p.puuid}
-                  onClick={() => handleNavigate(p)}
-                  className="group flex items-center gap-3 px-4 py-3 cursor-pointer
-                    hover:bg-[#c89b3c]/5 transition-colors border-b border-transparent hover:border-[#c89b3c]/10"
+                  className="group relative flex items-center gap-3 px-4 py-3 hover:bg-[#c89b3c]/5 transition-colors border-b border-transparent hover:border-[#c89b3c]/10"
                 >
-                  <div className="relative flex-shrink-0">
+                  <Link
+                    to={`/player/${p.region || localStorage.getItem("lastRegion") || "na1"}/${encodeURIComponent(p.gameName)}/${encodeURIComponent(p.tagLine)}`}
+                    state={{ puuid: p.puuid, region: p.region || localStorage.getItem("lastRegion") || "na1" }}
+                    onClick={() => setOpen(false)}
+                    className="absolute inset-0 z-0"
+                  />
+                  <div className="relative z-10 flex-shrink-0 pointer-events-none">
                     <ProfileAvatar profile={p} />
-                    {loadingId === p.puuid && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-black/60 rounded-md">
-                        <span className="w-3 h-3 rounded-full border-[1.5px] border-white/30 border-t-[#c89b3c] animate-spin block" />
-                      </div>
-                    )}
                   </div>
 
-                  <div className="flex-1 min-w-0 flex flex-col">
+                  <div className="relative z-10 flex-1 min-w-0 flex flex-col pointer-events-none">
                     <span className="text-xs font-bold text-slate-800 dark:text-white/80 truncate leading-tight">
                       {p.gameName}
                       <span className="text-slate-400 dark:text-white/20 font-medium ml-0.5">#{p.tagLine}</span>
@@ -213,7 +191,7 @@ function SavedDropdown() {
 
                   <button
                     onClick={(e) => { e.stopPropagation(); toggleSaved(p); }}
-                    className="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center
+                    className="relative z-10 flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center
                       text-red-400/40 hover:text-red-500 hover:bg-red-500/10
                       opacity-0 group-hover:opacity-100 transition-all"
                   >
