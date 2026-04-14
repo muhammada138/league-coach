@@ -53,7 +53,7 @@ function NavSearch() {
       setTagLine("");
       
       navigate(
-        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(finalTag.trim())}`,
+        `/player/${finalRegion}/${encodeURIComponent(data.gameName)}/${encodeURIComponent(finalTag.trim())}`,
         { state: { puuid: data.puuid, region: finalRegion } }
       );
     } catch (err) {
@@ -106,14 +106,14 @@ function SavedDropdown() {
       const data = await getSummoner(p.gameName, p.tagLine, region);
       setOpen(false);
       navigate(
-        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(p.tagLine)}`,
+        `/player/${region}/${encodeURIComponent(data.gameName)}/${encodeURIComponent(p.tagLine)}`,
         { state: { puuid: data.puuid, region } }
       );
     } catch {
       setOpen(false);
       const region = p.region || localStorage.getItem("lastRegion") || "na1";
       navigate(
-        `/player/${encodeURIComponent(p.gameName)}/${encodeURIComponent(p.tagLine)}`,
+        `/player/${region}/${encodeURIComponent(p.gameName)}/${encodeURIComponent(p.tagLine)}`,
         { state: { puuid: p.puuid, region } }
       );
     } finally {

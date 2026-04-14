@@ -442,7 +442,7 @@ async def live_enrich(body: LiveEnrichRequest):
 
                         score = float(_compute_perf_score(player, participants, None, md["info"]["gameDuration"]))
                         won = bool(player["win"])
-                        recent_games.append({"win": won, "score": round(score, 1)})
+                        recent_games.append({"win": won, "score": round(score, 1), "matchId": md["metadata"]["matchId"]})
 
                         cid = str(player.get("championId", ""))
                         champ_ids.append(cid)

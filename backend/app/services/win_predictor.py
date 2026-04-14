@@ -159,10 +159,19 @@ def _player_features(stats: dict, champion_id: int) -> np.ndarray:
         # Has recent game data but no rank — treat as low Iron; form/recent_wr will carry them
         rank_score = 1.5 / MAX_RANK
     else:
-        tier_val   = TIER_SCORE.get(tier, 3.5)
-        div_val    = DIV_BONUS.get(stats.get("division", ""), 0.0)
-        lp_bonus   = (stats.get("lp", 0) / 100.0) * 0.25
-        rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.0)
+        tier_val = TIER_SCORE.get(tier, 3.5)
+        is_apex  = tier in ["MASTER", "GRANDMASTER", "CHALLENGER"]
+        div_val  = 0.0 if is_apex else DIV_BONUS.get(stats.get("division", ""), 0.0)
+        
+        # In apex tiers, LP is the primary differentiator. We give it more weight.
+        lp_val = stats.get("lp", 0)
+        if is_apex:
+            # 100 LP in Master ≈ 0.4 rank points (vs 0.25 normally)
+            lp_bonus = (lp_val / 100.0) * 0.4
+        else:
+            lp_bonus = (lp_val / 100.0) * 0.25
+            
+        rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.2) / 1.2 # Allow some headroom
 
     # 2. Season WR — confidence-weighted toward 0.5 (full trust at 100 games)
     total     = wins + losses

@@ -260,22 +260,21 @@ export default function SearchInput({
                         <path d="M8 1.5l1.75 3.55 3.92.57-2.84 2.77.67 3.9L8 10.35l-3.5 1.84.67-3.9L2.33 5.62l3.92-.57L8 1.5z" />
                       </svg>
                     </button>
-                    {suggestionTab === "recent" && (
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeFromHistory(s);
-                        }}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500/30 hover:text-red-500 hover:bg-red-500/10 transition-all"
-                        title="Remove from Recent"
-                      >
-                        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <path d="M9 3l-6 6M3 3l6 6" strokeLinecap="round" />
-                        </svg>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (s.type === 'saved') toggleSaved(s);
+                        else removeFromHistory(s);
+                      }}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500/30 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                      title={s.type === 'saved' ? "Remove Favorite" : "Remove from Recent"}
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M9 3l-6 6M3 3l6 6" strokeLinecap="round" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               ))
