@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
 import { getSummoner } from "../api/riot";
+import RegionSelector from "./RegionSelector";
 
 // ── localStorage helpers ─────────────────────────────────────────────────────
 export const SAVED_KEY = "savedProfiles";
@@ -77,6 +78,7 @@ function NavSearch() {
   const inputRef = useRef(null);
   const blurTimer = useRef(null);
   const navigate = useNavigate();
+  const [region, setRegion] = useState(localStorage.getItem("lastRegion") || "na1");
 
   const expanded = focused || query.length > 0;
   const showHistory = focused && !error;
@@ -103,7 +105,6 @@ function NavSearch() {
     setError("");
     setLoading(true);
     try {
-      const region = localStorage.getItem("lastRegion") || "na1";
       const data = await getSummoner(parsed.gameName, parsed.tagLine, region);
       saveSearchHistory(raw);
       setQuery("");
@@ -160,7 +161,7 @@ function NavSearch() {
             : "border-slate-200 dark:border-white/10"
           }
           bg-slate-50 dark:bg-white/[0.04]
-          ${expanded ? "w-44 sm:w-52" : "w-8 sm:w-40"}`}
+          ${expanded ? "w-56 sm:w-72" : "w-8 sm:w-40"}`}
       >
         <button
           type="submit"
@@ -179,6 +180,21 @@ function NavSearch() {
             </svg>
           )}
         </button>
+
+        {expanded && (
+          <>
+            <div className="flex-shrink-0 border-r border-slate-200 dark:border-white/10 h-4 mr-1 ml-1" />
+            <RegionSelector 
+              value={region} 
+              onChange={(r) => {
+                setRegion(r);
+                localStorage.setItem("lastRegion", r);
+              }} 
+              compact 
+            />
+            <div className="flex-shrink-0 border-r border-slate-200 dark:border-white/10 h-4 ml-1 mr-2" />
+          </>
+        )}
 
         <input
           ref={inputRef}

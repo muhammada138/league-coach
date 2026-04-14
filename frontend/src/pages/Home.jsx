@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { getSummoner } from "../api/riot";
+import RegionSelector from "../components/RegionSelector";
 
 const DOT_GRID = `url("data:image/svg+xml,%3Csvg width='28' height='28' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='1' cy='1' r='1' fill='%23c89b3c'/%3E%3C/svg%3E")`;
 
@@ -22,24 +23,6 @@ const HOW_IT_WORKS = [
   },
 ];
 
-const REGIONS = [
-  { id: "na1", label: "NA" },
-  { id: "euw1", label: "EUW" },
-  { id: "eun1", label: "EUNE" },
-  { id: "kr", label: "KR" },
-  { id: "jp1", label: "JP" },
-  { id: "br1", label: "BR" },
-  { id: "la1", label: "LAN" },
-  { id: "la2", label: "LAS" },
-  { id: "oc1", label: "OCE" },
-  { id: "tr1", label: "TR" },
-  { id: "ru", label: "RU" },
-  { id: "ph2", label: "PH" },
-  { id: "sg2", label: "SG" },
-  { id: "th2", label: "TH" },
-  { id: "tw2", label: "TW" },
-  { id: "vn2", label: "VN" },
-];
 
 function readHistory() {
   try {
@@ -217,28 +200,10 @@ export default function Home() {
                   Region
                 </label>
                 <div className="relative">
-                  <select
+                  <RegionSelector 
                     value={region}
-                    onChange={(e) => setRegion(e.target.value)}
-                    className="w-full px-3 py-3.5 rounded-xl appearance-none
-                      border border-slate-200 dark:border-white/10
-                      focus:border-[#c89b3c]/60 dark:focus:border-[#c89b3c]/50
-                      focus:ring-2 focus:ring-[#c89b3c]/10
-                      bg-slate-50 dark:bg-white/[0.04]
-                      text-slate-900 dark:text-white text-sm
-                      transition-all duration-200 shadow-inner"
-                  >
-                    {REGIONS.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 dark:text-white/20">
-                    <svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M7 10l5 5 5-5z" />
-                    </svg>
-                  </div>
+                    onChange={(r) => setRegion(r)}
+                  />
                 </div>
               </div>
             </div>
