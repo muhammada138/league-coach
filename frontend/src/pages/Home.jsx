@@ -49,7 +49,7 @@ export default function Home() {
       saveToHistory({ gameName: finalName.trim(), tagLine: finalTag.trim(), region: finalRegion });
       localStorage.setItem("lastRegion", finalRegion);
       navigate(
-        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(finalTag.trim())}`,
+        `/player/${finalRegion}/${encodeURIComponent(data.gameName)}/${encodeURIComponent(finalTag.trim())}`,
         { state: { puuid: data.puuid, gameCount: 20, region: finalRegion } }
       );
     } catch (err) {
