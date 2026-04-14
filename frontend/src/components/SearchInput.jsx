@@ -209,26 +209,26 @@ export default function SearchInput({
               </div>
             ) : (
               suggestions.map((s, i) => (
-                <button
+                <div
                   key={`${s.gameName}#${s.tagLine}-${i}`}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => applySuggestion(s)}
-                  className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors
+                  className={`group w-full text-left px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer
                     ${i === focusedIdx 
                       ? "bg-[#c89b3c]/10 text-[#c89b3c]" 
                       : "hover:bg-slate-50 dark:hover:bg-white/[0.04] text-slate-700 dark:text-white/70"}`}
                 >
-                  {s.type === 'saved' ? (
-                    <svg className="w-3.5 h-3.5 text-[#c89b3c]" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M8 1.5l1.75 3.55 3.92.57-2.84 2.77.67 3.9L8 10.35l-3.5 1.84.67-3.9L2.33 5.62l3.92-.57L8 1.5z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-3.5 h-3.5 text-slate-300 dark:text-white/10" viewBox="0 0 12 12" fill="none">
-                      <path d="M6 1v5l3 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.3"/>
-                    </svg>
-                  )}
-                  <div className="flex flex-col min-w-0">
+                  <div className="flex-shrink-0">
+                    {s.type === 'saved' ? (
+                      <svg className="w-3.5 h-3.5 text-[#c89b3c]" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 1.5l1.75 3.55 3.92.57-2.84 2.77.67 3.9L8 10.35l-3.5 1.84.67-3.9L2.33 5.62l3.92-.57L8 1.5z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5 text-slate-300 dark:text-white/10" viewBox="0 0 12 12" fill="none">
+                        <path d="M6 1v5l3 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.3"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col">
                     <span className="text-sm font-semibold truncate leading-tight">
                       {s.gameName}
                       <span className="text-slate-400 dark:text-white/20 font-medium">#{s.tagLine}</span>
@@ -239,7 +239,44 @@ export default function SearchInput({
                       </span>
                     )}
                   </div>
-                </button>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSaved(s);
+                      }}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all
+                        ${s.isSaved 
+                          ? "bg-[#c89b3c]/10 text-[#c89b3c] shadow-sm shadow-[#c89b3c]/5" 
+                          : "text-slate-400 dark:text-white/20 hover:text-[#c89b3c] hover:bg-[#c89b3c]/10"}`}
+                      title={s.isSaved ? "Remove Favorite" : "Favorite Profile"}
+                    >
+                      <svg className={`w-3.5 h-3.5 ${s.isSaved ? "fill-current" : ""}`} viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 1.5l1.75 3.55 3.92.57-2.84 2.77.67 3.9L8 10.35l-3.5 1.84.67-3.9L2.33 5.62l3.92-.57L8 1.5z" />
+                      </svg>
+                    </button>
+                    {suggestionTab === "recent" && (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFromHistory(s);
+                        }}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500/30 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                        title="Remove from Recent"
+                      >
+                        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M9 3l-6 6M3 3l6 6" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
               ))
             )}
           </div>

@@ -24,6 +24,45 @@ const HOW_IT_WORKS = [
   },
 ];
 
+function QuickFavorites() {
+  const { saved, toggleSaved } = useSearchHistory();
+  const navigate = useNavigate();
+
+  if (!saved || saved.length === 0) return null;
+
+  return (
+    <div className="w-full max-w-2xl mt-4 flex flex-wrap justify-center gap-2 animate-fadeIn">
+      {saved.map((p) => {
+        const region = p.region || localStorage.getItem("lastRegion") || "na1";
+        return (
+          <div
+            key={`${p.gameName}#${p.tagLine}`}
+            className="group flex items-center gap-2 px-3 py-1.5 bg-white/50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.07] rounded-full hover:border-[#c89b3c]/40 hover:bg-[#c89b3c]/[0.03] transition-all cursor-pointer shadow-sm"
+            onClick={() => navigate(`/player/${encodeURIComponent(p.gameName)}/${encodeURIComponent(p.tagLine)}`, { state: { puuid: p.puuid, region } })}
+          >
+            <div className="w-5 h-5 rounded-md bg-[#c89b3c]/10 border border-[#c89b3c]/20 flex items-center justify-center text-[#c89b3c] text-[8px] font-black uppercase">
+              {p.gameName.charAt(0)}
+            </div>
+            <span className="text-[11px] font-bold text-slate-700 dark:text-white/70 truncate max-w-[100px]">
+              {p.gameName}
+              <span className="text-slate-400 dark:text-white/20 font-medium ml-0.5">#{p.tagLine}</span>
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleSaved(p); }}
+              className="w-4 h-4 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+              title="Remove from Favorites"
+            >
+              <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M9 3L3 9M3 3L9 9" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Home() {
   const [gameName, setGameName] = useState("");
   const [tagLine, setTagLine]   = useState("");
@@ -103,6 +142,9 @@ export default function Home() {
           loading={loading}
           error={error}
         />
+
+        {/* Quick Access Favorites Bar */}
+        <QuickFavorites />
 
         {/* Secondary section: How it works */}
         <div className="w-full max-w-lg mt-16">
