@@ -477,7 +477,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
 }
 
 // ── Star / save button ─────────────────────────────────────────────────────
-function StarButton({ gameName, tagLine, puuid, profileIconId }) {
+function StarButton({ gameName, tagLine, puuid, profileIconId, region }) {
   const [saved, setSaved] = useState(() =>
     readSaved().some((p) => p.puuid === puuid)
   );
@@ -491,7 +491,7 @@ function StarButton({ gameName, tagLine, puuid, profileIconId }) {
       setSaved(false);
     } else {
       if (current.length >= 10) return;
-      writeSaved([...current, { gameName, tagLine, puuid, profileIconId }]);
+      writeSaved([...current, { gameName, tagLine, puuid, profileIconId, region }]);
       setSaved(true);
     }
   };
@@ -526,7 +526,7 @@ function LaneIcon({ lane }) {
 }
 
 // ── Live Game Banner ────────────────────────────────────────────────────────
-function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
+function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region }) {
   const navigate = useNavigate();
   const [champMap, setChampMap] = useState(null);
   const [elapsed, setElapsed] = useState(liveGame.gameLength ?? 0);
@@ -543,13 +543,13 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady }) {
   useEffect(() => {
     const puuids = liveGame.participants.map((p) => p.puuid).filter(Boolean);
     if (puuids.length > 0) {
-      getLiveEnrich(puuids, liveGame.queueId ?? 420)
+      getLiveEnrich(puuids, liveGame.queueId ?? 420, region)
         .then((stats) => { setLiveStats(stats); onReady?.(); })
         .catch(() => { onReady?.(); });
     } else {
       onReady?.();
     }
-  }, [liveGame]);
+  }, [liveGame, region]);
 
   // Call backend ML win predictor once we have both live stats and champion names
   useEffect(() => {
@@ -794,7 +794,7 @@ function LpHistoryGraph({ history }) {
   );
 }
 
-function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked" }) {
+function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked", region }) {
   const [iconFailed, setIconFailed] = useState(false);
   if (!profile) return null;
   const displayProfile = queueTab === "flex" && profile.flex
@@ -848,7 +848,10 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVe
             <span className="text-xs text-slate-400 dark:text-white/25 font-normal ml-1 flex-shrink-0">
               #{tagLine}
             </span>
-            <StarButton gameName={gameName} tagLine={tagLine} puuid={puuid} profileIconId={profile.profileIconId} />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#c89b3c]/60 bg-[#c89b3c]/10 px-1.5 py-0.5 rounded border border-[#c89b3c]/20 ml-2">
+              {region.toUpperCase()}
+            </span>
+            <StarButton gameName={gameName} tagLine={tagLine} puuid={puuid} profileIconId={profile.profileIconId} region={region} />
             {onLiveCheck && (
               <div className="ml-2 flex items-center gap-2">
                 <button
@@ -1753,12 +1756,12 @@ export default function Dashboard() {
         .catch(() => ["14.24.1"]),
       puuidHint
         ? Promise.resolve(puuidHint)
-        : getSummoner(gameName, tagLine).then((d) => d.puuid),
+        : getSummoner(gameName, tagLine, region).then((d) => d.puuid),
     ]);
     setDdVersion(versions[0]);
     getRunesMap(versions[0]).then(setRunesMap);
     setResolvedPuuid(puuidResolved);
-    const prof = await getProfile(puuidResolved);
+    const prof = await getProfile(puuidResolved, region);
     setProfile(prof);
     setExtraGames([]);
     setHasMore(true);
@@ -1773,8 +1776,8 @@ export default function Dashboard() {
     if (!resolvedPuuid) return;
     const queueMap = { ranked: 'RANKED_SOLO_5x5', flex: 'RANKED_FLEX_SR' };
     const queue = queueMap[queueTab] || 'RANKED_SOLO_5x5';
-    getLpHistory(resolvedPuuid, queue).then(setLpHistory).catch(() => {});
-  }, [resolvedPuuid, queueTab]);
+    getLpHistory(resolvedPuuid, queue, region).then(setLpHistory).catch(() => {});
+  }, [resolvedPuuid, queueTab, region]);
 
   // Teammates and opponents data is now aggregated locally from 'games' prop in RightPanel
 
@@ -1794,7 +1797,7 @@ export default function Dashboard() {
     doFetch(state?.puuid)
       .then((puuid) => {
         setLoading(false); // profile card renders immediately
-        return analyzeSummoner(puuid, gameName, gameCount);
+        return analyzeSummoner(puuid, gameName, gameCount, region);
       })
       .then((anal) => {
         setAnalysis(anal);
@@ -1815,7 +1818,7 @@ export default function Dashboard() {
     setExpandedMatchId(null);
     setScoreboard(null);
     doFetch(resolvedPuuid)
-      .then((puuid) => analyzeSummoner(puuid, gameName, gameCount))
+      .then((puuid) => analyzeSummoner(puuid, gameName, gameCount, region))
       .then((anal) => {
         setAnalysis(anal);
         setAnalysisLoading(false);
@@ -1832,7 +1835,7 @@ export default function Dashboard() {
         const start = analysis.games.length + extraGames.length;
         const remaining = MAX_GAMES - start;
         const count = Math.min(10, remaining);
-        const newGames = await getHistory(resolvedPuuid, start, count, 420);
+        const newGames = await getHistory(resolvedPuuid, start, count, 420, region);
         setExtraGames((prev) => [...prev, ...newGames]);
         if (newGames.length < count) setHasMore(false);
       } catch {
@@ -1849,7 +1852,7 @@ export default function Dashboard() {
         const start = currentGames.length;
         const remaining = MAX_GAMES - start;
         const count = Math.min(10, remaining);
-        const newGames = await getHistory(resolvedPuuid, start, count, queueNum);
+        const newGames = await getHistory(resolvedPuuid, start, count, queueNum, region);
         setTabGames((prev) => ({ ...prev, [queueTab]: [...currentGames, ...newGames] }));
         if (newGames.length < count) setTabHasMore((prev) => ({ ...prev, [queueTab]: false }));
       } catch {
@@ -1866,7 +1869,7 @@ export default function Dashboard() {
       const queueNum = tabId === "flex" ? 440 : 400;
       setTabLoadingMore(true);
       try {
-        const games = await getHistory(resolvedPuuid, 0, 10, queueNum);
+        const games = await getHistory(resolvedPuuid, 0, 10, queueNum, region);
         setTabGames((prev) => ({ ...prev, [tabId]: games }));
         if (games.length < 10) setTabHasMore((prev) => ({ ...prev, [tabId]: false }));
       } catch {
@@ -1881,7 +1884,7 @@ export default function Dashboard() {
     if (liveStatus === 'loading' || !resolvedPuuid) return;
     setLiveStatus('loading');
     try {
-      const data = await getLiveGame(resolvedPuuid);
+      const data = await getLiveGame(resolvedPuuid, region);
       if (data.inGame) {
         setLiveGame(data);
         return; // stays 'loading' until LiveGameBanner calls onReady
@@ -1906,7 +1909,7 @@ export default function Dashboard() {
     setScoreboard(null);
     setScoreboardLoading(true);
     try {
-      const data = await getScoreboard(matchId);
+      const data = await getScoreboard(matchId, region);
       setScoreboard(data);
     } catch {
       setScoreboard(null);
@@ -1964,6 +1967,7 @@ export default function Dashboard() {
               onLiveCheck={handleLiveCheck}
               liveStatus={liveStatus}
               queueTab={queueTab}
+              region={region}
             />
 
             {liveGame?.inGame && (
@@ -1973,6 +1977,7 @@ export default function Dashboard() {
                 puuid={resolvedPuuid}
                 onClose={() => setLiveGame(null)}
                 onReady={() => setLiveStatus('idle')}
+                region={region}
               />
             )}
 

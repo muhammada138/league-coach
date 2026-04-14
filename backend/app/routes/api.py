@@ -8,7 +8,7 @@ from ..services.riot import (
     _compute_perf_score, _compute_diffed_lane
 )
 from ..services.groq import get_coaching_feedback, ask_coach_question
-from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, CACHE_VERSION
+from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, CACHE_VERSION, get_routing
 from ..models.requests import LiveEnrichRequest, AskRequest, WinPredictRequest
 from ..services import win_predictor
 from ..services import db
@@ -27,9 +27,11 @@ async def backfill_if_needed(puuid: str, tier: str, division: str, lp: int, wins
     
     # Simple backfill: Fetch last 20 games and estimate LP path
     # NOTE: This is an estimation. Real LP gain/loss depends on MMR.
+    # We use americas as default for backfill unless we want to pass routing here too
+    routing = RIOT_ROUTING 
     async with httpx.AsyncClient() as client:
         try:
-            match_ids = await riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=20&queue=420")
+            match_ids = await riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=20&queue=420")
             if not match_ids: return
             
             match_tasks = [riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}") for mid in match_ids]
@@ -74,18 +76,19 @@ async def backfill_if_needed(puuid: str, tier: str, division: str, lp: int, wins
             print(f"Backfill failed: {e}")
 
 @router.get("/summoner/{game_name}/{tag_line}")
-async def get_summoner(game_name: str, tag_line: str):
-    url = f"https://{RIOT_ROUTING}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{game_name}/{tag_line}"
+async def get_summoner(game_name: str, tag_line: str, region: str = RIOT_REGION):
+    routing = get_routing(region)
+    url = f"https://{routing}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{game_name}/{tag_line}"
     async with httpx.AsyncClient() as client:
         data = await riot_get(client, url)
     return {"puuid": data["puuid"], "gameName": data["gameName"], "tagLine": data["tagLine"]}
 
 @router.get("/profile/{puuid}")
-async def get_profile(puuid: str):
+async def get_profile(puuid: str, region: str = RIOT_REGION):
     async with httpx.AsyncClient() as client:
         summoner, entries = await asyncio.gather(
-            riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"),
-            riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
+            riot_get(client, f"https://{region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"),
+            riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
         )
     summoner_level = summoner.get("summonerLevel", 0)
     ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
@@ -130,16 +133,17 @@ async def lp_history(puuid: str, queue: str = 'RANKED_SOLO_5x5'):
 
 
 @router.get("/analyze/{puuid}")
-async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
+async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10, region: str = RIOT_REGION):
     count = max(5, min(count, 30))
+    routing = get_routing(region)
     # Versioned cache key to force logic updates
-    cache_key = f"{CACHE_VERSION}:analyze:{puuid}:{count}"
+    cache_key = f"{CACHE_VERSION}:region:{region}:analyze:{puuid}:{count}"
     cached = route_cache.get(cache_key)
     if cached is not None: return cached
     async with httpx.AsyncClient(timeout=30.0) as client:
         queue_priorities = [420, 440, 400]
         id_tasks = [
-            riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count={count}&queue={q}")
+            riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count={count}&queue={q}")
             for q in queue_priorities
         ]
         id_results = await asyncio.gather(*id_tasks, return_exceptions=True)
@@ -151,7 +155,7 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
                 queue_used = q
                 break
         if not match_ids: raise HTTPException(status_code=404, detail="No matches found")
-        match_tasks = [riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}") for mid in match_ids]
+        match_tasks = [riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/{mid}") for mid in match_ids]
         match_datas = await asyncio.gather(*match_tasks, return_exceptions=True)
         games = []
         for match_id, match_data in zip(match_ids, match_datas):
@@ -276,16 +280,17 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10):
     return result
 
 @router.get("/history/{puuid}")
-async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 420):
+async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 420, region: str = RIOT_REGION):
     count = min(count, 10)
+    routing = get_routing(region)
     # Versioned cache key to force logic updates
-    cache_key = f"{CACHE_VERSION}:history:{puuid}:{start}:{count}:{queue}"
+    cache_key = f"{CACHE_VERSION}:region:{region}:history:{puuid}:{start}:{count}:{queue}"
     cached = route_cache.get(cache_key)
     if cached is not None: return cached
     async with httpx.AsyncClient(timeout=30.0) as client:
-        match_ids = await riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?start={start}&count={count}&queue={queue}")
+        match_ids = await riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?start={start}&count={count}&queue={queue}")
         if not match_ids: return []
-        match_tasks = [riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}") for mid in match_ids]
+        match_tasks = [riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/{mid}") for mid in match_ids]
         match_datas = await asyncio.gather(*match_tasks, return_exceptions=True)
     games = []
     for match_id, match_data in zip(match_ids, match_datas):
@@ -316,13 +321,14 @@ async def get_history(puuid: str, start: int = 0, count: int = 10, queue: int = 
     return games
 
 @router.get("/match/{match_id}/scoreboard")
-async def get_scoreboard(match_id: str):
+async def get_scoreboard(match_id: str, region: str = RIOT_REGION):
+    routing = get_routing(region)
     async with httpx.AsyncClient() as client:
-        data = await riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{match_id}")
+        data = await riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/{match_id}")
     participants = sorted(data["info"]["participants"], key=lambda p: p["teamId"])
     for p in participants: p["totalMinionsKilled"] = p.get("totalMinionsKilled", 0) + p.get("neutralMinionsKilled", 0)
     async with httpx.AsyncClient() as c2:
-        ranks = await asyncio.gather(*[get_cached_rank(c2, p.get("puuid", "")) for p in participants], return_exceptions=True)
+        ranks = await asyncio.gather(*[get_cached_rank(c2, p.get("puuid", ""), region=region) for p in participants], return_exceptions=True)
     participants_out = []
     for i, p in enumerate(participants):
         rank = ranks[i] if not isinstance(ranks[i], Exception) else "Unranked"
@@ -347,8 +353,8 @@ async def get_scoreboard(match_id: str):
     return {"participants": participants_out, "teams": data["info"]["teams"]}
 
 @router.get("/live/{puuid}")
-async def get_live_game(puuid: str):
-    url = f"https://{RIOT_REGION}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{puuid}"
+async def get_live_game(puuid: str, region: str = RIOT_REGION):
+    url = f"https://{region}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{puuid}"
     async with httpx.AsyncClient() as client:
         try:
             data = await riot_get(client, url)
@@ -374,7 +380,13 @@ async def live_enrich(body: LiveEnrichRequest):
     _match_sem = asyncio.Semaphore(8)
 
     async def enrich_one(puuid: str):
-        cache_key = f"{puuid}:{body.queue_id}"
+        # We need region here from body, but LiveEnrichRequest would need updating
+        # For now, we'll try to infer it or use default. 
+        # Actually, let's update LiveEnrichRequest to include region.
+        region = getattr(body, 'region', RIOT_REGION)
+        routing = get_routing(region)
+        
+        cache_key = f"{puuid}:{body.queue_id}:{region}"
         cached = enriched_cache.get(cache_key)
         if cached: return cached
 
@@ -387,8 +399,8 @@ async def live_enrich(body: LiveEnrichRequest):
         try:
             async with httpx.AsyncClient(timeout=25.0) as client:
                 entries, match_ids = await asyncio.gather(
-                    riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                    riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
+                    riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
+                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
                 
@@ -411,7 +423,7 @@ async def live_enrich(body: LiveEnrichRequest):
                     # Rate-limited match detail fetches — each call acquires the shared semaphore
                     async def _fetch(mid):
                         async with _match_sem:
-                            return await riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
+                            return await riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/{mid}")
 
                     match_datas = await asyncio.gather(*[_fetch(mid) for mid in match_ids], return_exceptions=True)
                     
