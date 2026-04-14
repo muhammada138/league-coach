@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory, getTeammates } from "../api/riot";
 import useSearchHistory from "../hooks/useSearchHistory";
@@ -597,12 +597,11 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
       : null;
 
     const canNav = !isMe && p.puuid && p.summonerName && p.tagLine;
-    const handleNav = () => canNav && navigate(
-      `/player/${region}/${encodeURIComponent(p.summonerName)}/${encodeURIComponent(p.tagLine)}`,
-      { state: { puuid: p.puuid, back: true } }
-    );
+    const toUrl = canNav ? `/player/${region}/${encodeURIComponent(p.summonerName)}/${encodeURIComponent(p.tagLine)}` : undefined;
+    const linkState = canNav ? { puuid: p.puuid, back: true } : undefined;
 
     const handleDotClick = (e, matchId) => {
+      e.preventDefault();
       e.stopPropagation();
       if (isMe && matchId) {
         onMatchClick?.(matchId);
@@ -611,19 +610,20 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
 
     return (
       <div key={p.puuid || p.summonerName}
-        onClick={handleNav}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors
-          ${isMe ? "bg-[#c89b3c]/10 border border-[#c89b3c]/20" : "hover:bg-slate-50 dark:hover:bg-white/[0.02]"}
-          ${canNav ? "cursor-pointer group" : ""}`}
+        className={`relative group flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors
+          ${isMe ? "bg-[#c89b3c]/10 border border-[#c89b3c]/20" : "hover:bg-slate-50 dark:hover:bg-white/[0.02]"}`}
       >
+        {canNav && (
+          <Link to={toUrl} state={linkState} className="absolute inset-0 z-0 rounded-lg" />
+        )}
         {iconUrl ? (
           <img src={iconUrl} alt={champName}
-            className="w-7 h-7 rounded object-cover border border-slate-200 dark:border-white/10 flex-shrink-0"
+            className="relative z-10 w-7 h-7 rounded object-cover border border-slate-200 dark:border-white/10 flex-shrink-0 pointer-events-none"
             onError={(e) => { e.target.style.display = "none"; }} />
         ) : (
-          <div className="w-7 h-7 rounded bg-slate-200 dark:bg-white/10 flex-shrink-0 animate-pulse" />
+          <div className="relative z-10 w-7 h-7 rounded bg-slate-200 dark:bg-white/10 flex-shrink-0 animate-pulse pointer-events-none" />
         )}
-        <div className="flex flex-col min-w-0 flex-1">
+        <div className="relative z-10 flex flex-col min-w-0 flex-1 pointer-events-none">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className={`text-xs font-semibold truncate
               ${isMe ? "text-[#c89b3c]" : canNav ? "text-slate-700 dark:text-white/70 group-hover:text-[#c89b3c] dark:group-hover:text-[#c89b3c] transition-colors" : "text-slate-700 dark:text-white/70"}`}>
@@ -662,7 +662,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
         </div>
 
         {/* Last 5 W/L dots */}
-        <div className="flex gap-0.5 flex-shrink-0">
+        <div className="relative z-10 flex gap-0.5 flex-shrink-0">
           {last5.length > 0
             ? last5.map((g, i) => (
               <div key={i} title={`Score: ${g.score}${isMe ? "\nClick to view game" : ""}`}
@@ -1048,18 +1048,19 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
 
                 <div className="flex flex-col ml-0.5 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => p?.puuid && p?.riotIdTagline && navigate(
-                        `/player/${region}/${encodeURIComponent(p?.riotIdGameName)}/${encodeURIComponent(p?.riotIdTagline)}`,
-                        { state: { puuid: p?.puuid, back: true } }
-                      )}
-                      disabled={!p?.puuid || !p?.riotIdTagline}
-                      className={`font-bold truncate text-[11px] text-left
-                        ${isMe ? "text-[#c89b3c]" : "text-slate-800 dark:text-white/80"}
-                        ${p?.puuid && p?.riotIdTagline ? "hover:underline hover:text-[#c89b3c] cursor-pointer" : "cursor-default"}`}
-                    >
-                      {p?.riotIdGameName || "Unknown"}
-                    </button>
+                    {p?.puuid && p?.riotIdTagline ? (
+                      <Link
+                        to={`/player/${region}/${encodeURIComponent(p?.riotIdGameName)}/${encodeURIComponent(p?.riotIdTagline)}`}
+                        state={{ puuid: p?.puuid, back: true }}
+                        className={`font-bold truncate text-[11px] text-left hover:underline hover:text-[#c89b3c] cursor-pointer ${isMe ? "text-[#c89b3c]" : "text-slate-800 dark:text-white/80"}`}
+                      >
+                        {p?.riotIdGameName || "Unknown"}
+                      </Link>
+                    ) : (
+                      <span className={`font-bold truncate text-[11px] text-left cursor-default ${isMe ? "text-[#c89b3c]" : "text-slate-800 dark:text-white/80"}`}>
+                        {p?.riotIdGameName || "Unknown"}
+                      </span>
+                    )}
                     {p?.puuid === mvpPuuid && (
                       <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-yellow-400/15 text-yellow-400 border border-yellow-400/30 leading-none flex-shrink-0">
                         MVP
@@ -1531,17 +1532,19 @@ function TeammatesContent({ games, region }) {
               return (
                 <div
                   key={r.puuid}
-                  onClick={() => r.tagLine && navigate(`/player/${region}/${encodeURIComponent(r.name)}/${encodeURIComponent(r.tagLine)}`, { state: { puuid: r.puuid, back: true } })}
-                  className={`grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-5 py-2
+                  className={`group relative grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-5 py-2
                     hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors border-b
                     border-slate-50 dark:border-white/[0.03] last:border-0
-                    ${r.tagLine ? "cursor-pointer group" : ""}`}
+                  `}
                 >
-                  <span className={`text-xs font-semibold truncate max-w-[130px] transition-colors
+                  {r.tagLine && (
+                    <Link to={`/player/${region}/${encodeURIComponent(r.name)}/${encodeURIComponent(r.tagLine)}`} state={{ puuid: r.puuid, back: true }} className="absolute inset-0 z-0" />
+                  )}
+                  <span className={`relative z-10 pointer-events-none text-xs font-semibold truncate max-w-[130px] transition-colors
                     ${r.tagLine ? "text-slate-700 dark:text-white/70 group-hover:text-[#c89b3c] dark:group-hover:text-[#c89b3c]" : "text-slate-700 dark:text-white/70"}`}>{r.name}</span>
-                  <span className="text-xs text-slate-500 dark:text-white/40 text-right tabular-nums">{r.games}</span>
-                  <span className="text-xs text-slate-500 dark:text-white/40 text-right tabular-nums whitespace-nowrap">{r.wins}-{r.games - r.wins}</span>
-                  <span className={`text-xs font-bold text-right tabular-nums ${wrColor}`}>{wr}%</span>
+                  <span className="relative z-10 pointer-events-none text-xs text-slate-500 dark:text-white/40 text-right tabular-nums">{r.games}</span>
+                  <span className="relative z-10 pointer-events-none text-xs text-slate-500 dark:text-white/40 text-right tabular-nums whitespace-nowrap">{r.wins}-{r.games - r.wins}</span>
+                  <span className={`relative z-10 pointer-events-none text-xs font-bold text-right tabular-nums ${wrColor}`}>{wr}%</span>
                 </div>
               );
             })}

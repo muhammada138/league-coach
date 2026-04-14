@@ -134,7 +134,18 @@ export default function SearchInput({
             type="text"
             placeholder={placeholder.split('#')[0]}
             value={gameName}
-            onChange={(e) => { setGameName(e.target.value); setShowSuggestions(true); }}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val.includes('#')) {
+                const [name, ...rest] = val.split('#');
+                setGameName(name);
+                setTagLine(rest.join('#'));
+                setShowSuggestions(true);
+              } else {
+                setGameName(val);
+                setShowSuggestions(true);
+              }
+            }}
             onFocus={() => { clearTimeout(blurTimer.current); setShowSuggestions(true); }}
             onBlur={() => { blurTimer.current = setTimeout(() => setShowSuggestions(false), 200); }}
             onKeyDown={handleKeyDown}
