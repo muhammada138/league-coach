@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory, getTeammates } from "../api/riot";
-import { readSaved, writeSaved } from "../components/Navbar";
+import useSearchHistory from "../hooks/useSearchHistory";
 
 const TIER_COLORS = {
   IRON: "text-slate-400",
@@ -478,32 +478,23 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
 
 // ── Star / save button ─────────────────────────────────────────────────────
 function StarButton({ gameName, tagLine, puuid, profileIconId, region }) {
-  const [saved, setSaved] = useState(() =>
-    readSaved().some((p) => p.puuid === puuid)
-  );
+  const { saved: savedList, toggleSaved } = useSearchHistory();
+  const isSaved = savedList.some((p) => p.puuid === puuid);
 
   if (!tagLine || !puuid) return null;
 
-  const toggle = () => {
-    const current = readSaved();
-    if (saved) {
-      writeSaved(current.filter((p) => p.puuid !== puuid));
-      setSaved(false);
-    } else {
-      if (current.length >= 10) return;
-      writeSaved([...current, { gameName, tagLine, puuid, profileIconId, region }]);
-      setSaved(true);
-    }
+  const handleToggle = () => {
+    toggleSaved({ gameName, tagLine, puuid, profileIconId, region });
   };
 
   return (
     <button
-      onClick={toggle}
-      title={saved ? "Remove from saved" : "Save profile"}
+      onClick={handleToggle}
+      title={isSaved ? "Remove from saved" : "Save profile"}
       className={`ml-1 flex-shrink-0 text-lg leading-none transition-colors duration-150
-        ${saved ? "text-[#c89b3c]" : "text-slate-300 dark:text-white/20 hover:text-[#c89b3c]"}`}
+        ${isSaved ? "text-[#c89b3c]" : "text-slate-300 dark:text-white/20 hover:text-[#c89b3c]"}`}
     >
-      {saved ? "★" : "☆"}
+      {isSaved ? "★" : "☆"}
     </button>
   );
 }
