@@ -7,6 +7,8 @@ AI-powered League of Legends coaching. Enter your Riot ID, get a breakdown of yo
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat&logo=tailwind-css&logoColor=white)
 ![Groq](https://img.shields.io/badge/Groq_AI-LLaMA_3.3_70B-orange?style=flat)
 
+Live at [RiftIQ](https://league-coach.vercel.app/)
+
 ---
 ## Screenshots
 
