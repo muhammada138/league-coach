@@ -257,17 +257,11 @@ export default function SearchInput({
                       {s.tier && s.tier !== "UNRANKED" && (
                         <>
                           <span className="w-0.5 h-0.5 rounded-full bg-slate-300 dark:bg-white/20" />
-                          <div className="flex items-center gap-1">
-                            <img
-                              src={`https://opgg-static.akamaized.net/images/medals_new/${s.tier.toLowerCase()}.png`}
-                              alt={s.tier}
-                              className="w-3 h-3 object-contain drop-shadow-sm"
-                              onError={(e) => { e.target.style.display = 'none'; }}
-                            />
-                            <span className={`text-[9px] font-bold uppercase tracking-wide ${TIER_COLORS[s.tier] || "text-slate-400"}`}>
-                              {s.tier}
-                            </span>
-                          </div>
+                          <span className={`text-[9px] font-bold uppercase tracking-wide ${TIER_COLORS[s.tier] || "text-slate-400"}`}>
+                            {["MASTER", "GRANDMASTER", "CHALLENGER"].includes(s.tier)
+                              ? `${s.tier} ${s.lp ?? 0} LP`
+                              : `${s.tier} ${s.division ?? ""}`}
+                          </span>
                         </>
                       )}
                     </div>

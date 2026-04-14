@@ -481,7 +481,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
 }
 
 // ── Star / save button ─────────────────────────────────────────────────────
-function StarButton({ gameName, tagLine, puuid, profileIconId, region, tier }) {
+function StarButton({ gameName, tagLine, puuid, profileIconId, region, tier, division, lp }) {
   const { saved: savedList, toggleSaved } = useSearchHistory();
   const isSaved = savedList.some((p) =>
     p.gameName.toLowerCase() === gameName.toLowerCase() &&
@@ -491,7 +491,7 @@ function StarButton({ gameName, tagLine, puuid, profileIconId, region, tier }) {
   if (!tagLine || !puuid) return null;
 
   const handleToggle = () => {
-    toggleSaved({ gameName, tagLine, puuid, profileIconId, region, tier });
+    toggleSaved({ gameName, tagLine, puuid, profileIconId, region, tier, division, lp });
   };
 
   return (
@@ -880,7 +880,7 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVe
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#c89b3c]/60 bg-[#c89b3c]/10 px-1.5 py-0.5 rounded border border-[#c89b3c]/20 ml-2">
               {region.toUpperCase()}
             </span>
-            <StarButton gameName={gameName} tagLine={tagLine} puuid={puuid} profileIconId={profile.profileIconId} region={region} tier={profile.tier} />
+            <StarButton gameName={gameName} tagLine={tagLine} puuid={puuid} profileIconId={profile.profileIconId} region={region} tier={profile.tier} division={profile.division} lp={profile.lp} />
             {onLiveCheck && (
               <div className="ml-2 flex items-center gap-2">
                 <button
@@ -956,8 +956,8 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
     <>
       <tr>
         <td colSpan={9} className={`px-2 py-1.5 ${isWin
-            ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400"
-            : "bg-red-50 dark:bg-red-950/50 text-red-500 dark:text-red-400"
+          ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400"
+          : "bg-red-50 dark:bg-red-950/50 text-red-500 dark:text-red-400"
           }`}>
           <div className="flex items-center gap-4">
             <span className="text-[10px] font-bold uppercase tracking-widest flex-shrink-0">
@@ -1013,8 +1013,8 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
           <tr
             key={(p?.riotIdGameName || idx) + (p?.championName || idx)}
             className={`border-b border-black/[0.04] dark:border-white/[0.03] last:border-0 transition-colors ${isMe
-                ? "bg-[#c89b3c]/10 dark:bg-[#c89b3c]/[0.12]"
-                : "hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
+              ? "bg-[#c89b3c]/10 dark:bg-[#c89b3c]/[0.12]"
+              : "hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
               }`}
           >
             <td className="px-2 py-2 text-slate-400 dark:text-white/25 text-[10px] w-5 sm:w-6 text-center">{idx + 1}</td>
@@ -1291,8 +1291,8 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
               </span>
             ) : (
               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${game.win
-                  ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-                  : "bg-red-100 dark:bg-red-500/20 text-red-500 dark:text-red-400"
+                ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                : "bg-red-100 dark:bg-red-500/20 text-red-500 dark:text-red-400"
                 }`}>
                 {game.win ? "W" : "L"}
               </span>
@@ -1363,10 +1363,10 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
       {/* Expanded scoreboard */}
       {isExpanded && (
         <div className={`border-t ${isRemake
-            ? "border-slate-200 dark:border-white/10 bg-slate-50/20 dark:bg-slate-800/10"
-            : game.win
-              ? "border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10"
-              : "border-red-200 dark:border-red-500/20 bg-red-50/20 dark:bg-red-950/10"
+          ? "border-slate-200 dark:border-white/10 bg-slate-50/20 dark:bg-slate-800/10"
+          : game.win
+            ? "border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10"
+            : "border-red-200 dark:border-red-500/20 bg-red-50/20 dark:bg-red-950/10"
           }`}>
           <ExpandedScoreboard
             scoreboard={scoreboard}
@@ -1803,7 +1803,9 @@ export default function Dashboard() {
       region,
       puuid: puuidResolved,
       profileIconId: prof?.profileIconId,
-      tier: prof?.tier
+      tier: prof?.tier,
+      division: prof?.division,
+      lp: prof?.lp
     });
 
     setExtraGames([]);
