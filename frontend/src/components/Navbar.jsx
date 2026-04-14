@@ -103,13 +103,14 @@ function NavSearch() {
     setError("");
     setLoading(true);
     try {
-      const data = await getSummoner(parsed.gameName, parsed.tagLine);
+      const region = localStorage.getItem("lastRegion") || "na1";
+      const data = await getSummoner(parsed.gameName, parsed.tagLine, region);
       saveSearchHistory(raw);
       setQuery("");
       inputRef.current?.blur();
       navigate(
         `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(parsed.tagLine)}`,
-        { state: { puuid: data.puuid } }
+        { state: { puuid: data.puuid, region } }
       );
     } catch (err) {
       setError(err.response?.status === 404 ? "Summoner not found" : "Something went wrong");
@@ -299,17 +300,19 @@ function SavedDropdown() {
   const handleNavigate = async (p) => {
     setLoadingId(p.puuid);
     try {
-      const data = await getSummoner(p.gameName, p.tagLine);
+      const region = p.region || localStorage.getItem("lastRegion") || "na1";
+      const data = await getSummoner(p.gameName, p.tagLine, region);
       setOpen(false);
       navigate(
         `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(p.tagLine)}`,
-        { state: { puuid: data.puuid } }
+        { state: { puuid: data.puuid, region } }
       );
     } catch {
       setOpen(false);
+      const region = p.region || localStorage.getItem("lastRegion") || "na1";
       navigate(
         `/player/${encodeURIComponent(p.gameName)}/${encodeURIComponent(p.tagLine)}`,
-        { state: { puuid: p.puuid } }
+        { state: { puuid: p.puuid, region } }
       );
     } finally {
       setLoadingId(null);
@@ -377,6 +380,11 @@ function SavedDropdown() {
                   <span className="flex-1 min-w-0 text-xs font-semibold text-slate-700 dark:text-white/70 truncate">
                     {p.gameName}
                     <span className="text-slate-400 dark:text-white/30 font-normal">#{p.tagLine}</span>
+                    {p.region && (
+                      <span className="ml-1.5 text-[9px] font-bold text-[#c89b3c]/60 bg-[#c89b3c]/10 px-1 py-0.5 rounded border border-[#c89b3c]/20">
+                        {p.region.toUpperCase()}
+                      </span>
+                    )}
                   </span>
 
                   <button
