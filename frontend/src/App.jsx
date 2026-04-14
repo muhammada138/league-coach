@@ -16,7 +16,7 @@ export default function App() {
           <Navbar />
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/player/:gameName/:tagLine" element={<Dashboard />} />
+            <Route path="/player/:region/:gameName/:tagLine" element={<Dashboard />} />
             <Route path="/admin/ingest" element={<IngestDashboard />} />
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />

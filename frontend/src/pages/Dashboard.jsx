@@ -1695,9 +1695,10 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
 const APP_VERSION = "1.1";
 
 export default function Dashboard() {
-  const { gameName: rawGameName, tagLine: rawTagLine } = useParams();
-  const gameName = rawGameName ? decodeURIComponent(rawGameName) : "";
-  const tagLine  = rawTagLine  ? decodeURIComponent(rawTagLine)  : "";
+   const { region: urlRegion, gameName: rawGameName, tagLine: rawTagLine } = useParams();
+   const gameName = rawGameName ? decodeURIComponent(rawGameName) : "";
+   const tagLine  = rawTagLine  ? decodeURIComponent(rawTagLine)  : "";
+   const region   = urlRegion || state?.region || localStorage.getItem("lastRegion") || "na1";
 
   useEffect(() => {
     const storedVersion = localStorage.getItem("app_version");
@@ -1714,7 +1715,6 @@ export default function Dashboard() {
 
   const { state } = useLocation();
   const navigate = useNavigate();
-  const region = state?.region || localStorage.getItem("lastRegion") || "na1";
   const gameCount = 20; // Hardcoded to 20 to fix rate limiting issues
 
   const [resolvedPuuid, setResolvedPuuid] = useState(state?.puuid ?? null);
