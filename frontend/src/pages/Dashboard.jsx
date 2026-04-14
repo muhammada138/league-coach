@@ -528,9 +528,13 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   const [predictor, setPredictor] = useState(null);
 
   useEffect(() => { getChampIdMap(ddVersion).then(setChampMap); }, [ddVersion]);
+  // Riot's spectator API has a ~3-minute broadcast delay; compensate so our
+  // timer matches the actual in-game time visible to the players.
+  const SPECTATOR_DELAY_SECS = 182;
+
   useEffect(() => {
     if (liveGame?.gameLength !== undefined) {
-      setElapsed(liveGame.gameLength);
+      setElapsed(liveGame.gameLength + SPECTATOR_DELAY_SECS);
     }
   }, [liveGame?.gameId]);
 
