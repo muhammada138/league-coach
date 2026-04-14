@@ -63,7 +63,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 pt-14 pb-20 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 pt-24 pb-20 relative overflow-hidden">
       {/* Background elements */}
       <div className="absolute inset-0 opacity-[0.025] dark:opacity-[0.045] pointer-events-none" style={{ backgroundImage: DOT_GRID, backgroundSize: "28px 28px" }} />
       <div className="hidden dark:block absolute top-[28%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] rounded-full pointer-events-none bg-[#c89b3c]/[0.055] blur-[160px]" />

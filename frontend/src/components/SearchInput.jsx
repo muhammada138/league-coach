@@ -40,11 +40,12 @@ export default function SearchInput({
       
       // 2. Check Recent
       for (const h of history) {
-        if (typeof h !== 'string' || !h.includes('#')) continue;
-        const key = h.toLowerCase();
+        const hName = typeof h === 'string' ? h.split('#')[0] : h.gameName;
+        const hTag = typeof h === 'string' ? h.split('#')[1] : h.tagLine;
+        if (!hName) continue;
+        const key = `${hName}#${hTag}`.toLowerCase();
         if (key.includes(queryParams) && !seen.has(key)) {
-          const [n, t] = h.split('#');
-          results.push({ gameName: n, tagLine: t, type: 'recent' });
+          results.push({ ...(typeof h === 'string' ? { gameName: hName, tagLine: hTag } : h), type: 'recent' });
         }
       }
       return results.slice(0, 8);
@@ -56,14 +57,18 @@ export default function SearchInput({
     } else {
       return history
         .map(h => {
-          if (typeof h !== 'string' || !h.includes('#')) return null;
-          const [n, t] = h.split('#');
+          const n = typeof h === 'string' ? h.split('#')[0] : h.gameName;
+          const t = typeof h === 'string' ? h.split('#')[1] : h.tagLine;
+          if (!n) return null;
           // Mark as saved if it exists in saved list to show star correctly
           const isSaved = saved.some(p => 
             p.gameName.toLowerCase() === n.toLowerCase() && 
             p.tagLine.toLowerCase() === t.toLowerCase()
           );
-          return { gameName: n, tagLine: t, type: isSaved ? 'saved' : 'recent' };
+          return { 
+            ...(typeof h === 'string' ? { gameName: n, tagLine: t } : h), 
+            type: isSaved ? 'saved' : 'recent' 
+          };
         })
         .filter(Boolean)
         .slice(0, 10);
@@ -73,12 +78,12 @@ export default function SearchInput({
   const applySuggestion = (s) => {
     setGameName(s.gameName);
     setTagLine(s.tagLine || "");
-    if (s.region) setRegion(s.region);
+    if (s.region) {
+      setRegion(s.region);
+      localStorage.setItem("lastRegion", s.region);
+    }
     setShowSuggestions(false);
     
-    // Auto-submit: Use a small timeout to let state setters finish (React 18 batches)
-    // Or better, we can pass the data to onSubmit if we modify it.
-    // For now, the most robust way is to pass the values directly to a modified onSubmit.
     if (typeof onSubmit === 'function') {
       onSubmit(s);
     }

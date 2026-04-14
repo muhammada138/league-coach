@@ -1794,6 +1794,7 @@ export default function Dashboard() {
       .then((anal) => {
         setAnalysis(anal);
         setAnalysisLoading(false);
+        localStorage.setItem("lastRegion", region);
       })
       .catch(() => {
         setLoading(false);
