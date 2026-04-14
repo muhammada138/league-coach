@@ -144,15 +144,15 @@ def _train_and_save() -> None:
 _NEUTRAL = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.0, 0.0], dtype=float)
 
 
-def _player_features(stats: dict, champion_id: int) -> np.ndarray:
-    """Return a 7-dim feature vector for a single player."""
+def _player_features(stats: dict, champion_id: int):
+    """Return a 7-dim feature vector for a single player, or None if hidden."""
     tier = stats.get("tier", "UNRANKED")
     wins = stats.get("wins", 0)
     losses = stats.get("losses", 0)
 
-    # Completely unknown / hidden profile (streamer mode — no data at all) → neutral baseline
+    # Completely unknown / hidden profile (streamer mode — no data at all)
     if not stats or (tier == "UNRANKED" and wins == 0 and losses == 0 and not stats.get("last5")):
-        return _NEUTRAL.copy()
+        return None
 
     # 1. Rank score  (0 → 1)
     if tier == "UNRANKED":
@@ -238,20 +238,25 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
     blue_raw = [p for p in participants if p.get("teamId") == 100]
     red_raw  = [p for p in participants if p.get("teamId") == 200]
 
-    def feats(players):
-        result = [
-            _player_features(live_stats.get(p["puuid"], {}), p.get("championId", 0))
-            for p in players
-        ]
-        while len(result) < 5:
-            result.append(_NEUTRAL.copy())
-        return result[:5]
+    # Extract features, leaving None for hidden players
+    blue_feats = [_player_features(live_stats.get(p.get("puuid", ""), {}), p.get("championId", 0)) for p in blue_raw]
+    red_feats  = [_player_features(live_stats.get(p.get("puuid", ""), {}), p.get("championId", 0)) for p in red_raw]
 
-    blue_feats = feats(blue_raw)
-    red_feats  = feats(red_raw)
+    # Compute lobby average to impute hidden players without unfairly dragging down their team
+    known_feats = [f for f in blue_feats + red_feats if f is not None]
+    lobby_mean = np.mean(known_feats, axis=0) if known_feats else _NEUTRAL.copy()
 
-    blue_vec = _team_vector(blue_feats)
-    red_vec  = _team_vector(red_feats)
+    def impute_and_pad(feat_list):
+        res = [f if f is not None else lobby_mean.copy() for f in feat_list]
+        while len(res) < 5:
+            res.append(lobby_mean.copy())
+        return res[:5]
+
+    blue_clean = impute_and_pad(blue_feats)
+    red_clean  = impute_and_pad(red_feats)
+
+    blue_vec = _team_vector(blue_clean)
+    red_vec  = _team_vector(red_clean)
     diff_vec = blue_vec - red_vec
 
     X = np.concatenate([blue_vec, red_vec, diff_vec]).reshape(1, -1)
