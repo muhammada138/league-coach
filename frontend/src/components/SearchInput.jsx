@@ -121,7 +121,10 @@ export default function SearchInput({
       >
         <RegionSelector
           value={region}
-          onChange={setRegion}
+          onChange={(newRegion) => {
+            setRegion(newRegion);
+            localStorage.setItem("lastRegion", newRegion);
+          }}
           pill
           compact={navbar}
         />
