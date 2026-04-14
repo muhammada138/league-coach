@@ -242,21 +242,15 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
     blue_feats = [_player_features(live_stats.get(p.get("puuid", ""), {}), p.get("championId", 0)) for p in blue_raw]
     red_feats  = [_player_features(live_stats.get(p.get("puuid", ""), {}), p.get("championId", 0)) for p in red_raw]
 
-    # Compute lobby average to impute hidden players without unfairly dragging down their team
-    known_feats = [f for f in blue_feats + red_feats if f is not None]
-    lobby_mean = np.mean(known_feats, axis=0) if known_feats else _NEUTRAL.copy()
+    # A team's vector is simply the mean of its known players.
+    # This prevents hidden players from dragging the team average toward the opponent's stats.
+    blue_known = [f for f in blue_feats if f is not None]
+    red_known  = [f for f in red_feats if f is not None]
+    all_known  = blue_known + red_known
+    global_mean = np.mean(all_known, axis=0) if all_known else _NEUTRAL.copy()
 
-    def impute_and_pad(feat_list):
-        res = [f if f is not None else lobby_mean.copy() for f in feat_list]
-        while len(res) < 5:
-            res.append(lobby_mean.copy())
-        return res[:5]
-
-    blue_clean = impute_and_pad(blue_feats)
-    red_clean  = impute_and_pad(red_feats)
-
-    blue_vec = _team_vector(blue_clean)
-    red_vec  = _team_vector(red_clean)
+    blue_vec = np.mean(blue_known, axis=0) if blue_known else global_mean.copy()
+    red_vec  = np.mean(red_known, axis=0) if red_known else global_mean.copy()
     diff_vec = blue_vec - red_vec
 
     X = np.concatenate([blue_vec, red_vec, diff_vec]).reshape(1, -1)
