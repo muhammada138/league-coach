@@ -360,6 +360,7 @@ async def get_live_game(puuid: str, region: str = RIOT_REGION):
             data = await riot_get(client, url)
             return {
                 "inGame": True, "gameId": data.get("gameId"), "gameMode": data.get("gameMode", ""),
+                "gameLength": data.get("gameLength", 0),
                 "queueId": data.get("gameQueueConfigId", 420),
                 "participants": [{"puuid": p.get("puuid", ""), "summonerName": (p.get("riotId") or p.get("summonerName") or "Unknown").split("#")[0], "tagLine": (p.get("riotId") or "").split("#")[1] if "#" in (p.get("riotId") or "") else "", "teamId": p.get("teamId", 0), "championId": p.get("championId", 0)} for p in data.get("participants", [])],
             }
@@ -480,6 +481,42 @@ async def live_enrich(body: LiveEnrichRequest):
         return base
 
     results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])
+    
+    # --- Duo Detection ---
+    # Map match_id -> set of PUUIDs (from participants) who were in that match
+    match_to_players = {} # {match_id: set(puuids)}
+    for r in results:
+        p_puuid = r["puuid"]
+        for g in r.get("last5", []):
+            mid = g.get("matchId")
+            if mid:
+                if mid not in match_to_players: match_to_players[mid] = set()
+                match_to_players[mid].add(p_puuid)
+    
+    # Count shared matches for every pair of PUUIDs
+    shared_counts = {} # {(puuid1, puuid2): count}
+    for m_players in match_to_players.values():
+        plist = sorted(list(m_players))
+        import itertools
+        for p1, p2 in itertools.combinations(plist, 2):
+            pair = (p1, p2)
+            shared_counts[pair] = shared_counts.get(pair, 0) + 1
+            
+    # Groups: map puuid -> groupId (1, 2, ...)
+    duo_groups = {} # {puuid: gid}
+    next_gid = 1
+    for (p1, p2), count in shared_counts.items():
+        if count >= 2:
+            # If either is already in a group, join them there; otherwise new group
+            gid = duo_groups.get(p1) or duo_groups.get(p2) or next_gid
+            if gid == next_gid: next_gid += 1
+            duo_groups[p1] = gid
+            duo_groups[p2] = gid
+            
+    # Inject duo info back into results
+    for r in results:
+        r["duo_group"] = duo_groups.get(r["puuid"], 0)
+
     return {r["puuid"]: r for r in results}
 
 @router.post("/win-predict")
