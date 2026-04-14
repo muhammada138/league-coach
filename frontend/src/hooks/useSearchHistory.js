@@ -44,7 +44,7 @@ export default function useSearchHistory() {
   }, []);
 
   const saveToHistory = useCallback((entry) => {
-    // entry can be an object { gameName, tagLine, region, tier, profileIconId, puuid }
+    // entry can be an object { gameName, tagLine, region, tier, division, lp, profileIconId, puuid }
     if (!entry || !entry.gameName || !entry.tagLine || !entry.region) return;
 
     const entryObj = {
@@ -52,6 +52,8 @@ export default function useSearchHistory() {
       tagLine: entry.tagLine.trim(),
       region: entry.region,
       tier: entry.tier,
+      division: entry.division,
+      lp: entry.lp,
       profileIconId: entry.profileIconId,
       puuid: entry.puuid
     };

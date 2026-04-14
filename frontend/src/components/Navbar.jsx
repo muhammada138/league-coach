@@ -201,17 +201,11 @@ function SavedDropdown() {
                       {p.tier && p.tier !== "UNRANKED" && (
                         <>
                           <span className="w-0.5 h-0.5 rounded-full bg-slate-300 dark:bg-white/20" />
-                          <div className="flex items-center gap-1">
-                            <img
-                              src={`https://opgg-static.akamaized.net/images/medals_new/${p.tier.toLowerCase()}.png`}
-                              alt={p.tier}
-                              className="w-3 h-3 object-contain drop-shadow-sm"
-                              onError={(e) => { e.target.style.display = 'none'; }}
-                            />
-                            <span className={`text-[9px] font-bold uppercase tracking-wide ${TIER_COLORS[p.tier] || "text-slate-400"}`}>
-                              {p.tier}
-                            </span>
-                          </div>
+                          <span className={`text-[9px] font-bold uppercase tracking-wide ${TIER_COLORS[p.tier] || "text-slate-400"}`}>
+                            {["MASTER", "GRANDMASTER", "CHALLENGER"].includes(p.tier)
+                              ? `${p.tier} ${p.lp ?? 0} LP`
+                              : `${p.tier} ${p.division ?? ""}`}
+                          </span>
                         </>
                       )}
                     </div>
