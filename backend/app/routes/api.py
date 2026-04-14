@@ -387,7 +387,7 @@ async def live_enrich(body: LiveEnrichRequest):
         region = getattr(body, 'region', RIOT_REGION)
         routing = get_routing(region)
         
-        cache_key = f"v2:{puuid}:{body.queue_id}:{region}"
+        cache_key = f"v3:{puuid}:{body.queue_id}:{region}"
         cached = enriched_cache.get(cache_key)
         if cached: return cached
 
@@ -443,7 +443,8 @@ async def live_enrich(body: LiveEnrichRequest):
 
                         score = float(_compute_perf_score(player, participants, None, md["info"]["gameDuration"]))
                         won = bool(player["win"])
-                        recent_games.append({"win": won, "score": round(score, 1), "matchId": md["metadata"]["matchId"]})
+                        participant_puuids = [p.get("puuid", "") for p in participants if p.get("puuid")]
+                        recent_games.append({"win": won, "score": round(score, 1), "matchId": md["metadata"]["matchId"], "participants": participant_puuids})
 
                         cid = str(player.get("championId", ""))
                         champ_ids.append(cid)
@@ -482,32 +483,33 @@ async def live_enrich(body: LiveEnrichRequest):
 
     results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])
     
-    # --- Duo Detection ---
-    # Map match_id -> set of PUUIDs (from participants) who were in that match
-    match_to_players = {} # {match_id: set(puuids)}
+    # --- Duo Detection (participant-level) ---
+    # For each player, their last5 now stores match_participants (all PUUIDs who played in that match).
+    # We cross-reference: for each live-game PUUID-pair, count how many matches they share
+    # across ALL fetched match data — even if the match is only in ONE player's history.
+    live_puuids = {r["puuid"] for r in results if r.get("puuid")}
+    
+    # Build: puuid_a -> {puuid_b: count_of_shared_matches}
+    # Keyed by each player whose match history we fetched
+    co_game_counts = {}  # {(puuid_a, puuid_b): count}
     for r in results:
         p_puuid = r["puuid"]
         for g in r.get("last5", []):
-            mid = g.get("matchId")
-            if mid:
-                if mid not in match_to_players: match_to_players[mid] = set()
-                match_to_players[mid].add(p_puuid)
-    
-    # Count shared matches for every pair of PUUIDs
-    shared_counts = {} # {(puuid1, puuid2): count}
-    for m_players in match_to_players.values():
-        plist = sorted(list(m_players))
-        import itertools
-        for p1, p2 in itertools.combinations(plist, 2):
-            pair = (p1, p2)
-            shared_counts[pair] = shared_counts.get(pair, 0) + 1
-            
-    # Groups: map puuid -> groupId (1, 2, ...)
-    duo_groups = {} # {puuid: gid}
+            match_participants = g.get("participants", [])
+            for other_puuid in match_participants:
+                if other_puuid != p_puuid and other_puuid in live_puuids:
+                    pair = tuple(sorted([p_puuid, other_puuid]))
+                    co_game_counts[pair] = co_game_counts.get(pair, 0) + 1
+
+    # Note: each shared game is counted once from each player's perspective,
+    # so a pair who played 2 real duo games together will have count >= 2.
+    # Divide by 2 if BOTH players' last5 overlap; but if only 1 player's history
+    # captured the match, count is still meaningful. Use threshold of 2 raw counts.
+    duo_groups = {}
     next_gid = 1
-    for (p1, p2), count in shared_counts.items():
-        if count >= 2:  # 2+ shared recent games = genuine premade
-            # If either is already in a group, join them there; otherwise new group
+    import itertools as _it
+    for (p1, p2), count in co_game_counts.items():
+        if count >= 2:
             gid = duo_groups.get(p1) or duo_groups.get(p2) or next_gid
             if gid == next_gid: next_gid += 1
             duo_groups[p1] = gid
