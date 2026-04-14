@@ -939,7 +939,7 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVe
 }
 
 // ── Expanded Scoreboard ────────────────────────────────────────────────────
-function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersion, runesMap, maxDamage, teamStats, mvpPuuid, acePuuid }) {
+function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersion, runesMap, maxDamage, teamStats, mvpPuuid, acePuuid, region }) {
   const navigate = useNavigate();
 
   const ROLE_ORDER = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5 };
@@ -1049,7 +1049,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => p?.puuid && p?.riotIdTagline && navigate(
-                        `/player/${encodeURIComponent(p?.riotIdGameName)}/${encodeURIComponent(p?.riotIdTagline)}`,
+                        `/player/${region}/${encodeURIComponent(p?.riotIdGameName)}/${encodeURIComponent(p?.riotIdTagline)}`,
                         { state: { puuid: p?.puuid, back: true } }
                       )}
                       disabled={!p?.puuid || !p?.riotIdTagline}
@@ -1128,7 +1128,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
   );
 }
 
-function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion, runesMap }) {
+function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion, runesMap, region }) {
   const withScores = useMemo(() => {
     const participants = scoreboard?.participants || [];
     return participants.filter(Boolean).map((p) => ({
@@ -1201,6 +1201,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
             teamStats={(scoreboard?.teams || [])?.find(t => t.teamId === 100)}
             mvpPuuid={mvpPuuid}
             acePuuid={acePuuid}
+            region={region}
             />
             <tr>
             <td colSpan={9} className="p-0">
@@ -1219,6 +1220,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
             teamStats={(scoreboard?.teams || [])?.find(t => t.teamId === 200)}
             mvpPuuid={mvpPuuid}
             acePuuid={acePuuid}
+            region={region}
             />        </tbody>
       </table>
     </div>
@@ -1226,7 +1228,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
 }
 
 // ── Horizontal Game Row ────────────────────────────────────────────────────
-function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, gameName, ddVersion, runesMap }) {
+function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, gameName, ddVersion, runesMap, region }) {
   if (!game) return null;
   const isRemake = (game.gameDuration || 0) < 210;
   const mins = Math.floor(game.gameDuration / 60);
@@ -1375,6 +1377,7 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
             isRemake={isRemake} 
             ddVersion={ddVersion}
             runesMap={runesMap}
+            region={region}
           />
         </div>
       )}
@@ -1490,7 +1493,7 @@ function SummaryStrip({ analysis, games }) {
 }
 
 // ── Teammates Content ───────────────────────────────────────────────────────
-function TeammatesContent({ games }) {
+function TeammatesContent({ games, region }) {
   const [tab, setTab] = useState("with");
   const navigate = useNavigate();
 
@@ -1530,7 +1533,7 @@ function TeammatesContent({ games }) {
               return (
                 <div
                   key={r.puuid}
-                  onClick={() => r.tagLine && navigate(`/player/${encodeURIComponent(r.name)}/${encodeURIComponent(r.tagLine)}`, { state: { puuid: r.puuid, back: true } })}
+                  onClick={() => r.tagLine && navigate(`/player/${region}/${encodeURIComponent(r.name)}/${encodeURIComponent(r.tagLine)}`, { state: { puuid: r.puuid, back: true } })}
                   className={`grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-5 py-2
                     hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors border-b
                     border-slate-50 dark:border-white/[0.03] last:border-0
@@ -1713,6 +1716,7 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
           <div className="lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
             <TeammatesContent 
               games={games} 
+              region={region}
             />
           </div>
         )}
@@ -2104,6 +2108,7 @@ export default function Dashboard() {
                           gameName={gameName}
                           ddVersion={ddVersion}
                           runesMap={runesMap}
+                          region={region}
                         />
                       ))}
                     </div>
