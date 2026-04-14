@@ -119,6 +119,34 @@ export default function useSearchHistory() {
       window.dispatchEvent(new Event("search-history-update"));
       return next;
     });
+
+    setSaved((prev) => {
+      let updated = false;
+      const next = prev.map((p) => {
+        if (
+          p.gameName.toLowerCase() === entryObj.gameName.toLowerCase() &&
+          p.tagLine.toLowerCase() === entryObj.tagLine.toLowerCase()
+        ) {
+          // Check if there are actual changes to avoid unnecessary updates
+          if (
+            p.tier !== entryObj.tier ||
+            p.division !== entryObj.division ||
+            p.lp !== entryObj.lp ||
+            p.profileIconId !== entryObj.profileIconId ||
+            p.puuid !== entryObj.puuid
+          ) {
+            updated = true;
+            return { ...p, ...entryObj };
+          }
+        }
+        return p;
+      });
+      if (updated) {
+        localStorage.setItem(SAVED_KEY, JSON.stringify(next));
+        window.dispatchEvent(new Event("search-history-update"));
+      }
+      return next;
+    });
   }, []);
 
   return { history, saved, saveToHistory, toggleSaved, removeFromHistory };
