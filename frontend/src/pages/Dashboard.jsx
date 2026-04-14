@@ -1238,6 +1238,7 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
 
   return (
     <div
+      id={`match-${game.matchId}`}
       className={`rounded-xl overflow-hidden border transition-all duration-300
         ${borderClass}
         ${isExpanded ? "ring-1 ring-[#c89b3c]/40 shadow-lg shadow-[#c89b3c]/5" : ""}`}
