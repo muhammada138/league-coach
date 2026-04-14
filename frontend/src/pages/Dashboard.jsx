@@ -479,7 +479,10 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
 // ── Star / save button ─────────────────────────────────────────────────────
 function StarButton({ gameName, tagLine, puuid, profileIconId, region }) {
   const { saved: savedList, toggleSaved } = useSearchHistory();
-  const isSaved = savedList.some((p) => p.puuid === puuid);
+  const isSaved = savedList.some((p) => 
+    p.gameName.toLowerCase() === gameName.toLowerCase() &&
+    p.tagLine.toLowerCase() === tagLine.toLowerCase()
+  );
 
   if (!tagLine || !puuid) return null;
 
