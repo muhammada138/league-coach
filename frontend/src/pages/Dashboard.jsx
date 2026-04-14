@@ -520,7 +520,7 @@ function LaneIcon({ lane }) {
 }
 
 // ── Live Game Banner ────────────────────────────────────────────────────────
-function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region }) {
+function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, onMatchClick }) {
   const navigate = useNavigate();
   const [champMap, setChampMap] = useState(null);
   const [elapsed, setElapsed] = useState(liveGame.gameLength ?? 0);
@@ -584,9 +584,16 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region }
 
     const canNav = !isMe && p.puuid && p.summonerName && p.tagLine;
     const handleNav = () => canNav && navigate(
-      `/player/${encodeURIComponent(p.summonerName)}/${encodeURIComponent(p.tagLine)}`,
+      `/player/${region}/${encodeURIComponent(p.summonerName)}/${encodeURIComponent(p.tagLine)}`,
       { state: { puuid: p.puuid, back: true } }
     );
+
+    const handleDotClick = (e, matchId) => {
+      e.stopPropagation();
+      if (isMe && matchId) {
+        onMatchClick?.(matchId);
+      }
+    };
 
     return (
       <div key={p.puuid || p.summonerName}
@@ -631,12 +638,15 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region }
             <span className="text-[10px] text-slate-300 dark:text-white/10 leading-none mt-0.5 animate-pulse">loading…</span>
           )}
         </div>
+
         {/* Last 5 W/L dots */}
         <div className="flex gap-0.5 flex-shrink-0">
           {last5.length > 0
             ? last5.map((g, i) => (
-                <div key={i} title={`Score: ${g.score}`}
-                  className={`w-2 h-2 rounded-full ${g.win ? "bg-emerald-400" : "bg-red-400/80"}`} />
+                <div key={i} title={`Score: ${g.score}${isMe ? "\nClick to view game" : ""}`}
+                  onClick={(e) => handleDotClick(e, g.matchId)}
+                  className={`w-2 h-2 rounded-full ${g.win ? "bg-emerald-400" : "bg-red-400/80"} 
+                    ${isMe && g.matchId ? "cursor-pointer hover:ring-2 hover:ring-white/40 active:scale-90 transition-all" : ""}`} />
               ))
             : [...Array(5)].map((_, i) => (
                 <div key={i} className={`w-2 h-2 rounded-full ${(liveStats || !p.puuid) ? "bg-slate-200 dark:bg-white/10" : "bg-slate-200 dark:bg-white/10 animate-pulse"}`} />
@@ -1977,6 +1987,13 @@ export default function Dashboard() {
                 onClose={() => setLiveGame(null)}
                 onReady={() => setLiveStatus('idle')}
                 region={region}
+                onMatchClick={(mid) => {
+                  handleToggleGame(mid);
+                  // Allow DOM to update before scrolling
+                  setTimeout(() => {
+                    document.getElementById(`match-${mid}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 100);
+                }}
               />
             )}
 
