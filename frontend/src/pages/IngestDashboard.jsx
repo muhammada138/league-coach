@@ -27,9 +27,11 @@ export default function IngestDashboard() {
 
   useEffect(() => {
     if (status && !status.is_paused) {
+      if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = setInterval(fetchStatus, 10000);
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
