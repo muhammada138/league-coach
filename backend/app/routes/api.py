@@ -465,7 +465,7 @@ async def live_enrich(body: LiveEnrichRequest):
                         from collections import Counter as _Counter
                         main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
                         base.update({
-                            "last5": recent_games[:5],   # first 5 shown as dots in UI
+                            "last5": recent_games[:5][::-1],   # reversed: oldest first, most recent last (rightmost)
                             "avg_score": avg_score,
                             "recent_wr": recent_wr,
                             "champ_wr_map": champ_wr_map,

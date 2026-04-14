@@ -23,9 +23,20 @@ export default function IngestDashboard() {
 
   useEffect(() => {
     fetchStatus();
-    intervalRef.current = setInterval(fetchStatus, 10000);
-    return () => clearInterval(intervalRef.current);
   }, []);
+
+  useEffect(() => {
+    if (status && !status.is_paused) {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(fetchStatus, 10000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [status?.is_paused]);
 
   const handleToggle = async () => {
     setToggling(true);
