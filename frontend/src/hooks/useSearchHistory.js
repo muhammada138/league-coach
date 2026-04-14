@@ -44,13 +44,32 @@ export default function useSearchHistory() {
   }, []);
 
   const saveToHistory = useCallback((entry) => {
-    if (!entry || typeof entry !== "string") return;
+    // entry can be a string "Name#Tag" or an object { gameName, tagLine, region }
+    if (!entry) return;
     
+    let entryObj;
+    if (typeof entry === "string") {
+      const [gameName, tagLine] = entry.split("#");
+      entryObj = { gameName, tagLine, region: localStorage.getItem("lastRegion") || "na1" };
+    } else {
+      entryObj = entry;
+    }
+
+    if (!entryObj.gameName || !entryObj.tagLine) return;
+
     setHistory((prev) => {
-      const filtered = prev.filter((h) => h.toLowerCase() !== entry.toLowerCase());
-      const next = [entry, ...filtered].slice(0, 10);
+      // Filter out duplicates by comparing name#tag
+      const filtered = prev.filter((h) => {
+        const hName = typeof h === 'string' ? h.split('#')[0] : h.gameName;
+        const hTag = typeof h === 'string' ? h.split('#')[1] : h.tagLine;
+        return (
+          hName.toLowerCase() !== entryObj.gameName.toLowerCase() ||
+          hTag.toLowerCase() !== entryObj.tagLine.toLowerCase()
+        );
+      });
+      
+      const next = [entryObj, ...filtered].slice(0, 10);
       localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-      // Dispatch custom event for inter-component sync in same window
       window.dispatchEvent(new Event("search-history-update"));
       return next;
     });
