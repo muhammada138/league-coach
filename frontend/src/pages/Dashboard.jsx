@@ -967,23 +967,23 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
               <div className="flex items-center gap-3 text-[10px] font-bold opacity-90 tracking-wide overflow-hidden overflow-x-auto no-scrollbar">
                 <span title="Towers" className="flex items-center gap-1 flex-shrink-0">
                   <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/tower-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="T" onError={(e) => { e.target.style.display = 'none' }} />
-                  {teamStats.tower}
+                  {teamStats.objectives?.tower?.kills ?? 0}
                 </span>
                 <span title="Dragons" className="flex items-center gap-1 flex-shrink-0">
                   <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/dragon-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="D" onError={(e) => { e.target.style.display = 'none' }} />
-                  {teamStats.dragon}
+                  {teamStats.objectives?.dragon?.kills ?? 0}
                 </span>
                 <span title="Void Grubs" className="flex items-center gap-1 flex-shrink-0">
                   <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/horde-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="G" onError={(e) => { e.target.style.display = 'none' }} />
-                  {teamStats.horde}
+                  {teamStats.objectives?.horde?.kills ?? 0}
                 </span>
                 <span title="Rift Heralds" className="flex items-center gap-1 flex-shrink-0">
                   <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/herald-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="H" onError={(e) => { e.target.style.display = 'none' }} />
-                  {teamStats.riftHerald}
+                  {teamStats.objectives?.riftHerald?.kills ?? 0}
                 </span>
                 <span title="Barons" className="flex items-center gap-1 flex-shrink-0">
                   <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/baron-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="B" onError={(e) => { e.target.style.display = 'none' }} />
-                  {teamStats.baron}
+                  {teamStats.objectives?.baron?.kills ?? 0}
                 </span>
               </div>
             )}
