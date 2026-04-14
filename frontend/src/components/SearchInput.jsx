@@ -18,6 +18,7 @@ export default function SearchInput({
   const [suggestionTab, setSuggestionTab] = useState("recent"); // "recent" | "saved"
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const wrapperRef = useRef(null);
+  const blurTimer = useRef(null);
 
   const queryParams = gameName.trim().toLowerCase();
   
@@ -93,7 +94,7 @@ export default function SearchInput({
   };
 
   return (
-    <div className={`relative w-full ${navbar ? "max-w-md" : "max-w-2xl"}`} ref={containerRef}>
+    <div className={`relative w-full ${navbar ? "max-w-md" : "max-w-2xl"}`} ref={wrapperRef}>
       <form 
         onSubmit={handleFormSubmit}
         className={`group flex items-stretch transition-all duration-300 relative z-10
