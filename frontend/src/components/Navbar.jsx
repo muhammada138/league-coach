@@ -35,22 +35,26 @@ function NavSearch() {
   const navigate = useNavigate();
   const { saveToHistory } = useSearchHistory();
 
-  const handleSearch = async () => {
-    if (!gameName.trim() || !tagLine.trim()) return;
+  const handleSearch = async (suggestion) => {
+    const finalName = suggestion?.gameName || gameName;
+    const finalTag  = suggestion?.tagLine || tagLine;
+    const finalRegion = suggestion?.region || region;
+
+    if (!finalName.trim() || !finalTag.trim()) return;
     setLoading(true);
     setError("");
     try {
-      const data = await getSummoner(gameName.trim(), tagLine.trim(), region);
-      saveToHistory(`${gameName.trim()}#${tagLine.trim()}`);
-      localStorage.setItem("lastRegion", region);
+      const data = await getSummoner(finalName.trim(), finalTag.trim(), finalRegion);
+      saveToHistory({ gameName: finalName.trim(), tagLine: finalTag.trim(), region: finalRegion });
+      localStorage.setItem("lastRegion", finalRegion);
       
       // Clear inputs and navigate
       setGameName("");
       setTagLine("");
       
       navigate(
-        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(tagLine.trim())}`,
-        { state: { puuid: data.puuid, region } }
+        `/player/${encodeURIComponent(data.gameName)}/${encodeURIComponent(finalTag.trim())}`,
+        { state: { puuid: data.puuid, region: finalRegion } }
       );
     } catch (err) {
       setError(err.response?.status === 404 ? "Not found" : "Error");
@@ -208,22 +212,26 @@ export default function Navbar() {
       bg-white/80 dark:bg-[#05080f]/80
       backdrop-blur-xl
       border-b border-slate-200/60 dark:border-white/[0.04]
-      transition-all duration-300">
-      <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
-        <Link to="/" className="flex-shrink-0 flex items-center gap-3 group">
-          <div className="w-8 h-8 rounded-xl bg-[#c89b3c] flex items-center justify-center shadow-lg shadow-[#c89b3c]/20 group-hover:scale-110 transition-transform">
-            <span className="text-white font-black text-xs">IQ</span>
-          </div>
+      transition-all duration-300 shadow-sm">
+      <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+        {/* Logo Section (Left) */}
+        <Link to="/" className="flex items-center gap-2.5 group flex-shrink-0">
+          <img 
+            src="/logo.png" 
+            alt="Rift IQ" 
+            className="w-8 h-8 rounded-lg shadow-lg shadow-[#c89b3c]/10 group-hover:scale-105 transition-transform"
+          />
           <span className="text-lg font-black tracking-tighter text-slate-900 dark:text-white/90">RIFT IQ</span>
         </Link>
 
-        {/* Dynamic Search Bar */}
-        <NavSearch />
-
-        <div className="flex items-center gap-2.5 ml-auto">
-          <SavedDropdown />
-          <div className="w-px h-4 bg-slate-200 dark:bg-white/10 mx-1 hidden sm:block" />
-          <ThemeToggle />
+        {/* Right Actions Cluster (Search + Saved + Theme) */}
+        <div className="flex items-center gap-3 ml-auto">
+          <NavSearch />
+          <div className="flex items-center gap-2.5">
+            <SavedDropdown />
+            <div className="w-px h-4 bg-slate-200 dark:bg-white/10 mx-1 hidden sm:block" />
+            <ThemeToggle />
+          </div>
         </div>
       </div>
     </nav>

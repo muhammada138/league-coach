@@ -52,7 +52,7 @@ export default function RegionSelector({ value, onChange, compact = false, pill 
         <button
           type="button"
           onClick={toggleDropdown}
-          className={`flex items-center gap-1.5 pl-3.5 pr-2.5 h-11 transition-all rounded-l-xl
+          className={`flex items-center gap-1.5 pl-3.5 pr-2.5 h-full transition-all rounded-l-xl
             border-r border-slate-200 dark:border-white/10
             bg-slate-50 dark:bg-white/[0.04] hover:bg-slate-100 dark:hover:bg-white/[0.08]
             group select-none`}

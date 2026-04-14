@@ -12,50 +12,63 @@ export default function SearchInput({
   placeholder = "Name#TAG",
   navbar = false 
 }) {
-  const { history, saved } = useSearchHistory();
+  const { history, saved, toggleSaved, removeFromHistory } = useSearchHistory();
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const [suggestionTab, setSuggestionTab] = useState("recent"); // "recent" | "saved"
   const [focusedIdx, setFocusedIdx] = useState(-1);
-  const blurTimer = useRef(null);
-  const containerRef = useRef(null);
+  const wrapperRef = useRef(null);
 
   const queryParams = gameName.trim().toLowerCase();
   
-  // Combine saved and history for suggestions
   const suggestions = (() => {
-    const seen = new Set();
-    const results = [];
-    
-    // 1. Saved Profiles
-    for (const p of saved) {
-      if (!p.gameName) continue;
-      const key = `${p.gameName}#${p.tagLine}`.toLowerCase();
-      if (!queryParams || key.includes(queryParams)) {
-        seen.add(key);
-        results.push({ ...p, type: 'saved' });
+    const list = queryParams ? (() => {
+      const seen = new Set();
+      const results = [];
+      for (const p of saved) {
+        if (!p.gameName) continue;
+        const key = `${p.gameName}#${p.tagLine}`.toLowerCase();
+        if (key.includes(queryParams)) {
+          seen.add(key);
+          results.push({ ...p, type: 'saved' });
+        }
       }
-    }
-    
-    // 2. Recent History
-    for (const h of history) {
-      if (typeof h !== 'string' || !h.includes('#')) continue;
-      const key = h.toLowerCase();
-      if ((!queryParams || key.includes(queryParams)) && !seen.has(key)) {
-        const [n, t] = h.split('#');
-        results.push({ gameName: n, tagLine: t, type: 'recent' });
+      for (const h of history) {
+        const hName = typeof h === 'string' ? h.split('#')[0] : h.gameName;
+        const hTag = typeof h === 'string' ? h.split('#')[1] : h.tagLine;
+        if (!hName) continue;
+        const key = `${hName}#${hTag}`.toLowerCase();
+        if (key.includes(queryParams) && !seen.has(key)) {
+          results.push({ ...(typeof h === 'string' ? { gameName: hName, tagLine: hTag } : h), type: 'recent' });
+        }
       }
-    }
-    
-    return results.slice(0, 8);
+      return results;
+    })() : (suggestionTab === "saved" ? saved.map(p => ({ ...p, type: 'saved' })) : history.map(h => {
+        const n = typeof h === 'string' ? h.split('#')[0] : h.gameName;
+        const t = typeof h === 'string' ? h.split('#')[1] : h.tagLine;
+        return { ...(typeof h === 'string' ? { gameName: n, tagLine: t } : h), type: 'recent' };
+    }));
+
+    return list.map(item => {
+      const isSaved = saved.some(p => 
+        p.gameName.toLowerCase() === item.gameName.toLowerCase() && 
+        p.tagLine.toLowerCase() === item.tagLine.toLowerCase()
+      );
+      return { ...item, isSaved };
+    }).slice(0, 10);
   })();
 
   const applySuggestion = (s) => {
     setGameName(s.gameName);
     setTagLine(s.tagLine || "");
-    if (s.region) setRegion(s.region);
+    if (s.region) {
+      setRegion(s.region);
+      localStorage.setItem("lastRegion", s.region);
+    }
     setShowSuggestions(false);
-    
-    // If it's a direct selection, maybe auto-submit? 
-    // For now, let's just fill the form as per DeepLol.
+    if (typeof onSubmit === 'function') {
+      onSubmit(s);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -74,7 +87,7 @@ export default function SearchInput({
     }
   };
 
-  const clearAndSubmit = (e) => {
+  const handleFormSubmit = (e) => {
     e.preventDefault();
     onSubmit();
   };
@@ -82,7 +95,7 @@ export default function SearchInput({
   return (
     <div className={`relative w-full ${navbar ? "max-w-md" : "max-w-2xl"}`} ref={containerRef}>
       <form 
-        onSubmit={clearAndSubmit}
+        onSubmit={handleFormSubmit}
         className={`group flex items-stretch transition-all duration-300 relative z-10
           ${navbar ? "h-9" : "h-14"}
           bg-white dark:bg-[#0d111a]/80 backdrop-blur-md
@@ -91,7 +104,6 @@ export default function SearchInput({
           rounded-xl shadow-lg shadow-black/5 dark:shadow-black/40
           ${navbar ? "ring-0" : "focus-within:ring-4 focus-within:ring-[#c89b3c]/5"}`}
       >
-        {/* Region Pill */}
         <RegionSelector 
           value={region} 
           onChange={setRegion} 
@@ -99,7 +111,6 @@ export default function SearchInput({
           compact={navbar} 
         />
 
-        {/* Name Input */}
         <div className="flex-1 flex items-center min-w-0">
           <input
             type="text"
@@ -129,7 +140,6 @@ export default function SearchInput({
           />
         </div>
 
-        {/* Search Icon / Button */}
         <button
           type="submit"
           disabled={loading}
@@ -148,7 +158,7 @@ export default function SearchInput({
       </form>
 
       {/* Suggestions Dropdown */}
-      {showSuggestions && (suggestions.length > 0 || error) && (
+      {showSuggestions && (suggestions.length > 0 || history.length > 0 || saved.length > 0 || error) && (
         <div className="absolute top-full left-0 right-0 mt-2 z-50
           bg-white dark:bg-[#0d111a]
           border border-slate-200 dark:border-white/[0.08]
@@ -162,46 +172,113 @@ export default function SearchInput({
             </div>
           )}
           
-          <div className="px-4 py-2 border-b border-slate-100 dark:border-white/[0.04]">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/20">
-              {queryParams ? "Matching Summoners" : "Recent Searches"}
-            </span>
-          </div>
+          {/* Tabs UI */}
+          {!queryParams && (
+            <div className="flex border-b border-slate-100 dark:border-white/[0.04]">
+              {["recent", "saved"].map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setSuggestionTab(t)}
+                  className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-[0.15em] transition-colors
+                    ${suggestionTab === t 
+                      ? "text-[#c89b3c] bg-[#c89b3c]/5 border-b border-[#c89b3c]" 
+                      : "text-slate-400 dark:text-white/20 hover:text-slate-600 dark:hover:text-white/40"}`}
+                >
+                  {t === "recent" ? "Recent" : "Favorites"}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {queryParams && (
+            <div className="px-4 py-2 border-b border-slate-100 dark:border-white/[0.04]">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/20">
+                Matches
+              </span>
+            </div>
+          )}
 
           <div className="max-h-[300px] overflow-y-auto no-scrollbar">
-            {suggestions.map((s, i) => (
-              <button
-                key={`${s.gameName}#${s.tagLine}-${i}`}
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => applySuggestion(s)}
-                className={`w-full text-left px-4 py-3.5 flex items-center gap-3 transition-colors
-                  ${i === focusedIdx 
-                    ? "bg-[#c89b3c]/10 text-[#c89b3c]" 
-                    : "hover:bg-slate-50 dark:hover:bg-white/[0.04] text-slate-700 dark:text-white/70"}`}
-              >
-                {s.type === 'saved' ? (
-                  <svg className="w-4 h-4 text-[#c89b3c]/60" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M8 1.5l1.75 3.55 3.92.57-2.84 2.77.67 3.9L8 10.35l-3.5 1.84.67-3.9L2.33 5.62l3.92-.57L8 1.5z" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4 text-slate-300 dark:text-white/10" viewBox="0 0 12 12" fill="none">
-                    <path d="M6 1v5l3 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.3"/>
-                  </svg>
-                )}
-                <div className="flex flex-col min-w-0">
-                  <span className="text-sm font-semibold truncate leading-tight">
-                    {s.gameName}
-                    <span className="text-slate-400 dark:text-white/20 font-medium">#{s.tagLine}</span>
-                  </span>
-                  {s.region && (
-                    <span className="text-[9px] font-bold uppercase tracking-tighter text-[#c89b3c]/50">
-                      {s.region}
+            {suggestions.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <p className="text-xs text-slate-400 dark:text-white/10 italic">
+                  No {suggestionTab === "recent" ? "recent searches" : "favorite profiles"} found
+                </p>
+              </div>
+            ) : (
+              suggestions.map((s, i) => (
+                <div
+                  key={`${s.gameName}#${s.tagLine}-${i}`}
+                  onClick={() => applySuggestion(s)}
+                  className={`group w-full text-left px-4 py-3 flex items-center gap-3 transition-colors cursor-pointer
+                    ${i === focusedIdx 
+                      ? "bg-[#c89b3c]/10 text-[#c89b3c]" 
+                      : "hover:bg-slate-50 dark:hover:bg-white/[0.04] text-slate-700 dark:text-white/70"}`}
+                >
+                  <div className="flex-shrink-0">
+                    {s.type === 'saved' ? (
+                      <svg className="w-3.5 h-3.5 text-[#c89b3c]" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 1.5l1.75 3.55 3.92.57-2.84 2.77.67 3.9L8 10.35l-3.5 1.84.67-3.9L2.33 5.62l3.92-.57L8 1.5z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5 text-slate-300 dark:text-white/10" viewBox="0 0 12 12" fill="none">
+                        <path d="M6 1v5l3 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.3"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col">
+                    <span className="text-sm font-semibold truncate leading-tight">
+                      {s.gameName}
+                      <span className="text-slate-400 dark:text-white/20 font-medium">#{s.tagLine}</span>
                     </span>
-                  )}
+                    {s.region && (
+                      <span className="text-[9px] font-bold uppercase tracking-tighter text-[#c89b3c]/50">
+                        {s.region}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSaved(s);
+                      }}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all
+                        ${s.isSaved 
+                          ? "bg-[#c89b3c]/10 text-[#c89b3c] shadow-sm shadow-[#c89b3c]/5" 
+                          : "text-slate-400 dark:text-white/20 hover:text-[#c89b3c] hover:bg-[#c89b3c]/10"}`}
+                      title={s.isSaved ? "Remove Favorite" : "Favorite Profile"}
+                    >
+                      <svg className={`w-3.5 h-3.5 ${s.isSaved ? "fill-current" : ""}`} viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 1.5l1.75 3.55 3.92.57-2.84 2.77.67 3.9L8 10.35l-3.5 1.84.67-3.9L2.33 5.62l3.92-.57L8 1.5z" />
+                      </svg>
+                    </button>
+                    {suggestionTab === "recent" && (
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFromHistory(s);
+                        }}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500/30 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                        title="Remove from Recent"
+                      >
+                        <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M9 3l-6 6M3 3l6 6" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </button>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}

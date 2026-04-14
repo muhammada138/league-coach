@@ -479,7 +479,10 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
 // ── Star / save button ─────────────────────────────────────────────────────
 function StarButton({ gameName, tagLine, puuid, profileIconId, region }) {
   const { saved: savedList, toggleSaved } = useSearchHistory();
-  const isSaved = savedList.some((p) => p.puuid === puuid);
+  const isSaved = savedList.some((p) => 
+    p.gameName.toLowerCase() === gameName.toLowerCase() &&
+    p.tagLine.toLowerCase() === tagLine.toLowerCase()
+  );
 
   if (!tagLine || !puuid) return null;
 
@@ -1708,6 +1711,7 @@ export default function Dashboard() {
 
   const { state } = useLocation();
   const navigate = useNavigate();
+  const region = state?.region || localStorage.getItem("lastRegion") || "na1";
   const gameCount = 20; // Hardcoded to 20 to fix rate limiting issues
 
   const [resolvedPuuid, setResolvedPuuid] = useState(state?.puuid ?? null);
@@ -1793,6 +1797,7 @@ export default function Dashboard() {
       .then((anal) => {
         setAnalysis(anal);
         setAnalysisLoading(false);
+        localStorage.setItem("lastRegion", region);
       })
       .catch(() => {
         setLoading(false);
