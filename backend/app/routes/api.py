@@ -401,7 +401,7 @@ async def live_enrich(body: LiveEnrichRequest):
             async with httpx.AsyncClient(timeout=25.0) as client:
                 entries, match_ids = await asyncio.gather(
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
+                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
                 
@@ -466,7 +466,7 @@ async def live_enrich(body: LiveEnrichRequest):
                         from collections import Counter as _Counter
                         main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
                         base.update({
-                            "last5": recent_games[:5],   # newest first (leftmost)
+                            "last5": recent_games[:5],   # newest first (leftmost), fetch 10 for duo detection
                             "avg_score": avg_score,
                             "recent_wr": recent_wr,
                             "champ_wr_map": champ_wr_map,
@@ -506,7 +506,7 @@ async def live_enrich(body: LiveEnrichRequest):
     duo_groups = {} # {puuid: gid}
     next_gid = 1
     for (p1, p2), count in shared_counts.items():
-        if count >= 2:
+        if count >= 1:  # even 1 shared recent game is enough to flag as premade
             # If either is already in a group, join them there; otherwise new group
             gid = duo_groups.get(p1) or duo_groups.get(p2) or next_gid
             if gid == next_gid: next_gid += 1
