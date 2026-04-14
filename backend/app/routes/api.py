@@ -401,7 +401,7 @@ async def live_enrich(body: LiveEnrichRequest):
             async with httpx.AsyncClient(timeout=25.0) as client:
                 entries, match_ids = await asyncio.gather(
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
+                        riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
                 
@@ -437,6 +437,11 @@ async def live_enrich(body: LiveEnrichRequest):
 
                     for md in match_datas:
                         if isinstance(md, Exception): continue
+                        
+                        # Skip remakes (games under 3.5 minutes)
+                        if md.get("info", {}).get("gameDuration", 0) < 210:
+                            continue
+                            
                         participants = md["info"]["participants"]
                         player = next((p for p in participants if p.get("puuid") == puuid), None)
                         if not player: continue
