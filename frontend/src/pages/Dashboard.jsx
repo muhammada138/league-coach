@@ -529,6 +529,12 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
 
   useEffect(() => { getChampIdMap(ddVersion).then(setChampMap); }, [ddVersion]);
   useEffect(() => {
+    if (liveGame?.gameLength !== undefined) {
+      setElapsed(liveGame.gameLength);
+    }
+  }, [liveGame?.gameId]);
+
+  useEffect(() => {
     const id = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => clearInterval(id);
   }, []);
@@ -610,11 +616,20 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
           <div className="w-7 h-7 rounded bg-slate-200 dark:bg-white/10 flex-shrink-0 animate-pulse" />
         )}
         <div className="flex flex-col min-w-0 flex-1">
-          <span className={`text-xs font-semibold truncate
-            ${isMe ? "text-[#c89b3c]" : canNav ? "text-slate-700 dark:text-white/70 group-hover:text-[#c89b3c] dark:group-hover:text-[#c89b3c] transition-colors" : "text-slate-700 dark:text-white/70"}`}>
-            {isMe && "★ "}{p.summonerName}
-            <span className="text-slate-400 dark:text-white/30 font-normal">{p.tagLine ? `#${p.tagLine}` : ""}</span>
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className={`text-xs font-semibold truncate
+              ${isMe ? "text-[#c89b3c]" : canNav ? "text-slate-700 dark:text-white/70 group-hover:text-[#c89b3c] dark:group-hover:text-[#c89b3c] transition-colors" : "text-slate-700 dark:text-white/70"}`}>
+              {isMe && "★ "}{p.summonerName}
+              <span className="text-slate-400 dark:text-white/30 font-normal">{p.tagLine ? `#${p.tagLine}` : ""}</span>
+            </span>
+            {stats?.duo_group > 0 && (
+              <span className={`text-[8px] font-black px-1 rounded bg-current/10 border border-current/20 uppercase tracking-tighter ${
+                ["text-pink-500", "text-indigo-400", "text-amber-500", "text-cyan-400", "text-lime-400"][(stats.duo_group - 1) % 5]
+              }`}>
+                Duo
+              </span>
+            )}
+          </div>
           {!p.puuid ? (
             <span className="text-[10px] text-slate-300 dark:text-white/20 leading-none mt-0.5">Hidden</span>
           ) : rankLabel ? (
