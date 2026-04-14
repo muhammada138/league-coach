@@ -12,23 +12,19 @@ export default function SearchInput({
   placeholder = "Name#TAG",
   navbar = false 
 }) {
-  const { history, saved } = useSearchHistory();
+  const { history, saved, toggleSaved, removeFromHistory } = useSearchHistory();
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [suggestionTab, setSuggestionTab] = useState("recent"); // "recent" | "saved"
   const [focusedIdx, setFocusedIdx] = useState(-1);
-  const blurTimer = useRef(null);
-  const containerRef = useRef(null);
+  const wrapperRef = useRef(null);
 
   const queryParams = gameName.trim().toLowerCase();
   
-  // Combine saved and history for suggestions
   const suggestions = (() => {
-    // If user is typing, show all matches from both
-    if (queryParams) {
+    const list = queryParams ? (() => {
       const seen = new Set();
       const results = [];
-      
-      // 1. Check Saved
       for (const p of saved) {
         if (!p.gameName) continue;
         const key = `${p.gameName}#${p.tagLine}`.toLowerCase();
@@ -37,8 +33,6 @@ export default function SearchInput({
           results.push({ ...p, type: 'saved' });
         }
       }
-      
-      // 2. Check Recent
       for (const h of history) {
         const hName = typeof h === 'string' ? h.split('#')[0] : h.gameName;
         const hTag = typeof h === 'string' ? h.split('#')[1] : h.tagLine;
@@ -48,31 +42,20 @@ export default function SearchInput({
           results.push({ ...(typeof h === 'string' ? { gameName: hName, tagLine: hTag } : h), type: 'recent' });
         }
       }
-      return results.slice(0, 8);
-    }
+      return results;
+    })() : (suggestionTab === "saved" ? saved.map(p => ({ ...p, type: 'saved' })) : history.map(h => {
+        const n = typeof h === 'string' ? h.split('#')[0] : h.gameName;
+        const t = typeof h === 'string' ? h.split('#')[1] : h.tagLine;
+        return { ...(typeof h === 'string' ? { gameName: n, tagLine: t } : h), type: 'recent' };
+    }));
 
-    // If NOT typing, show selected tab
-    if (suggestionTab === "saved") {
-      return saved.map(p => ({ ...p, type: 'saved' })).slice(0, 10);
-    } else {
-      return history
-        .map(h => {
-          const n = typeof h === 'string' ? h.split('#')[0] : h.gameName;
-          const t = typeof h === 'string' ? h.split('#')[1] : h.tagLine;
-          if (!n) return null;
-          // Mark as saved if it exists in saved list to show star correctly
-          const isSaved = saved.some(p => 
-            p.gameName.toLowerCase() === n.toLowerCase() && 
-            p.tagLine.toLowerCase() === t.toLowerCase()
-          );
-          return { 
-            ...(typeof h === 'string' ? { gameName: n, tagLine: t } : h), 
-            type: isSaved ? 'saved' : 'recent' 
-          };
-        })
-        .filter(Boolean)
-        .slice(0, 10);
-    }
+    return list.map(item => {
+      const isSaved = saved.some(p => 
+        p.gameName.toLowerCase() === item.gameName.toLowerCase() && 
+        p.tagLine.toLowerCase() === item.tagLine.toLowerCase()
+      );
+      return { ...item, isSaved };
+    }).slice(0, 10);
   })();
 
   const applySuggestion = (s) => {
@@ -83,7 +66,6 @@ export default function SearchInput({
       localStorage.setItem("lastRegion", s.region);
     }
     setShowSuggestions(false);
-    
     if (typeof onSubmit === 'function') {
       onSubmit(s);
     }
