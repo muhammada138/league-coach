@@ -576,7 +576,10 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region }
     const stats = liveStats?.[p.puuid];
     const last5 = stats?.last5 ?? [];
     const rankLabel = stats
-      ? (stats.tier === "UNRANKED" ? "Unranked" : `${stats.tier.charAt(0) + stats.tier.slice(1).toLowerCase()}${stats.division ? ` ${stats.division}` : ""}`)
+      ? (stats.tier === "UNRANKED" ? "Unranked" :
+         ["MASTER", "GRANDMASTER", "CHALLENGER"].includes(stats.tier)
+           ? `${stats.tier.charAt(0) + stats.tier.slice(1).toLowerCase()} ${stats.lp} LP`
+           : `${stats.tier.charAt(0) + stats.tier.slice(1).toLowerCase()}${stats.division ? ` ${stats.division}` : ""}`)
       : null;
 
     const canNav = !isMe && p.puuid && p.summonerName && p.tagLine;
