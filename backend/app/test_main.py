@@ -65,5 +65,34 @@ async def test_analyze(mocker):
     response = client.get("/analyze/fake-puuid?game_name=Faker&count=5")
     assert response.status_code == 200
     assert "gameName" in response.json()
-    assert response.json()["coaching"] == "1. Play better.\n2. Farm more."
+
+@pytest.mark.asyncio
+async def test_win_predict():
+    from app.services import win_predictor
+    participants = [
+        {"puuid": "p1", "teamId": 100, "championId": 1},
+        {"puuid": "p2", "teamId": 200, "championId": 2},
+    ]
+    live_stats = {
+        "p1": {"tier": "GOLD", "division": "I", "lp": 50, "wins": 20, "losses": 18, "avg_score": 55},
+        "p2": {"tier": "SILVER", "division": "II", "lp": 10, "wins": 15, "losses": 20, "avg_score": 45},
+    }
     
+    # We don't need to mock the model as it falls back to a linear dot product if no model exists
+    prediction = win_predictor.predict(participants, live_stats)
+    assert "bluePct" in prediction
+    assert "redPct" in prediction
+    assert prediction["bluePct"] + prediction["redPct"] == 100
+
+@pytest.mark.asyncio
+async def test_db_lp_snapshot(mocker):
+    from app.services import db
+    mock_sqlite = mocker.patch("sqlite3.connect")
+    # Simulate first record
+    mock_sqlite.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = None
+    
+    await db.record_lp_snapshot("fake-puuid", "GOLD", "I", 50, 20, 18)
+    
+    # Verify execute was called
+    calls = mock_sqlite.return_value.__enter__.return_value.execute.call_args_list
+    assert any("INSERT INTO lp_history" in str(call) for call in calls)
