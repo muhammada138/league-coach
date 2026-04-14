@@ -489,31 +489,50 @@ async def live_enrich(body: LiveEnrichRequest):
     # across ALL fetched match data — even if the match is only in ONE player's history.
     live_puuids = {r["puuid"] for r in results if r.get("puuid")}
     
-    # Build: puuid_a -> {puuid_b: count_of_shared_matches}
-    # Keyed by each player whose match history we fetched
-    co_game_counts = {}  # {(puuid_a, puuid_b): count}
+    # Track unique shared matchIds per pair — a set so each game counts exactly once
+    # even if it appears in both players' histories.
+    pair_match_sets = {}  # {(puuid_a, puuid_b): set of matchIds}
     for r in results:
         p_puuid = r["puuid"]
         for g in r.get("last5", []):
             match_participants = g.get("participants", [])
+            match_id = g.get("matchId", "")
+            if not match_id:
+                continue
             for other_puuid in match_participants:
                 if other_puuid != p_puuid and other_puuid in live_puuids:
                     pair = tuple(sorted([p_puuid, other_puuid]))
-                    co_game_counts[pair] = co_game_counts.get(pair, 0) + 1
+                    if pair not in pair_match_sets:
+                        pair_match_sets[pair] = set()
+                    pair_match_sets[pair].add(match_id)
 
-    # Note: each shared game is counted once from each player's perspective,
-    # so a pair who played 2 real duo games together will have count >= 2.
-    # Divide by 2 if BOTH players' last5 overlap; but if only 1 player's history
-    # captured the match, count is still meaningful. Use threshold of 2 raw counts.
+    # Build an adjacency list for connected components (parties)
+    adj = {p: set() for p in live_puuids}
+    for pair, match_ids in pair_match_sets.items():
+        if len(match_ids) >= 2:  # 2+ distinct shared games = genuine premade
+            p1, p2 = pair
+            adj[p1].add(p2)
+            adj[p2].add(p1)
+            
     duo_groups = {}
     next_gid = 1
-    import itertools as _it
-    for (p1, p2), count in co_game_counts.items():
-        if count >= 2:
-            gid = duo_groups.get(p1) or duo_groups.get(p2) or next_gid
-            if gid == next_gid: next_gid += 1
-            duo_groups[p1] = gid
-            duo_groups[p2] = gid
+    visited = set()
+    for p in live_puuids:
+        if p not in visited and adj[p]:
+            # BFS to find all connected party members
+            q = [p]
+            component = []
+            while q:
+                curr = q.pop(0)
+                if curr not in visited:
+                    visited.add(curr)
+                    component.append(curr)
+                    q.extend(list(adj[curr]))
+            
+            if len(component) > 1:
+                for member in component:
+                    duo_groups[member] = next_gid
+                next_gid += 1
             
     # Inject duo info back into results
     for r in results:
