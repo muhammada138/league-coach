@@ -48,16 +48,6 @@ def init_db() -> None:
 
         # --- ML training data tables ---
 
-        # One-time migration: rename old leaky training_matches → training_matches_v1
-        tables = {r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()}
-        if "training_matches" in tables and "training_matches_v1" not in tables:
-            count = conn.execute("SELECT COUNT(*) FROM training_matches").fetchone()[0]
-            if count > 0:
-                conn.execute("ALTER TABLE training_matches RENAME TO training_matches_v1")
-                conn.execute("UPDATE ingestion_status SET processed_count = 0 WHERE id = 1")
-
         # Fresh clean training_matches table
         conn.execute("""
             CREATE TABLE IF NOT EXISTS training_matches (
