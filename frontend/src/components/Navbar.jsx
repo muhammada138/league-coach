@@ -45,7 +45,7 @@ function NavSearch() {
     setError("");
     try {
       const data = await getSummoner(finalName.trim(), finalTag.trim(), finalRegion);
-      saveToHistory(`${finalName.trim()}#${finalTag.trim()}`);
+      saveToHistory({ gameName: finalName.trim(), tagLine: finalTag.trim(), region: finalRegion });
       localStorage.setItem("lastRegion", finalRegion);
       
       // Clear inputs and navigate

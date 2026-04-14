@@ -44,18 +44,14 @@ export default function useSearchHistory() {
   }, []);
 
   const saveToHistory = useCallback((entry) => {
-    // entry can be a string "Name#Tag" or an object { gameName, tagLine, region }
-    if (!entry) return;
+    // entry can be an object { gameName, tagLine, region }
+    if (!entry || !entry.gameName || !entry.tagLine || !entry.region) return;
     
-    let entryObj;
-    if (typeof entry === "string") {
-      const [gameName, tagLine] = entry.split("#");
-      entryObj = { gameName, tagLine, region: localStorage.getItem("lastRegion") || "na1" };
-    } else {
-      entryObj = entry;
-    }
-
-    if (!entryObj.gameName || !entryObj.tagLine) return;
+    const entryObj = {
+      gameName: entry.gameName.trim(),
+      tagLine: entry.tagLine.trim(),
+      region: entry.region
+    };
 
     setHistory((prev) => {
       // Filter out duplicates by comparing name#tag
