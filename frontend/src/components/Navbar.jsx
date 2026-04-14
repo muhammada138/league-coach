@@ -5,6 +5,20 @@ import { getSummoner } from "../api/riot";
 import SearchInput from "./SearchInput";
 import useSearchHistory from "../hooks/useSearchHistory";
 
+const TIER_COLORS = {
+  IRON: "text-slate-400",
+  BRONZE: "text-orange-700",
+  SILVER: "text-slate-300",
+  GOLD: "text-yellow-500",
+  PLATINUM: "text-emerald-400",
+  EMERALD: "text-emerald-500",
+  DIAMOND: "text-blue-400",
+  MASTER: "text-purple-400",
+  GRANDMASTER: "text-red-400",
+  CHALLENGER: "text-sky-300",
+  UNRANKED: "text-slate-400",
+};
+
 // ── Profile avatar ───────────────────────────────────────────────────────────
 function ProfileAvatar({ profile }) {
   const [failed, setFailed] = useState(false);
@@ -37,7 +51,7 @@ function NavSearch() {
 
   const handleSearch = async (suggestion) => {
     const finalName = suggestion?.gameName || gameName;
-    const finalTag  = suggestion?.tagLine || tagLine;
+    const finalTag = suggestion?.tagLine || tagLine;
     const finalRegion = suggestion?.region || region;
 
     if (!finalName.trim() || !finalTag.trim()) return;
@@ -47,11 +61,11 @@ function NavSearch() {
       const data = await getSummoner(finalName.trim(), finalTag.trim(), finalRegion);
       saveToHistory({ gameName: finalName.trim(), tagLine: finalTag.trim(), region: finalRegion });
       localStorage.setItem("lastRegion", finalRegion);
-      
+
       // Clear inputs and navigate
       setGameName("");
       setTagLine("");
-      
+
       navigate(
         `/player/${finalRegion}/${encodeURIComponent(data.gameName)}/${encodeURIComponent(finalTag.trim())}`,
         { state: { puuid: data.puuid, region: finalRegion } }
@@ -65,7 +79,7 @@ function NavSearch() {
 
   return (
     <div className="hidden sm:block ml-4">
-      <SearchInput 
+      <SearchInput
         navbar
         region={region}
         setRegion={setRegion}
@@ -178,11 +192,29 @@ function SavedDropdown() {
                       {p.gameName}
                       <span className="text-slate-400 dark:text-white/20 font-medium ml-0.5">#{p.tagLine}</span>
                     </span>
-                    {p.region && (
-                      <span className="text-[9px] font-black text-[#c89b3c]/60 uppercase tracking-tighter">
-                        {p.region}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {p.region && (
+                        <span className="text-[9px] font-black text-[#c89b3c]/60 uppercase tracking-tighter">
+                          {p.region}
+                        </span>
+                      )}
+                      {p.tier && p.tier !== "UNRANKED" && (
+                        <>
+                          <span className="w-0.5 h-0.5 rounded-full bg-slate-300 dark:bg-white/20" />
+                          <div className="flex items-center gap-1">
+                            <img
+                              src={`https://opgg-static.akamaized.net/images/medals_new/${p.tier.toLowerCase()}.png`}
+                              alt={p.tier}
+                              className="w-3 h-3 object-contain drop-shadow-sm"
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                            <span className={`text-[9px] font-bold uppercase tracking-wide ${TIER_COLORS[p.tier] || "text-slate-400"}`}>
+                              {p.tier}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   <button
@@ -216,9 +248,9 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
         {/* Logo Section (Left) */}
         <Link to="/" className="flex items-center gap-2.5 group flex-shrink-0">
-          <img 
-            src="/logo.png" 
-            alt="Rift IQ" 
+          <img
+            src="/logo.png"
+            alt="Rift IQ"
             className="w-8 h-8 rounded-lg shadow-lg shadow-[#c89b3c]/10 group-hover:scale-105 transition-transform"
           />
           <span className="text-lg font-black tracking-tighter text-slate-900 dark:text-white/90">RIFT IQ</span>

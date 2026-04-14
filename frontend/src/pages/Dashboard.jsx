@@ -62,21 +62,21 @@ async function getRunesMap(ddVersion) {
 
 function computePerformanceScore(player, allPlayers) {
   if (!player || !allPlayers) return "0.00";
-  const ch   = player.challenges || {};
+  const ch = player.challenges || {};
   const lane = player.teamPosition || "MIDDLE";
 
   // Base
   const base = 15.0;
 
   // Global
-  const gpm  = ch.goldPerMinute        ?? 0;
-  const dpm  = ch.damagePerMinute      ?? 0;
+  const gpm = ch.goldPerMinute ?? 0;
+  const dpm = ch.damagePerMinute ?? 0;
   const vspm = ch.visionScorePerMinute ?? 0;
   const globalScore = (gpm + 60) * 0.008 + (dpm - 24.6) * 0.007 + vspm * 2.0;
 
   // KDA (role-dependent)
-  const kills   = player.kills   ?? 0;
-  const deaths  = player.deaths  ?? 0;
+  const kills = player.kills ?? 0;
+  const deaths = player.deaths ?? 0;
   const assists = player.assists ?? 0;
   let kdaScore;
   if (lane === "TOP") {
@@ -95,35 +95,35 @@ function computePerformanceScore(player, allPlayers) {
     );
     if (opp) {
       const goldDiff = (player.goldEarned ?? 0) - (opp.goldEarned ?? 0);
-      const xpDiff   = (player.champExperience ?? 0) - (opp.champExperience ?? 0);
+      const xpDiff = (player.champExperience ?? 0) - (opp.champExperience ?? 0);
       const maxCsAdv = ch.maxCsAdvantageOnLaneOpponent ?? 0;
-      const rawLane  = goldDiff * 0.0015 + xpDiff * 0.0011 + maxCsAdv * 0.08;
+      const rawLane = goldDiff * 0.0015 + xpDiff * 0.0011 + maxCsAdv * 0.08;
       laneScore = Math.max(-5.0, Math.min(10.0, rawLane));
     }
   }
 
   // Objectives
   const riftHeralds = ch.riftHeraldKills ?? 0;
-  const dragons     = player.dragonKills ?? 0;
-  const barons      = player.baronKills  ?? 0;
-  const horde       = ch.voidMonsterKill ?? 0;
-  const objDmg      = player.damageDealtToObjectives ?? 0;
-  const objScore    = riftHeralds * 3.0 + dragons * 2.1 + barons * 2.0 + horde * 0.5 + objDmg * 0.00024;
+  const dragons = player.dragonKills ?? 0;
+  const barons = player.baronKills ?? 0;
+  const horde = ch.voidMonsterKill ?? 0;
+  const objDmg = player.damageDealtToObjectives ?? 0;
+  const objScore = riftHeralds * 3.0 + dragons * 2.1 + barons * 2.0 + horde * 0.5 + objDmg * 0.00024;
 
   // Team (Riot challenges values are 0-1; convert to 0-100 for the formula)
-  const kpPct       = (ch.killParticipation          ?? 0) * 100;
-  const teamDmgPct  = (ch.teamDamagePercentage        ?? 0) * 100;
+  const kpPct = (ch.killParticipation ?? 0) * 100;
+  const teamDmgPct = (ch.teamDamagePercentage ?? 0) * 100;
   const dmgTakenPct = (ch.damageTakenOnTeamPercentage ?? 0) * 100;
-  const teamScore   = (kpPct - 25) * 0.14 + teamDmgPct * 0.09 + dmgTakenPct * 0.07;
+  const teamScore = (kpPct - 25) * 0.14 + teamDmgPct * 0.09 + dmgTakenPct * 0.07;
 
   // Role-Specific Mastery
   let roleSpecific;
   if (lane === "TOP" || lane === "MIDDLE" || lane === "BOTTOM") {
     // Branch A: Laners
-    const laneMins     = ch.laneMinionsFirst10Minutes ?? 0;
-    const turretPlates = ch.turretPlatesTaken         ?? 0;
-    const soloKills    = ch.soloKills                 ?? 0;
-    const turretTds    = ch.turretTakedowns           ?? 0;
+    const laneMins = ch.laneMinionsFirst10Minutes ?? 0;
+    const turretPlates = ch.turretPlatesTaken ?? 0;
+    const soloKills = ch.soloKills ?? 0;
+    const turretTds = ch.turretTakedowns ?? 0;
 
     let cs10Score = 0.0;
     if (laneMins > 0 && (lane === "TOP" || lane === "MIDDLE")) {
@@ -133,46 +133,46 @@ function computePerformanceScore(player, allPlayers) {
     }
     const platesScore = 2.25 + turretPlates * 1.50;
     const soloScore = lane === "BOTTOM" ? soloKills * 1.50
-                    : lane === "MIDDLE" ? soloKills * 0.85
-                    : /* TOP */           soloKills * 0.75;
+      : lane === "MIDDLE" ? soloKills * 0.85
+        : /* TOP */           soloKills * 0.75;
     const tdScore = lane === "TOP" ? turretTds * 0.85 : turretTds * 0.75;
 
     roleSpecific = cs10Score + platesScore + soloScore + tdScore;
 
   } else if (lane === "JUNGLE") {
     // Branch B: Jungle
-    const initCrab   = ch.initialCrabCount        ?? 0;
-    const scuttle    = ch.scuttleCrabKills         ?? 0;
-    const jungleCs10 = ch.jungleCsBefore10Minutes  ?? 0;
-    const enemyJg    = ch.enemyJungleMonsterKills  ?? 0;
-    const pickKill   = ch.pickKillWithAlly         ?? 0;
+    const initCrab = ch.initialCrabCount ?? 0;
+    const scuttle = ch.scuttleCrabKills ?? 0;
+    const jungleCs10 = ch.jungleCsBefore10Minutes ?? 0;
+    const enemyJg = ch.enemyJungleMonsterKills ?? 0;
+    const pickKill = ch.pickKillWithAlly ?? 0;
 
     roleSpecific = (
-      initCrab   * 1.50
-      + scuttle    * 0.45
+      initCrab * 1.50
+      + scuttle * 0.45
       + jungleCs10 * 0.067
-      + enemyJg    * 0.50
-      + pickKill   * 0.275
+      + enemyJg * 0.50
+      + pickKill * 0.275
     );
 
   } else {
     // Branch C: Support (UTILITY)
     const supportQuest = ch.completeSupportQuestInTime ?? 0;
-    const stealthWards = ch.stealthWardsPlaced         ?? 0;
-    const controlWards = ch.controlWardsPlaced         ?? 0;
-    const wardTds      = ch.wardTakedowns              ?? 0;
-    const pickKill     = ch.pickKillWithAlly           ?? 0;
+    const stealthWards = ch.stealthWardsPlaced ?? 0;
+    const controlWards = ch.controlWardsPlaced ?? 0;
+    const wardTds = ch.wardTakedowns ?? 0;
+    const pickKill = ch.pickKillWithAlly ?? 0;
 
     const questScore = supportQuest ? 1.50 : -3.0;
     roleSpecific = (
       questScore
       + stealthWards * 0.17
       + controlWards * 0.58
-      + wardTds      * 0.42
-      + pickKill     * 0.22
+      + wardTds * 0.42
+      + pickKill * 0.22
     );
   }
-  
+
   roleSpecific = Math.max(0.0, Math.min(20.0, roleSpecific));
 
   // Win/Loss
@@ -436,12 +436,16 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
               onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)}>
               {/* glow ring */}
               <circle r="5" fill={dotColor}
-                style={{ opacity: hovered ? 0.22 : 0, transformBox: "fill-box", transformOrigin: "center",
-                  transform: hovered ? "scale(1)" : "scale(0.3)", transition: "opacity 0.18s, transform 0.18s" }} />
+                style={{
+                  opacity: hovered ? 0.22 : 0, transformBox: "fill-box", transformOrigin: "center",
+                  transform: hovered ? "scale(1)" : "scale(0.3)", transition: "opacity 0.18s, transform 0.18s"
+                }} />
               {/* main dot */}
               <circle r="3" fill={dotColor}
-                style={{ transformBox: "fill-box", transformOrigin: "center",
-                  transform: hovered ? "scale(1.55)" : "scale(1)", transition: "transform 0.18s ease" }} />
+                style={{
+                  transformBox: "fill-box", transformOrigin: "center",
+                  transform: hovered ? "scale(1.55)" : "scale(1)", transition: "transform 0.18s ease"
+                }} />
               {/* hit area */}
               <circle r="8" fill="transparent" style={{ cursor: "default" }} />
             </g>
@@ -477,9 +481,9 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
 }
 
 // ── Star / save button ─────────────────────────────────────────────────────
-function StarButton({ gameName, tagLine, puuid, profileIconId, region }) {
+function StarButton({ gameName, tagLine, puuid, profileIconId, region, tier }) {
   const { saved: savedList, toggleSaved } = useSearchHistory();
-  const isSaved = savedList.some((p) => 
+  const isSaved = savedList.some((p) =>
     p.gameName.toLowerCase() === gameName.toLowerCase() &&
     p.tagLine.toLowerCase() === tagLine.toLowerCase()
   );
@@ -487,7 +491,7 @@ function StarButton({ gameName, tagLine, puuid, profileIconId, region }) {
   if (!tagLine || !puuid) return null;
 
   const handleToggle = () => {
-    toggleSaved({ gameName, tagLine, puuid, profileIconId, region });
+    toggleSaved({ gameName, tagLine, puuid, profileIconId, region, tier });
   };
 
   return (
@@ -503,10 +507,10 @@ function StarButton({ gameName, tagLine, puuid, profileIconId, region }) {
 }
 
 const LANE_META = {
-  TOP:     { abbr: "TOP", color: "text-blue-400",   bg: "bg-blue-400/10",   border: "border-blue-400/25"   },
-  JUNGLE:  { abbr: "JGL", color: "text-green-400",  bg: "bg-green-400/10",  border: "border-green-400/25"  },
-  MIDDLE:  { abbr: "MID", color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/25" },
-  BOTTOM:  { abbr: "BOT", color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/25" },
+  TOP: { abbr: "TOP", color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/25" },
+  JUNGLE: { abbr: "JGL", color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/25" },
+  MIDDLE: { abbr: "MID", color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/25" },
+  BOTTOM: { abbr: "BOT", color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/25" },
   UTILITY: { abbr: "SUP", color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/25" },
 };
 
@@ -568,14 +572,14 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
     if (participants.length === 0) return;
     getWinPredict(participants, liveStats)
       .then(setPredictor)
-      .catch(() => {});
+      .catch(() => { });
   }, [liveStats, champMap, liveGame]);
 
   const mins = Math.floor(elapsed / 60);
   const secs = String(elapsed % 60).padStart(2, "0");
   const queueLabel = QUEUE_LABELS[liveGame.queueId] ?? liveGame.gameMode ?? "Live Game";
   const blueTeam = liveGame.participants.filter((p) => p.teamId === 100);
-  const redTeam  = liveGame.participants.filter((p) => p.teamId === 200);
+  const redTeam = liveGame.participants.filter((p) => p.teamId === 200);
 
   const renderPlayer = (p) => {
     const isMe = p.puuid === puuid;
@@ -587,9 +591,9 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
     const last5 = stats?.last5 ?? [];
     const rankLabel = stats
       ? (stats.tier === "UNRANKED" ? "Unranked" :
-         ["MASTER", "GRANDMASTER", "CHALLENGER"].includes(stats.tier)
-           ? `${stats.tier.charAt(0) + stats.tier.slice(1).toLowerCase()} ${stats.lp} LP`
-           : `${stats.tier.charAt(0) + stats.tier.slice(1).toLowerCase()}${stats.division ? ` ${stats.division}` : ""}`)
+        ["MASTER", "GRANDMASTER", "CHALLENGER"].includes(stats.tier)
+          ? `${stats.tier.charAt(0) + stats.tier.slice(1).toLowerCase()} ${stats.lp} LP`
+          : `${stats.tier.charAt(0) + stats.tier.slice(1).toLowerCase()}${stats.division ? ` ${stats.division}` : ""}`)
       : null;
 
     const canNav = !isMe && p.puuid && p.summonerName && p.tagLine;
@@ -627,9 +631,8 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
               <span className="text-slate-400 dark:text-white/30 font-normal">{p.tagLine ? `#${p.tagLine}` : ""}</span>
             </span>
             {stats?.duo_group > 0 && (
-              <span className={`text-[8px] font-black px-1 rounded bg-current/10 border border-current/20 uppercase tracking-tighter ${
-                ["text-pink-500", "text-indigo-400", "text-amber-500", "text-cyan-400", "text-lime-400"][(stats.duo_group - 1) % 5]
-              }`}>
+              <span className={`text-[8px] font-black px-1 rounded bg-current/10 border border-current/20 uppercase tracking-tighter ${["text-pink-500", "text-indigo-400", "text-amber-500", "text-cyan-400", "text-lime-400"][(stats.duo_group - 1) % 5]
+                }`}>
                 Duo
               </span>
             )}
@@ -644,9 +647,9 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
                   <span>·</span>
                   <span className={
                     stats.avg_score >= 90 ? "text-yellow-500 dark:text-yellow-400 font-medium" :
-                    stats.avg_score >= 70 ? "text-purple-500 dark:text-purple-400 font-medium" :
-                    stats.avg_score >= 40 ? "text-blue-500 dark:text-blue-400 font-medium" :
-                    "text-red-500 dark:text-red-400 font-medium"
+                      stats.avg_score >= 70 ? "text-purple-500 dark:text-purple-400 font-medium" :
+                        stats.avg_score >= 40 ? "text-blue-500 dark:text-blue-400 font-medium" :
+                          "text-red-500 dark:text-red-400 font-medium"
                   }>
                     {stats.avg_score} avg
                   </span>
@@ -662,14 +665,14 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
         <div className="flex gap-0.5 flex-shrink-0">
           {last5.length > 0
             ? last5.map((g, i) => (
-                <div key={i} title={`Score: ${g.score}${isMe ? "\nClick to view game" : ""}`}
-                  onClick={(e) => handleDotClick(e, g.matchId)}
-                  className={`w-2 h-2 rounded-full ${g.win ? "bg-emerald-400" : "bg-red-400/80"} 
+              <div key={i} title={`Score: ${g.score}${isMe ? "\nClick to view game" : ""}`}
+                onClick={(e) => handleDotClick(e, g.matchId)}
+                className={`w-2 h-2 rounded-full ${g.win ? "bg-emerald-400" : "bg-red-400/80"} 
                     ${isMe && g.matchId ? "cursor-pointer hover:ring-2 hover:ring-white/40 active:scale-90 transition-all" : ""}`} />
-              ))
+            ))
             : [...Array(5)].map((_, i) => (
-                <div key={i} className={`w-2 h-2 rounded-full ${(liveStats || !p.puuid) ? "bg-slate-200 dark:bg-white/10" : "bg-slate-200 dark:bg-white/10 animate-pulse"}`} />
-              ))
+              <div key={i} className={`w-2 h-2 rounded-full ${(liveStats || !p.puuid) ? "bg-slate-200 dark:bg-white/10" : "bg-slate-200 dark:bg-white/10 animate-pulse"}`} />
+            ))
           }
         </div>
       </div>
@@ -741,7 +744,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
 // ── Profile Card ───────────────────────────────────────────────────────────
 // ── 30-Day LP History Graph ─────────────────────────────────────────────────
 const TIER_BASE_LP = { IRON: 0, BRONZE: 400, SILVER: 800, GOLD: 1200, PLATINUM: 1600, EMERALD: 2000, DIAMOND: 2400, MASTER: 2800, GRANDMASTER: 2800, CHALLENGER: 2800 };
-const DIV_BASE_LP  = { I: 300, II: 200, III: 100, IV: 0 };
+const DIV_BASE_LP = { I: 300, II: 200, III: 100, IV: 0 };
 const toAbsLP = (tier, div, lp) => (TIER_BASE_LP[tier] ?? 1200) + (DIV_BASE_LP[div] ?? 0) + (lp || 0);
 
 function LpHistoryGraph({ history }) {
@@ -754,18 +757,18 @@ function LpHistoryGraph({ history }) {
   const W = 260, H = 56, padX = 8, padY = 8;
   const innerW = W - 2 * padX, innerH = H - 2 * padY;
 
-  const minTs   = series[0].timestamp;
-  const maxTs   = series[series.length - 1].timestamp;
-  const allLp   = series.map((s) => s.absLp);
+  const minTs = series[0].timestamp;
+  const maxTs = series[series.length - 1].timestamp;
+  const allLp = series.map((s) => s.absLp);
   const minAbsLp = Math.min(...allLp);
   const maxAbsLp = Math.max(...allLp);
-  const lpRange  = Math.max(maxAbsLp - minAbsLp, 200);
+  const lpRange = Math.max(maxAbsLp - minAbsLp, 200);
 
   const toX = (ts) => maxTs === minTs ? padX + innerW / 2 : padX + ((ts - minTs) / (maxTs - minTs)) * innerW;
-  const toY = (v)  => padY + innerH - ((v - minAbsLp) / lpRange) * innerH;
+  const toY = (v) => padY + innerH - ((v - minAbsLp) / lpRange) * innerH;
 
   const pathD = series.map((s, i) => `${i === 0 ? "M" : "L"} ${toX(s.timestamp).toFixed(1)} ${toY(s.absLp).toFixed(1)}`).join(" ");
-  const last  = series[series.length - 1];
+  const last = series[series.length - 1];
   const first = series[0];
   const lineColor = last.absLp >= first.absLp ? "#10b981" : "#ef4444";
   const areaD = `${pathD} L ${toX(last.timestamp).toFixed(1)} ${(padY + innerH).toFixed(1)} L ${toX(first.timestamp).toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
@@ -877,7 +880,7 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVe
             <span className="text-[10px] font-bold uppercase tracking-widest text-[#c89b3c]/60 bg-[#c89b3c]/10 px-1.5 py-0.5 rounded border border-[#c89b3c]/20 ml-2">
               {region.toUpperCase()}
             </span>
-            <StarButton gameName={gameName} tagLine={tagLine} puuid={puuid} profileIconId={profile.profileIconId} region={region} />
+            <StarButton gameName={gameName} tagLine={tagLine} puuid={puuid} profileIconId={profile.profileIconId} region={region} tier={profile.tier} />
             {onLiveCheck && (
               <div className="ml-2 flex items-center gap-2">
                 <button
@@ -952,11 +955,10 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
   return (
     <>
       <tr>
-        <td colSpan={9} className={`px-2 py-1.5 ${
-          isWin
+        <td colSpan={9} className={`px-2 py-1.5 ${isWin
             ? "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400"
             : "bg-red-50 dark:bg-red-950/50 text-red-500 dark:text-red-400"
-        }`}>
+          }`}>
           <div className="flex items-center gap-4">
             <span className="text-[10px] font-bold uppercase tracking-widest flex-shrink-0">
               {teamLabel}: {isWin ? "Victory" : "Defeat"}
@@ -964,23 +966,23 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
             {teamStats && (
               <div className="flex items-center gap-3 text-[10px] font-bold opacity-90 tracking-wide overflow-hidden overflow-x-auto no-scrollbar">
                 <span title="Towers" className="flex items-center gap-1 flex-shrink-0">
-                  <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/tower-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="T" onError={(e) => { e.target.style.display='none' }} />
+                  <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/tower-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="T" onError={(e) => { e.target.style.display = 'none' }} />
                   {teamStats.tower}
                 </span>
                 <span title="Dragons" className="flex items-center gap-1 flex-shrink-0">
-                  <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/dragon-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="D" onError={(e) => { e.target.style.display='none' }} />
+                  <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/dragon-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="D" onError={(e) => { e.target.style.display = 'none' }} />
                   {teamStats.dragon}
                 </span>
                 <span title="Void Grubs" className="flex items-center gap-1 flex-shrink-0">
-                  <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/horde-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="G" onError={(e) => { e.target.style.display='none' }} />
+                  <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/horde-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="G" onError={(e) => { e.target.style.display = 'none' }} />
                   {teamStats.horde}
                 </span>
                 <span title="Rift Heralds" className="flex items-center gap-1 flex-shrink-0">
-                  <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/herald-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="H" onError={(e) => { e.target.style.display='none' }} />
+                  <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/herald-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="H" onError={(e) => { e.target.style.display = 'none' }} />
                   {teamStats.riftHerald}
                 </span>
                 <span title="Barons" className="flex items-center gap-1 flex-shrink-0">
-                  <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/baron-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="B" onError={(e) => { e.target.style.display='none' }} />
+                  <img src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default/baron-${teamStats.teamId}.png`} className="w-3.5 h-3.5 object-contain" alt="B" onError={(e) => { e.target.style.display = 'none' }} />
                   {teamStats.baron}
                 </span>
               </div>
@@ -996,25 +998,24 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
           scoreNum >= 90
             ? "text-yellow-500 dark:text-yellow-400"
             : scoreNum >= 70
-            ? "text-purple-500 dark:text-purple-400"
-            : scoreNum >= 40
-            ? "text-blue-500 dark:text-blue-400"
-            : "text-red-500 dark:text-red-400";
-            
+              ? "text-purple-500 dark:text-purple-400"
+              : scoreNum >= 40
+                ? "text-blue-500 dark:text-blue-400"
+                : "text-red-500 dark:text-red-400";
+
         const tier = (p?.rank || "UNRANKED").split(" ")[0].toUpperCase();
         const rankColor = TIER_COLORS[tier] ?? "text-slate-400 dark:text-white/40";
-        const emblemUrl = tier !== "UNRANKED" 
-          ? `https://opgg-static.akamaized.net/images/medals_new/${tier.toLowerCase()}.png` 
+        const emblemUrl = tier !== "UNRANKED"
+          ? `https://opgg-static.akamaized.net/images/medals_new/${tier.toLowerCase()}.png`
           : null;
 
         return (
           <tr
             key={(p?.riotIdGameName || idx) + (p?.championName || idx)}
-            className={`border-b border-black/[0.04] dark:border-white/[0.03] last:border-0 transition-colors ${
-              isMe
+            className={`border-b border-black/[0.04] dark:border-white/[0.03] last:border-0 transition-colors ${isMe
                 ? "bg-[#c89b3c]/10 dark:bg-[#c89b3c]/[0.12]"
                 : "hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
-            }`}
+              }`}
           >
             <td className="px-2 py-2 text-slate-400 dark:text-white/25 text-[10px] w-5 sm:w-6 text-center">{idx + 1}</td>
             <td className="px-2 py-2">
@@ -1029,7 +1030,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
                     {p?.champLevel}
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-0.5 flex-shrink-0">
                   <div className="flex flex-col gap-0.5">
                     <img src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/spell/${SUMMONER_SPELLS[p?.summoner1Id]}.png`} title={SUMMONER_SPELL_NAMES[p?.summoner1Id]} className="w-4 h-4 rounded cursor-help" onError={(e) => { e.target.style.display = "none"; }} />
@@ -1037,10 +1038,10 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
                   </div>
                   <div className="flex flex-col gap-0.5 bg-black/5 dark:bg-white/5 rounded-[3px] p-[1px]">
                     {runesMap && p?.primaryPerk && runesMap[p?.primaryPerk] ? (
-                        <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[p?.primaryPerk]}`} className="w-[14px] h-[14px] rounded-full bg-black/90 object-cover" />
+                      <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[p?.primaryPerk]}`} className="w-[14px] h-[14px] rounded-full bg-black/90 object-cover" />
                     ) : <div className="w-[14px] h-[14px]" />}
                     {runesMap && p?.subStyle && runesMap[p?.subStyle] ? (
-                        <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[p?.subStyle]}`} className="w-[14px] h-[14px] rounded-full bg-black/90 object-cover" />
+                      <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[p?.subStyle]}`} className="w-[14px] h-[14px] rounded-full bg-black/90 object-cover" />
                     ) : <div className="w-[14px] h-[14px]" />}
                   </div>
                 </div>
@@ -1071,7 +1072,7 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
                     )}
                   </div>
                   <div className="flex items-center gap-1 mt-0.5">
-                  {emblemUrl && <img src={emblemUrl} className="w-4 h-4 object-contain" alt={tier} onError={(e) => { e.target.style.display='none' }} />}
+                    {emblemUrl && <img src={emblemUrl} className="w-4 h-4 object-contain" alt={tier} onError={(e) => { e.target.style.display = 'none' }} />}
                     <span className={`text-[9px] truncate font-medium capitalize ${rankColor}`}>
                       {p?.rank}
                     </span>
@@ -1202,13 +1203,13 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
             mvpPuuid={mvpPuuid}
             acePuuid={acePuuid}
             region={region}
-            />
-            <tr>
+          />
+          <tr>
             <td colSpan={9} className="p-0">
               <div className="h-px bg-black/10 dark:bg-white/[0.08]" />
             </td>
-            </tr>
-            <TeamScoreRows
+          </tr>
+          <TeamScoreRows
             players={withScores?.filter((p) => p.teamId === 200) || []}
             isWin={team200Won}
             teamLabel="Red Team"
@@ -1221,7 +1222,7 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
             mvpPuuid={mvpPuuid}
             acePuuid={acePuuid}
             region={region}
-            />        </tbody>
+          />        </tbody>
       </table>
     </div>
   );
@@ -1238,22 +1239,22 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
   const scoreColor = game.score >= 90
     ? "text-yellow-500 dark:text-yellow-400"
     : game.score >= 70
-    ? "text-purple-500 dark:text-purple-400"
-    : game.score >= 40
-    ? "text-blue-500 dark:text-blue-400"
-    : "text-red-500 dark:text-red-400";
+      ? "text-purple-500 dark:text-purple-400"
+      : game.score >= 40
+        ? "text-blue-500 dark:text-blue-400"
+        : "text-red-500 dark:text-red-400";
 
   const borderClass = isRemake
     ? "border-slate-300 dark:border-white/10"
     : game.win
-    ? "border-emerald-200 dark:border-emerald-500/25"
-    : "border-red-200 dark:border-red-500/25";
+      ? "border-emerald-200 dark:border-emerald-500/25"
+      : "border-red-200 dark:border-red-500/25";
 
   const bgClass = isRemake
     ? "bg-slate-100/70 dark:bg-slate-800/20 hover:bg-slate-100 dark:hover:bg-slate-800/30"
     : game.win
-    ? "bg-emerald-50/70 dark:bg-emerald-950/25 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-    : "bg-red-50/70 dark:bg-red-950/25 hover:bg-red-50 dark:hover:bg-red-950/40";
+      ? "bg-emerald-50/70 dark:bg-emerald-950/25 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+      : "bg-red-50/70 dark:bg-red-950/25 hover:bg-red-50 dark:hover:bg-red-950/40";
 
   const accentClass = isRemake ? "bg-slate-400/50" : game.win ? "bg-emerald-400" : "bg-red-400";
 
@@ -1289,11 +1290,10 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
                 Remake
               </span>
             ) : (
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
-                game.win
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${game.win
                   ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                   : "bg-red-100 dark:bg-red-500/20 text-red-500 dark:text-red-400"
-              }`}>
+                }`}>
                 {game.win ? "W" : "L"}
               </span>
             )}
@@ -1354,27 +1354,25 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
         )}
 
         {/* Expand toggle */}
-        <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 ${
-          isExpanded ? "bg-[#c89b3c]/20 text-[#c89b3c] rotate-0" : "text-slate-400 dark:text-white/20"
-        }`}>
+        <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 ${isExpanded ? "bg-[#c89b3c]/20 text-[#c89b3c] rotate-0" : "text-slate-400 dark:text-white/20"
+          }`}>
           <span className="text-[10px] font-bold">{isExpanded ? "▲" : "▼"}</span>
         </div>
       </div>
 
       {/* Expanded scoreboard */}
       {isExpanded && (
-        <div className={`border-t ${
-          isRemake
+        <div className={`border-t ${isRemake
             ? "border-slate-200 dark:border-white/10 bg-slate-50/20 dark:bg-slate-800/10"
             : game.win
-            ? "border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10"
-            : "border-red-200 dark:border-red-500/20 bg-red-50/20 dark:bg-red-950/10"
-        }`}>
-          <ExpandedScoreboard 
-            scoreboard={scoreboard} 
-            loading={scoreboardLoading} 
-            gameName={gameName} 
-            isRemake={isRemake} 
+              ? "border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10"
+              : "border-red-200 dark:border-red-500/20 bg-red-50/20 dark:bg-red-950/10"
+          }`}>
+          <ExpandedScoreboard
+            scoreboard={scoreboard}
+            loading={scoreboardLoading}
+            gameName={gameName}
+            isRemake={isRemake}
             ddVersion={ddVersion}
             runesMap={runesMap}
             region={region}
@@ -1387,14 +1385,14 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
 
 // ── Stats Table ────────────────────────────────────────────────────────────
 const STAT_ROWS = [
-  { key: "kda",                         label: "KDA Ratio",     fmt: (v) => v.toFixed(2),                 invertDelta: false },
-  { key: "cspm",                        label: "CS per Minute", fmt: (v) => v.toFixed(2),                 invertDelta: false },
-  { key: "visionScore",                 label: "Vision Score",  fmt: (v) => v.toFixed(1),                 invertDelta: false },
-  { key: "totalDamageDealtToChampions", label: "Damage Dealt",  fmt: (v) => (v / 1000).toFixed(1) + "k", invertDelta: false },
-  { key: "goldEarned",                  label: "Gold Earned",   fmt: (v) => (v / 1000).toFixed(1) + "k", invertDelta: false },
-  { key: "wardsPlaced",                 label: "Wards Placed",  fmt: (v) => v.toFixed(1),                 invertDelta: false },
-  { key: "wardsKilled",                 label: "Wards Killed",  fmt: (v) => v.toFixed(1),                 invertDelta: false },
-  { key: "deaths",                      label: "Deaths",        fmt: (v) => v.toFixed(1),                 invertDelta: true  },
+  { key: "kda", label: "KDA Ratio", fmt: (v) => v.toFixed(2), invertDelta: false },
+  { key: "cspm", label: "CS per Minute", fmt: (v) => v.toFixed(2), invertDelta: false },
+  { key: "visionScore", label: "Vision Score", fmt: (v) => v.toFixed(1), invertDelta: false },
+  { key: "totalDamageDealtToChampions", label: "Damage Dealt", fmt: (v) => (v / 1000).toFixed(1) + "k", invertDelta: false },
+  { key: "goldEarned", label: "Gold Earned", fmt: (v) => (v / 1000).toFixed(1) + "k", invertDelta: false },
+  { key: "wardsPlaced", label: "Wards Placed", fmt: (v) => v.toFixed(1), invertDelta: false },
+  { key: "wardsKilled", label: "Wards Killed", fmt: (v) => v.toFixed(1), invertDelta: false },
+  { key: "deaths", label: "Deaths", fmt: (v) => v.toFixed(1), invertDelta: true },
 ];
 
 function StatsContent({ playerAverages, lobbyAverages, deltas }) {
@@ -1415,8 +1413,8 @@ function StatsContent({ playerAverages, lobbyAverages, deltas }) {
           Math.abs(dVal) < 0.05
             ? "text-slate-400 dark:text-white/30"
             : isPositive
-            ? "text-emerald-500 dark:text-emerald-400"
-            : "text-red-500 dark:text-red-400";
+              ? "text-emerald-500 dark:text-emerald-400"
+              : "text-red-500 dark:text-red-400";
         return (
           <div key={key} className="grid grid-cols-4 px-5 py-2.5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
             <span className="text-xs text-slate-600 dark:text-white/60 font-medium">{label}</span>
@@ -1436,7 +1434,7 @@ function StatsContent({ playerAverages, lobbyAverages, deltas }) {
 function SummaryStrip({ analysis, games }) {
   const allGames = games || analysis?.games || [];
   const n = allGames.length || 1;
-  
+
   const wins = allGames.filter((g) => g.win && g.gameDuration >= 210).length;
   const losses = allGames.filter((g) => !g.win && g.gameDuration >= 210).length;
   const totalValid = wins + losses || 1;
@@ -1473,11 +1471,11 @@ function SummaryStrip({ analysis, games }) {
   const lVis = analysis.lobbyAverages.visionScore;
 
   const items = [
-    { label: "Win Rate",  value: `${winRate}%`,       sub: `${wins}W · ${losses}L`,          positive: Number(winRate) >= 50 },
-    { label: "Avg KDA",   value: avgKda.toFixed(2),   sub: `Lobby ${lKda.toFixed(2)}`,       positive: avgKda >= lKda },
-    { label: "CS / min",  value: avgCspm.toFixed(2),  sub: `Lobby ${lCspm.toFixed(2)}`,      positive: avgCspm >= lCspm },
-    { label: "Vision",    value: avgVision.toFixed(1),sub: `Lobby ${lVis.toFixed(1)}`,       positive: avgVision >= lVis },
-    { label: "Avg Score", value: avgScore.toFixed(0), sub: `Last ${validScoreCount} games`,  positive: avgScore >= 60 },
+    { label: "Win Rate", value: `${winRate}%`, sub: `${wins}W · ${losses}L`, positive: Number(winRate) >= 50 },
+    { label: "Avg KDA", value: avgKda.toFixed(2), sub: `Lobby ${lKda.toFixed(2)}`, positive: avgKda >= lKda },
+    { label: "CS / min", value: avgCspm.toFixed(2), sub: `Lobby ${lCspm.toFixed(2)}`, positive: avgCspm >= lCspm },
+    { label: "Vision", value: avgVision.toFixed(1), sub: `Lobby ${lVis.toFixed(1)}`, positive: avgVision >= lVis },
+    { label: "Avg Score", value: avgScore.toFixed(0), sub: `Last ${validScoreCount} games`, positive: avgScore >= 60 },
   ];
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -1601,8 +1599,8 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
       <div className="flex border-b border-slate-100 dark:border-white/[0.06] flex-shrink-0">
         {[
           { id: "coaching", label: "AI Coaching", dot: true },
-          { id: "stats",    label: "Stats",        dot: false },
-          { id: "teams",    label: "Teams",        dot: false },
+          { id: "stats", label: "Stats", dot: false },
+          { id: "teams", label: "Teams", dot: false },
         ].map(({ id, label, dot }) => (
           <button
             key={id}
@@ -1714,8 +1712,8 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
           </div>
         ) : (
           <div className="lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
-            <TeammatesContent 
-              games={games} 
+            <TeammatesContent
+              games={games}
               region={region}
             />
           </div>
@@ -1729,10 +1727,12 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
 const APP_VERSION = "1.1";
 
 export default function Dashboard() {
-   const { region: urlRegion, gameName: rawGameName, tagLine: rawTagLine } = useParams();
-   const gameName = rawGameName ? decodeURIComponent(rawGameName) : "";
-   const tagLine  = rawTagLine  ? decodeURIComponent(rawTagLine)  : "";
-   const region   = urlRegion || state?.region || localStorage.getItem("lastRegion") || "na1";
+  const { region: urlRegion, gameName: rawGameName, tagLine: rawTagLine } = useParams();
+  const gameName = rawGameName ? decodeURIComponent(rawGameName) : "";
+  const tagLine = rawTagLine ? decodeURIComponent(rawTagLine) : "";
+  const region = urlRegion || state?.region || localStorage.getItem("lastRegion") || "na1";
+
+  const { saveToHistory } = useSearchHistory();
 
   useEffect(() => {
     const storedVersion = localStorage.getItem("app_version");
@@ -1795,6 +1795,17 @@ export default function Dashboard() {
     setResolvedPuuid(puuidResolved);
     const prof = await getProfile(puuidResolved, region);
     setProfile(prof);
+
+    // Enrich the local history entry with the newly fetched rank/icon/puuid
+    saveToHistory({
+      gameName,
+      tagLine,
+      region,
+      puuid: puuidResolved,
+      profileIconId: prof?.profileIconId,
+      tier: prof?.tier
+    });
+
     setExtraGames([]);
     setHasMore(true);
     setQueueTab("ranked");
@@ -1808,7 +1819,7 @@ export default function Dashboard() {
     if (!resolvedPuuid) return;
     const queueMap = { ranked: 'RANKED_SOLO_5x5', flex: 'RANKED_FLEX_SR' };
     const queue = queueMap[queueTab] || 'RANKED_SOLO_5x5';
-    getLpHistory(resolvedPuuid, queue, region).then(setLpHistory).catch(() => {});
+    getLpHistory(resolvedPuuid, queue, region).then(setLpHistory).catch(() => { });
   }, [resolvedPuuid, queueTab, region]);
 
   // Teammates and opponents data is now aggregated locally from 'games' prop in RightPanel
@@ -1974,8 +1985,8 @@ export default function Dashboard() {
               <span className="w-3.5 h-3.5 rounded-full border-[1.5px] border-slate-300 dark:border-white/20 border-t-[#c89b3c] animate-spin block" />
             ) : (
               <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
-                <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5c1.55 0 2.95.64 3.96 1.66" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M11.5 1.5v3h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5c1.55 0 2.95.64 3.96 1.66" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M11.5 1.5v3h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             )}
             {refreshing ? "Refreshing…" : "Refresh"}
@@ -2065,8 +2076,8 @@ export default function Dashboard() {
               const isInitialTabLoad = queueTab !== "ranked" && tabGames[queueTab] === null && tabLoadingMore;
               const QUEUE_TAB_OPTIONS = [
                 { id: "ranked", label: "Solo/Duo" },
-                { id: "flex",   label: "Flex" },
-                { id: "draft",  label: "Draft" },
+                { id: "flex", label: "Flex" },
+                { id: "draft", label: "Draft" },
               ];
               return (
                 <div>
@@ -2157,8 +2168,8 @@ export default function Dashboard() {
                   `Avg KDA: ${analysis.playerAverages.kda.toFixed(2)} (lobby: ${analysis.lobbyAverages.kda.toFixed(2)})`,
                   `CS/min: ${analysis.playerAverages.cspm.toFixed(2)} (lobby: ${analysis.lobbyAverages.cspm.toFixed(2)})`,
                   `Vision: ${analysis.playerAverages.visionScore.toFixed(1)} (lobby: ${analysis.lobbyAverages.visionScore.toFixed(1)})`,
-                  `Damage: ${(analysis.playerAverages.totalDamageDealtToChampions/1000).toFixed(1)}k (lobby: ${(analysis.lobbyAverages.totalDamageDealtToChampions/1000).toFixed(1)}k)`,
-                  `Gold: ${(analysis.playerAverages.goldEarned/1000).toFixed(1)}k (lobby: ${(analysis.lobbyAverages.goldEarned/1000).toFixed(1)}k)`,
+                  `Damage: ${(analysis.playerAverages.totalDamageDealtToChampions / 1000).toFixed(1)}k (lobby: ${(analysis.lobbyAverages.totalDamageDealtToChampions / 1000).toFixed(1)}k)`,
+                  `Gold: ${(analysis.playerAverages.goldEarned / 1000).toFixed(1)}k (lobby: ${(analysis.lobbyAverages.goldEarned / 1000).toFixed(1)}k)`,
                 ].join("\n")}
                 region={region}
               />

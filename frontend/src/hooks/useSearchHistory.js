@@ -44,13 +44,16 @@ export default function useSearchHistory() {
   }, []);
 
   const saveToHistory = useCallback((entry) => {
-    // entry can be an object { gameName, tagLine, region }
+    // entry can be an object { gameName, tagLine, region, tier, profileIconId, puuid }
     if (!entry || !entry.gameName || !entry.tagLine || !entry.region) return;
-    
+
     const entryObj = {
       gameName: entry.gameName.trim(),
       tagLine: entry.tagLine.trim(),
-      region: entry.region
+      region: entry.region,
+      tier: entry.tier,
+      profileIconId: entry.profileIconId,
+      puuid: entry.puuid
     };
 
     setHistory((prev) => {
@@ -63,7 +66,7 @@ export default function useSearchHistory() {
           hTag.toLowerCase() !== entryObj.tagLine.toLowerCase()
         );
       });
-      
+
       const next = [entryObj, ...filtered].slice(0, 10);
       localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
       window.dispatchEvent(new Event("search-history-update"));
@@ -91,14 +94,14 @@ export default function useSearchHistory() {
   const toggleSaved = useCallback((profile) => {
     setSaved((prev) => {
       // Find by gameName + tagLine since puuid might be missing in history entries
-      const exists = prev.find((p) => 
+      const exists = prev.find((p) =>
         p.gameName.toLowerCase() === profile.gameName.toLowerCase() &&
         p.tagLine.toLowerCase() === profile.tagLine.toLowerCase()
       );
-      
+
       let next;
       if (exists) {
-        next = prev.filter((p) => 
+        next = prev.filter((p) =>
           p.gameName.toLowerCase() !== profile.gameName.toLowerCase() ||
           p.tagLine.toLowerCase() !== profile.tagLine.toLowerCase()
         );
