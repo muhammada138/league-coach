@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory, getTeammates } from "../api/riot";
+import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory } from "../api/riot";
 import useSearchHistory from "../hooks/useSearchHistory";
 
 const TIER_COLORS = {
@@ -525,22 +525,23 @@ function LaneIcon({ lane }) {
 
 // ── Live Game Banner ────────────────────────────────────────────────────────
 function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, onMatchClick }) {
-  const navigate = useNavigate();
+  const SPECTATOR_DELAY_SECS = 182;
   const [champMap, setChampMap] = useState(null);
-  const [elapsed, setElapsed] = useState(liveGame.gameLength ?? 0);
+  const [elapsed, setElapsed] = useState(() => {
+    return liveGame?.gameLength !== undefined ? liveGame.gameLength + SPECTATOR_DELAY_SECS : 0;
+  });
   const [liveStats, setLiveStats] = useState(null);
   const [predictor, setPredictor] = useState(null);
 
   useEffect(() => { getChampIdMap(ddVersion).then(setChampMap); }, [ddVersion]);
   // Riot's spectator API has a ~3-minute broadcast delay; compensate so our
   // timer matches the actual in-game time visible to the players.
-  const SPECTATOR_DELAY_SECS = 182;
 
   useEffect(() => {
     if (liveGame?.gameLength !== undefined) {
       setElapsed(liveGame.gameLength + SPECTATOR_DELAY_SECS);
     }
-  }, [liveGame?.gameId]);
+  }, [liveGame?.gameId, liveGame?.gameLength]);
 
   useEffect(() => {
     const id = setInterval(() => setElapsed((e) => e + 1), 1000);
@@ -557,6 +558,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
     } else {
       onReady?.();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveGame, region]);
 
   // Call backend ML win predictor once we have both live stats and champion names
@@ -823,7 +825,7 @@ function LpHistoryGraph({ history }) {
   );
 }
 
-function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked", region }) {
+function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked", region }) {
   const [iconFailed, setIconFailed] = useState(false);
   if (!profile) return null;
   const displayProfile = queueTab === "flex" && profile.flex
@@ -943,8 +945,6 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, lpHistory, ddVe
 
 // ── Expanded Scoreboard ────────────────────────────────────────────────────
 function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersion, runesMap, maxDamage, teamStats, mvpPuuid, acePuuid, region }) {
-  const navigate = useNavigate();
-
   const ROLE_ORDER = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5 };
   const sortedPlayers = [...(players || [])]
     .filter(Boolean)
@@ -1494,7 +1494,6 @@ function SummaryStrip({ analysis, games }) {
 // ── Teammates Content ───────────────────────────────────────────────────────
 function TeammatesContent({ games, region }) {
   const [tab, setTab] = useState("with");
-  const navigate = useNavigate();
 
   const rows = aggregateTeammates(games, tab).filter((r) => r.games >= 2);
 
@@ -1556,7 +1555,7 @@ function TeammatesContent({ games, region }) {
 }
 
 // ── Right Panel (tabbed: Coaching | Stats | Teams) ──────────────────────────
-function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerContext, games, teammatesData, teammatesLoading, region }) {
+function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerContext, games, region }) {
   const [tab, setTab] = useState("coaching");
   const [chatInput, setChatInput] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
@@ -1857,6 +1856,7 @@ export default function Dashboard() {
         setAnalysisLoading(false);
         setError("Failed to load data. Check that the backend is running.");
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameName, tagLine]);
 
   const handleRefresh = () => {
