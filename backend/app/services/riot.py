@@ -1,6 +1,5 @@
 import httpx
 import asyncio
-import time
 import logging
 from fastapi import HTTPException
 from ..state import RIOT_HEADERS, api_semaphore, rank_cache, timeline_cache, RIOT_REGION, RIOT_ROUTING
