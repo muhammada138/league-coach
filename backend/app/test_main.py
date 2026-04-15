@@ -67,6 +67,61 @@ async def test_analyze(mocker):
     assert "gameName" in response.json()
 
 @pytest.mark.asyncio
+async def test_get_history(mocker):
+    mock_riot_get = mocker.patch("app.routes.api.riot_get")
+    async def mock_riot_get_impl(client_obj, url):
+        if "ids?" in url:
+            return ["match_1"]
+        elif "/matches/" in url:
+            return {
+                "info": {
+                    "gameDuration": 1200,
+                    "participants": [
+                        {
+                            "puuid": "fake-puuid",
+                            "championName": "Ahri",
+                            "teamId": 100,
+                            "win": True,
+                            "teamPosition": "MIDDLE",
+                            "kills": 10,
+                            "deaths": 2,
+                            "assists": 5,
+                            "totalMinionsKilled": 150,
+                            "visionScore": 20,
+                            "totalDamageDealtToChampions": 15000,
+                            "goldEarned": 10000,
+                            "damageDealtToTurrets": 2000,
+                            "wardsPlaced": 10,
+                            "wardsKilled": 2,
+                        }
+                    ]
+                }
+            }
+        return {}
+    mock_riot_get.side_effect = mock_riot_get_impl
+
+    response = client.get("/history/fake-puuid")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["matchId"] == "match_1"
+    assert data[0]["championName"] == "Ahri"
+
+@pytest.mark.asyncio
+async def test_get_history_invalid_params():
+    # Test invalid count parameter
+    response = client.get("/history/fake-puuid?count=invalid")
+    assert response.status_code == 422
+
+    # Test invalid start parameter
+    response = client.get("/history/fake-puuid?start=invalid")
+    assert response.status_code == 422
+
+    # Test invalid queue parameter
+    response = client.get("/history/fake-puuid?queue=invalid")
+    assert response.status_code == 422
+
+@pytest.mark.asyncio
 async def test_win_predict():
     from app.services import win_predictor
     participants = [
