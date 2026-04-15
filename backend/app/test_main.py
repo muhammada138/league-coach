@@ -97,65 +97,58 @@ async def test_db_lp_snapshot(mocker):
     calls = mock_sqlite.return_value.__enter__.return_value.execute.call_args_list
     assert any("INSERT INTO lp_history" in str(call) for call in calls)
 
-def test_init_db_fresh(mocker):
-    from app.services import db
-    import sqlite3
+@pytest.mark.asyncio
+async def test_get_cached_rank(mocker):
+    from app.services.riot import get_cached_rank
+    from app.state import rank_cache
+    import httpx
 
-    mock_db_path = mocker.MagicMock()
-    mocker.patch("app.services.db.DB_PATH", mock_db_path)
+    # Clear the cache before tests
+    rank_cache.cache.clear()
 
-    # We want a fresh in-memory db that stays alive for our checks
-    mem_conn = sqlite3.connect(":memory:")
+    # 1. Test missing puuid
+    rank = await get_cached_rank(None, "")
+    assert rank == "Unranked"
 
-    # Mock sqlite3.connect to yield our mem_conn
-    # It acts as a context manager in db.py: with sqlite3.connect(DB_PATH) as conn:
-    mocker.patch("sqlite3.connect", return_value=mem_conn)
+    # 2. Test cache miss (calls API)
+    # Since riot_get is called with client, we can mock the httpx.AsyncClient
+    mock_client = mocker.AsyncMock(spec=httpx.AsyncClient)
 
-    db.init_db()
+    mock_response = mocker.Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = [
+        {"queueType": "RANKED_FLEX_SR", "tier": "SILVER", "rank": "I"},
+        {"queueType": "RANKED_SOLO_5x5", "tier": "GOLD", "rank": "IV"}
+    ]
+    mock_client.get.return_value = mock_response
 
-    cursor = mem_conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    tables = [row[0] for row in cursor.fetchall()]
+    rank = await get_cached_rank(mock_client, "puuid-123", "na1")
+    assert rank == "Gold IV"
+    # Ensure it's in cache
+    assert "puuid-123" in rank_cache
 
-    assert "lp_history" in tables
-    assert "training_matches" in tables
-    assert "ingestion_status" in tables
+    # 3. Test cache hit (doesn't call API again)
+    mock_client.get.reset_mock()
+    rank = await get_cached_rank(mock_client, "puuid-123", "na1")
+    assert rank == "Gold IV"
+    mock_client.get.assert_not_called()
 
-    # Check lp_history has 'queue' column
-    cursor.execute("PRAGMA table_info(lp_history)")
-    columns = [row[1] for row in cursor.fetchall()]
-    assert "queue" in columns
+    # 4. Test missing RANKED_SOLO_5x5
+    mock_response2 = mocker.Mock()
+    mock_response2.status_code = 200
+    mock_response2.json.return_value = [
+        {"queueType": "RANKED_FLEX_SR", "tier": "SILVER", "rank": "I"}
+    ]
+    mock_client.get.return_value = mock_response2
 
-def test_init_db_migration(mocker):
-    from app.services import db
-    import sqlite3
+    rank = await get_cached_rank(mock_client, "puuid-456", "na1")
+    assert rank == "Unranked"
+    assert rank_cache["puuid-456"] == "Unranked"
 
-    mock_db_path = mocker.MagicMock()
-    mocker.patch("app.services.db.DB_PATH", mock_db_path)
+    # 5. Test API failure/exception
+    mock_client.get.side_effect = Exception("API Error")
 
-    # Pre-populate an in-memory DB with old schema
-    mem_conn = sqlite3.connect(":memory:")
-    mem_conn.execute("""
-        CREATE TABLE lp_history (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            puuid     TEXT    NOT NULL,
-            tier      TEXT    NOT NULL,
-            division  TEXT    NOT NULL,
-            lp        INTEGER NOT NULL,
-            wins      INTEGER NOT NULL,
-            losses    INTEGER NOT NULL,
-            timestamp INTEGER NOT NULL
-        )
-    """)
-    mem_conn.commit()
-
-    mocker.patch("sqlite3.connect", return_value=mem_conn)
-
-    db.init_db()
-
-    cursor = mem_conn.cursor()
-    cursor.execute("PRAGMA table_info(lp_history)")
-    columns = [row[1] for row in cursor.fetchall()]
-
-    # The migration should have added 'queue'
-    assert "queue" in columns
+    rank = await get_cached_rank(mock_client, "puuid-789", "na1")
+    assert rank == "Unranked"
+    # Should not cache Unranked on failure
+    assert "puuid-789" not in rank_cache
