@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getLiveEnrich, getSummoner } from './riot';
+import { getLiveEnrich, getSummoner, getProfile } from './riot';
 
 const { mockGet, mockPost } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -102,6 +102,39 @@ describe('Riot API Wrappers', () => {
       mockGet.mockRejectedValueOnce(mockError);
 
       await expect(getSummoner('Hide on bush', 'KR1')).rejects.toThrow('API Error');
+    });
+  });
+
+  describe('getProfile', () => {
+    it('should fetch profile with default region (na1)', async () => {
+      const mockData = { name: 'Player', level: 100 };
+      mockGet.mockResolvedValueOnce({ data: mockData });
+
+      const result = await getProfile('test-puuid');
+
+      expect(mockGet).toHaveBeenCalledWith('/profile/test-puuid', {
+        params: { region: 'na1' }
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should fetch profile with a custom region', async () => {
+      const mockData = { name: 'PlayerEU', level: 200 };
+      mockGet.mockResolvedValueOnce({ data: mockData });
+
+      const result = await getProfile('test-puuid-eu', 'euw1');
+
+      expect(mockGet).toHaveBeenCalledWith('/profile/test-puuid-eu', {
+        params: { region: 'euw1' }
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should handle API errors appropriately', async () => {
+      const mockError = new Error('API Error');
+      mockGet.mockRejectedValueOnce(mockError);
+
+      await expect(getProfile('error-puuid')).rejects.toThrow('API Error');
     });
   });
 });
