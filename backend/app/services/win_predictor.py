@@ -20,10 +20,14 @@ Replace model/win_predictor.pkl with a model trained on real Riot API match
 history (see MEMORY.md future plans) for better accuracy.
 """
 
+import json
 import logging
 from pathlib import Path
 
+import joblib
 import numpy as np
+import xgboost as xgb
+from sklearn.model_selection import train_test_split
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +60,6 @@ def load_or_train_model() -> None:
     """Load persisted model from disk; if absent, train on synthetic data."""
     global _model
     try:
-        import joblib  # noqa: PLC0415
         if MODEL_PATH.exists():
             _model = joblib.load(MODEL_PATH)
             logger.info("Loaded win predictor model from %s", MODEL_PATH)
@@ -115,10 +118,6 @@ def _generate_synthetic(n: int, seed: int = 42) -> tuple:
 def _train_and_save() -> None:
     """Train on synthetic data and save. Used when no real data exists yet."""
     try:
-        import joblib          # noqa: PLC0415
-        import xgboost as xgb  # noqa: PLC0415
-        from sklearn.model_selection import train_test_split  # noqa: PLC0415
-
         X, y = _generate_synthetic(20_000)
         X_train, _, y_train, _ = train_test_split(X, y, test_size=0.1, random_state=42)
 
@@ -281,10 +280,6 @@ def retrain_on_real_data() -> dict:
     """
     global _model
     try:
-        import json
-        import joblib
-        import xgboost as xgb
-        from sklearn.model_selection import train_test_split
         from ..services.db import get_all_training_matches_sync, get_v1_training_matches_sync
 
         clean_rows = get_all_training_matches_sync()
