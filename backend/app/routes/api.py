@@ -1,8 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 import httpx
 import asyncio
 from collections import Counter
-from typing import List
 from ..services.riot import (
     riot_get, get_cached_rank, get_match_timeline, 
     _compute_perf_score, _compute_diffed_lane
