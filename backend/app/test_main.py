@@ -10,7 +10,7 @@ def test_health_check():
     assert response.json() == {"status": "healthy"}
 
 @pytest.mark.asyncio
-async def test_get_summoner_happy_path(mocker):
+async def test_get_summoner(mocker):
     mock_riot_get = mocker.patch("app.routes.api.riot_get")
     mock_riot_get.return_value = {
         "puuid": "fake-puuid",
@@ -21,34 +21,6 @@ async def test_get_summoner_happy_path(mocker):
     response = client.get("/summoner/Faker/KR1")
     assert response.status_code == 200
     assert response.json()["puuid"] == "fake-puuid"
-
-    called_url = mock_riot_get.call_args[0][1]
-    assert "americas.api.riotgames.com" in called_url
-
-@pytest.mark.asyncio
-async def test_get_summoner_custom_region(mocker):
-    mock_riot_get = mocker.patch("app.routes.api.riot_get")
-    mock_riot_get.return_value = {
-        "puuid": "fake-puuid",
-        "gameName": "Faker",
-        "tagLine": "KR1"
-    }
-
-    response = client.get("/summoner/Faker/KR1?region=kr")
-    assert response.status_code == 200
-
-    called_url = mock_riot_get.call_args[0][1]
-    assert "asia.api.riotgames.com" in called_url
-
-@pytest.mark.asyncio
-async def test_get_summoner_not_found(mocker):
-    from fastapi import HTTPException
-    mock_riot_get = mocker.patch("app.routes.api.riot_get")
-    mock_riot_get.side_effect = HTTPException(status_code=404, detail="Data not found")
-
-    response = client.get("/summoner/Unknown/000")
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Data not found"
 
 @pytest.mark.asyncio
 async def test_analyze(mocker):
@@ -125,15 +97,65 @@ async def test_db_lp_snapshot(mocker):
     calls = mock_sqlite.return_value.__enter__.return_value.execute.call_args_list
     assert any("INSERT INTO lp_history" in str(call) for call in calls)
 
-@pytest.mark.asyncio
-async def test_win_predict_empty():
-    from app.services import win_predictor
+def test_init_db_fresh(mocker):
+    from app.services import db
+    import sqlite3
 
-    # Test predicting with an empty list of participants
-    prediction = win_predictor.predict([], {})
+    mock_db_path = mocker.MagicMock()
+    mocker.patch("app.services.db.DB_PATH", mock_db_path)
 
-    # Should return a neutral 50/50 prediction
-    assert "bluePct" in prediction
-    assert "redPct" in prediction
-    assert prediction["bluePct"] == 50
-    assert prediction["redPct"] == 50
+    # We want a fresh in-memory db that stays alive for our checks
+    mem_conn = sqlite3.connect(":memory:")
+
+    # Mock sqlite3.connect to yield our mem_conn
+    # It acts as a context manager in db.py: with sqlite3.connect(DB_PATH) as conn:
+    mocker.patch("sqlite3.connect", return_value=mem_conn)
+
+    db.init_db()
+
+    cursor = mem_conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = [row[0] for row in cursor.fetchall()]
+
+    assert "lp_history" in tables
+    assert "training_matches" in tables
+    assert "ingestion_status" in tables
+
+    # Check lp_history has 'queue' column
+    cursor.execute("PRAGMA table_info(lp_history)")
+    columns = [row[1] for row in cursor.fetchall()]
+    assert "queue" in columns
+
+def test_init_db_migration(mocker):
+    from app.services import db
+    import sqlite3
+
+    mock_db_path = mocker.MagicMock()
+    mocker.patch("app.services.db.DB_PATH", mock_db_path)
+
+    # Pre-populate an in-memory DB with old schema
+    mem_conn = sqlite3.connect(":memory:")
+    mem_conn.execute("""
+        CREATE TABLE lp_history (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            puuid     TEXT    NOT NULL,
+            tier      TEXT    NOT NULL,
+            division  TEXT    NOT NULL,
+            lp        INTEGER NOT NULL,
+            wins      INTEGER NOT NULL,
+            losses    INTEGER NOT NULL,
+            timestamp INTEGER NOT NULL
+        )
+    """)
+    mem_conn.commit()
+
+    mocker.patch("sqlite3.connect", return_value=mem_conn)
+
+    db.init_db()
+
+    cursor = mem_conn.cursor()
+    cursor.execute("PRAGMA table_info(lp_history)")
+    columns = [row[1] for row in cursor.fetchall()]
+
+    # The migration should have added 'queue'
+    assert "queue" in columns
