@@ -197,7 +197,7 @@ async def _process_player(
         status = db._get_ingestion_status_sync()
         if status["is_paused"] or status["processed_count"] >= status["total_target"]:
             break
-        if db._has_training_match_sync(mid):
+        if await db.has_training_match(mid):
             continue
         async with _sem:
             try:
