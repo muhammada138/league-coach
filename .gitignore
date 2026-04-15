@@ -39,3 +39,8 @@ docs/
 backend/data/
 backend/model/
 docs/maestro/
+
+# Planning and Artifacts
+plan.md
+*.plan.md
+artifacts/
