@@ -96,3 +96,16 @@ async def test_db_lp_snapshot(mocker):
     # Verify execute was called
     calls = mock_sqlite.return_value.__enter__.return_value.execute.call_args_list
     assert any("INSERT INTO lp_history" in str(call) for call in calls)
+
+@pytest.mark.asyncio
+async def test_win_predict_empty():
+    from app.services import win_predictor
+
+    # Test predicting with an empty list of participants
+    prediction = win_predictor.predict([], {})
+
+    # Should return a neutral 50/50 prediction
+    assert "bluePct" in prediction
+    assert "redPct" in prediction
+    assert prediction["bluePct"] == 50
+    assert prediction["redPct"] == 50
