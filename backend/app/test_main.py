@@ -10,7 +10,7 @@ def test_health_check():
     assert response.json() == {"status": "healthy"}
 
 @pytest.mark.asyncio
-async def test_get_summoner(mocker):
+async def test_get_summoner_happy_path(mocker):
     mock_riot_get = mocker.patch("app.routes.api.riot_get")
     mock_riot_get.return_value = {
         "puuid": "fake-puuid",
@@ -21,6 +21,34 @@ async def test_get_summoner(mocker):
     response = client.get("/summoner/Faker/KR1")
     assert response.status_code == 200
     assert response.json()["puuid"] == "fake-puuid"
+
+    called_url = mock_riot_get.call_args[0][1]
+    assert "americas.api.riotgames.com" in called_url
+
+@pytest.mark.asyncio
+async def test_get_summoner_custom_region(mocker):
+    mock_riot_get = mocker.patch("app.routes.api.riot_get")
+    mock_riot_get.return_value = {
+        "puuid": "fake-puuid",
+        "gameName": "Faker",
+        "tagLine": "KR1"
+    }
+
+    response = client.get("/summoner/Faker/KR1?region=kr")
+    assert response.status_code == 200
+
+    called_url = mock_riot_get.call_args[0][1]
+    assert "asia.api.riotgames.com" in called_url
+
+@pytest.mark.asyncio
+async def test_get_summoner_not_found(mocker):
+    from fastapi import HTTPException
+    mock_riot_get = mocker.patch("app.routes.api.riot_get")
+    mock_riot_get.side_effect = HTTPException(status_code=404, detail="Data not found")
+
+    response = client.get("/summoner/Unknown/000")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Data not found"
 
 @pytest.mark.asyncio
 async def test_analyze(mocker):
