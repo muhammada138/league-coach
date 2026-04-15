@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import RegionSelector from "./RegionSelector";
 import useSearchHistory from "../hooks/useSearchHistory";
 
@@ -28,7 +28,6 @@ export default function SearchInput({
 }) {
   const { history, saved, toggleSaved, removeFromHistory } = useSearchHistory();
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
   const [suggestionTab, setSuggestionTab] = useState("recent"); // "recent" | "saved"
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const wrapperRef = useRef(null);
