@@ -115,3 +115,4 @@ The `/analyze` endpoint:
 8. Returns stats, game history, coaching narrative, scores, and lane diff data in one response
 
 The AI talks directly to you and references your actual numbers.
+
