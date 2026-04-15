@@ -1,3 +1,0 @@
-ðŸ§ª Add tests for db.py init_db()
-
-Merged PR #12 via local squash to preserve unified contributor history.
