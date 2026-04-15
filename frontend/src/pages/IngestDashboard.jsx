@@ -36,6 +36,7 @@ export default function IngestDashboard() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status?.is_paused]);
 
   const handleToggle = async () => {

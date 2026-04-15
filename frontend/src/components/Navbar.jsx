@@ -100,9 +100,7 @@ function NavSearch() {
 function SavedDropdown() {
   const [open, setOpen] = useState(false);
   const { saved, toggleSaved } = useSearchHistory();
-  const [loadingId, setLoadingId] = useState(null);
   const wrapperRef = useRef(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     if (!open) return;
