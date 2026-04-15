@@ -37,7 +37,8 @@ jobs:
           key: ${{ secrets.DEPLOY_KEY }}
           script: |
             cd ~/league-coach
-            git pull origin master
+            git fetch origin master
+            git reset --hard origin/master
             source venv/bin/activate
             pip install -r backend/requirements.txt
             sudo systemctl restart riftiq
