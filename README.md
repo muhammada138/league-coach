@@ -1,6 +1,6 @@
 # Rift IQ
 
-A sophisticated coaching platform for League of Legends that provides data-driven advice based on your real performance. It benchmarks your statistics against every other player in your recent matches, using advanced language models to identify specific areas for improvement and providing actionable tips to help you climb the ladder.
+An advanced coaching and analysis platform for League of Legends that uses machine learning to decode your match performance. It features a real-time win probability predictor, lobby-wide stat benchmarking, and interactive LP trend graphs to help you visualize your competitive journey.
 
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)
