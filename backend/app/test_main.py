@@ -207,3 +207,32 @@ async def test_get_cached_rank(mocker):
     assert rank == "Unranked"
     # Should not cache Unranked on failure
     assert "puuid-789" not in rank_cache
+
+def test_lp_history(mocker):
+    # Mock network calls using AsyncMock for the awaitable function
+    mock_get_lp_history = mocker.patch("app.routes.api.db.get_lp_history", new_callable=mocker.AsyncMock)
+    mock_get_lp_history.return_value = [
+        {"tier": "GOLD", "division": "I", "lp": 50, "wins": 100, "losses": 90, "timestamp": 1234567890}
+    ]
+
+    response = client.get("/lp-history/test-puuid")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"tier": "GOLD", "division": "I", "lp": 50, "wins": 100, "losses": 90, "timestamp": 1234567890}
+    ]
+    mock_get_lp_history.assert_called_once_with("test-puuid", queue='RANKED_SOLO_5x5', days=30)
+
+
+def test_lp_history_flex(mocker):
+    # Mock network calls using AsyncMock for the awaitable function
+    mock_get_lp_history = mocker.patch("app.routes.api.db.get_lp_history", new_callable=mocker.AsyncMock)
+    mock_get_lp_history.return_value = [
+        {"tier": "PLATINUM", "division": "IV", "lp": 10, "wins": 50, "losses": 45, "timestamp": 1234567890}
+    ]
+
+    response = client.get("/lp-history/test-puuid?queue=RANKED_FLEX_SR")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"tier": "PLATINUM", "division": "IV", "lp": 10, "wins": 50, "losses": 45, "timestamp": 1234567890}
+    ]
+    mock_get_lp_history.assert_called_once_with("test-puuid", queue='RANKED_FLEX_SR', days=30)
