@@ -122,6 +122,86 @@ async def test_get_history_invalid_params():
     assert response.status_code == 422
 
 @pytest.mark.asyncio
+async def test_get_history_missing_path_param():
+    # Test missing puuid path parameter
+    response = client.get("/history/")
+    assert response.status_code == 404
+
+@pytest.fixture(autouse=True)
+def clear_caches():
+    from app.state import route_cache
+    route_cache.cache.clear()
+    yield
+
+@pytest.mark.asyncio
+async def test_get_history_empty_matches(mocker):
+    mock_riot_get = mocker.patch("app.routes.api.riot_get")
+    mock_riot_get.return_value = []
+
+    response = client.get("/history/fake-puuid-empty")
+    assert response.status_code == 200
+    assert response.json() == []
+
+@pytest.mark.asyncio
+async def test_get_history_exceptions(mocker):
+    mock_riot_get = mocker.patch("app.routes.api.riot_get")
+    async def mock_riot_get_impl(client_obj, url):
+        if "ids?" in url:
+            return ["match_1", "match_2"]
+        elif "match_1" in url:
+            return {
+                "info": {
+                    "gameDuration": 1200,
+                    "participants": [{"puuid": "fake-puuid-exception", "championName": "Ahri", "teamId": 100, "win": True, "kills": 10, "deaths": 2, "assists": 5, "visionScore": 20}]
+                }
+            }
+        elif "match_2" in url:
+            raise Exception("API failure")
+        return {}
+    mock_riot_get.side_effect = mock_riot_get_impl
+
+    response = client.get("/history/fake-puuid-exception")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["matchId"] == "match_1"
+
+@pytest.mark.asyncio
+async def test_get_history_player_not_found(mocker):
+    mock_riot_get = mocker.patch("app.routes.api.riot_get")
+    async def mock_riot_get_impl(client_obj, url):
+        if "ids?" in url:
+            return ["match_1"]
+        elif "/matches/" in url:
+            return {
+                "info": {
+                    "gameDuration": 1200,
+                    "participants": [{"puuid": "other-puuid", "championName": "Ahri", "teamId": 100, "win": True, "kills": 1, "deaths": 1, "assists": 1, "visionScore": 1}]
+                }
+            }
+        return {}
+    mock_riot_get.side_effect = mock_riot_get_impl
+
+    response = client.get("/history/fake-puuid-notfound")
+    assert response.status_code == 200
+    assert response.json() == []
+
+@pytest.mark.asyncio
+async def test_get_history_count_clamping(mocker):
+    mock_riot_get = mocker.patch("app.routes.api.riot_get")
+    async def mock_riot_get_impl(client_obj, url):
+        if "ids?" in url:
+            # Check if count=10 is in the url despite count=20 in the request
+            assert "count=10" in url
+            return []
+        return {}
+    mock_riot_get.side_effect = mock_riot_get_impl
+
+    response = client.get("/history/fake-puuid-clamping?count=20")
+    assert response.status_code == 200
+    assert response.json() == []
+
+@pytest.mark.asyncio
 async def test_win_predict():
     from app.services import win_predictor
     participants = [
