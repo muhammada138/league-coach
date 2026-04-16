@@ -43,7 +43,7 @@ export const getWinPredict = (participants, live_stats) =>
   api.post("/win-predict", { participants, live_stats }).then((r) => r.data);
 
 export const getLpHistory = (puuid, queue = 'RANKED_SOLO_5x5') =>
-  api.get(`/lp-history/${puuid}`, { params: { queue } }).then((r) => r.data);
+  api.get(`/lp_history/${puuid}`, { params: { queue } }).then((r) => r.data);
 
 export const getTeammates = (puuid) =>
   api.get(`/teammates/${puuid}`).then((r) => r.data);
