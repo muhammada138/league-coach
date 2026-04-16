@@ -255,9 +255,9 @@ async def _process_player(
 
     # Step 6: Save training samples — seed player's form from older matches in batch
     saved = 0
+    status = db._get_ingestion_status_sync()
     for i, mid in enumerate(ordered):
-        status = db._get_ingestion_status_sync()
-        if status["is_paused"] or status["processed_count"] >= status["total_target"]:
+        if status["is_paused"] or status["processed_count"] + saved >= status["total_target"]:
             break
 
         try:
