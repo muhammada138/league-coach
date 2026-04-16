@@ -207,3 +207,24 @@ async def test_get_cached_rank(mocker):
     assert rank == "Unranked"
     # Should not cache Unranked on failure
     assert "puuid-789" not in rank_cache
+
+@pytest.mark.asyncio
+async def test_lp_history(mocker):
+    mock_get_lp_history = mocker.patch("app.routes.api.db.get_lp_history")
+
+    mock_data = [
+        {"tier": "GOLD", "division": "I", "lp": 50, "wins": 20, "losses": 18, "timestamp": 1234567890}
+    ]
+    mock_get_lp_history.return_value = mock_data
+
+    # Test default queue
+    response = client.get("/lp-history/fake-puuid")
+    assert response.status_code == 200
+    assert response.json() == mock_data
+    mock_get_lp_history.assert_called_with("fake-puuid", queue="RANKED_SOLO_5x5", days=30)
+
+    # Test custom queue
+    response = client.get("/lp-history/fake-puuid?queue=RANKED_FLEX_SR")
+    assert response.status_code == 200
+    assert response.json() == mock_data
+    mock_get_lp_history.assert_called_with("fake-puuid", queue="RANKED_FLEX_SR", days=30)
