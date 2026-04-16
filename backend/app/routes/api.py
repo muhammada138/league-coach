@@ -126,7 +126,7 @@ async def get_profile(puuid: str, region: str = RIOT_REGION):
         "flex": flex_data,
     }
 
-@router.get("/lp-history/{puuid}")
+@router.get("/lp_history/{puuid}")
 async def lp_history(puuid: str, queue: str = 'RANKED_SOLO_5x5'):
     return await db.get_lp_history(puuid, queue=queue, days=30)
 
