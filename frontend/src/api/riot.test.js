@@ -55,6 +55,13 @@ describe('Riot API Wrappers', () => {
       });
       expect(result).toEqual(mockData);
     });
+
+    it('should handle API errors appropriately', async () => {
+      const mockError = new Error('API Error');
+      mockPost.mockRejectedValueOnce(mockError);
+
+      await expect(getLiveEnrich(['error-puuid'])).rejects.toThrow('API Error');
+    });
   });
 
   describe('getSummoner', () => {
