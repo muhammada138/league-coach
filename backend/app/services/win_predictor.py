@@ -24,10 +24,20 @@ import json
 import logging
 from pathlib import Path
 
-import joblib
 import numpy as np
-import xgboost as xgb
-from sklearn.model_selection import train_test_split
+
+try:
+    import joblib
+    import xgboost as xgb
+    from sklearn.model_selection import train_test_split
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+    joblib = None
+    xgb = None
+    train_test_split = None
+
+from ..services.db import get_all_training_matches_sync, get_v1_training_matches_sync
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +69,9 @@ _model = None  # fitted XGBClassifier or None
 def load_or_train_model() -> None:
     """Load persisted model from disk; if absent, train on synthetic data."""
     global _model
+    if not ML_AVAILABLE:
+        logger.warning("joblib/xgboost not installed – using linear fallback")
+        return
     try:
         if MODEL_PATH.exists():
             _model = joblib.load(MODEL_PATH)
@@ -66,8 +79,6 @@ def load_or_train_model() -> None:
         else:
             logger.info("No saved model – training on synthetic data (one-time, ~5 s)")
             _train_and_save()
-    except ImportError:
-        logger.warning("joblib/xgboost not installed – using linear fallback")
     except Exception as exc:
         logger.warning("Model load failed (%s) – using linear fallback", exc)
 
@@ -279,9 +290,10 @@ def retrain_on_real_data() -> dict:
     Hot-swaps the in-memory model on success.
     """
     global _model
-    try:
-        from ..services.db import get_all_training_matches_sync, get_v1_training_matches_sync
+    if not ML_AVAILABLE:
+        return {"ok": False, "error": "ML dependencies not installed"}
 
+    try:
         clean_rows = get_all_training_matches_sync()
         v1_rows    = get_v1_training_matches_sync()
 
