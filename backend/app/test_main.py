@@ -107,6 +107,32 @@ async def test_get_history(mocker):
     assert data[0]["matchId"] == "match_1"
     assert data[0]["championName"] == "Ahri"
 
+def test_lp_history(mocker):
+    mock_db_get_lp_history = mocker.patch("app.routes.api.db.get_lp_history")
+
+    # Mock return value since get_lp_history is async we need to use AsyncMock or mock return value coroutine.
+    # Actually mocker.patch handles coroutine return_value with AsyncMock by default in recent versions, but wait!
+    # db.get_lp_history is an async function. Let's make sure it returns a coroutine.
+    async def mock_get(*args, **kwargs):
+        return [
+            {"tier": "GOLD", "division": "I", "lp": 50, "wins": 20, "losses": 18, "timestamp": 1234567890}
+        ]
+    mock_db_get_lp_history.side_effect = mock_get
+
+    # Test default queue
+    response = client.get("/lp-history/fake-puuid")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["tier"] == "GOLD"
+    assert data[0]["lp"] == 50
+    mock_db_get_lp_history.assert_called_with("fake-puuid", queue="RANKED_SOLO_5x5", days=30)
+
+    # Test custom queue
+    response = client.get("/lp-history/fake-puuid?queue=RANKED_FLEX_SR")
+    assert response.status_code == 200
+    mock_db_get_lp_history.assert_called_with("fake-puuid", queue="RANKED_FLEX_SR", days=30)
+
 @pytest.mark.asyncio
 async def test_get_history_invalid_params():
     # Test invalid count parameter
