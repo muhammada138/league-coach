@@ -74,4 +74,62 @@ describe('Dashboard Component', () => {
         expect(getLpHistory).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('Missing error test in lp_history', async () => {
+    const mockPuuid = 'test-puuid-456';
+
+    // Mock getSummoner
+    getSummoner.mockResolvedValue({ puuid: mockPuuid });
+    // Mock getProfile
+    getProfile.mockResolvedValue({
+      tier: 'GOLD',
+      division: 'I',
+      lp: 50,
+      wins: 10,
+      losses: 10,
+      summonerLevel: 100,
+    });
+    // Mock analyzeSummoner
+    analyzeSummoner.mockResolvedValue({
+      games: [],
+      coaching: '',
+      playerAverages: {
+          kda: 2, cspm: 5, visionScore: 10, totalDamageDealtToChampions: 1000, goldEarned: 1000
+      },
+      lobbyAverages: {
+          kda: 2, cspm: 5, visionScore: 10, totalDamageDealtToChampions: 1000, goldEarned: 1000
+      },
+      deltas: {},
+    });
+
+    // Explicitly mock the getLpHistory promise to reject
+    const lpError = new Error('getLpHistory rejection test error');
+    getLpHistory.mockRejectedValue(lpError);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({}),
+    });
+
+    window.scrollTo = vi.fn();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(
+      <MemoryRouter initialEntries={['/player/na1/AnotherSummoner/NA1']}>
+        <Routes>
+          <Route path="/player/:region/:gameName/:tagLine" element={<Dashboard />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    // Ensure the function was called and error was swallowed gracefully
+    await waitFor(() => {
+      expect(getLpHistory).toHaveBeenCalledWith(mockPuuid, 'RANKED_SOLO_5x5', 'na1');
+    });
+
+    await waitFor(() => {
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+    });
+
+    consoleErrorSpy.mockRestore();
+  });
 });
