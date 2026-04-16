@@ -226,15 +226,15 @@ async def _process_player(
     _rank_cache_set(puuid, seed_rank_entry)  # seed is already fresh
     rank_cache: dict[str, dict | None] = {puuid: seed_rank_entry}
 
+    status = db._get_ingestion_status_sync()
+    if status["is_paused"]:
+        return 0
+
     for other_puuid in other_puuids:
         hit, cached_entry = _rank_cache_get(other_puuid)
         if hit:
             rank_cache[other_puuid] = cached_entry
             continue
-
-        status = db._get_ingestion_status_sync()
-        if status["is_paused"]:
-            return 0
 
         async with _sem:
             try:
@@ -263,7 +263,6 @@ async def _process_player(
         try:
             info         = match_details[mid]["info"]
             participants = info["participants"]
-            duration     = info["gameDuration"]
 
             blue = [p for p in participants if p["teamId"] == 100]
             red  = [p for p in participants if p["teamId"] == 200]
