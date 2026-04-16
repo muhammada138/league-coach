@@ -8,6 +8,7 @@ real 30-day LP history without any third-party data source.
 """
 
 import asyncio
+import json as _json
 import sqlite3
 import time
 from pathlib import Path
@@ -213,7 +214,6 @@ def _has_training_match_sync(match_id: str) -> bool:
 def _save_training_match_sync(
     match_id: str, blue_feats: list, red_feats: list, blue_won: bool
 ) -> None:
-    import json as _json
     with sqlite3.connect(DB_PATH) as conn:
         # INSERT OR IGNORE so duplicates are silently skipped
         cur = conn.execute(
