@@ -28,6 +28,7 @@ import joblib
 import numpy as np
 import xgboost as xgb
 from sklearn.model_selection import train_test_split
+from app.services.db import get_all_training_matches_sync, get_v1_training_matches_sync
 
 logger = logging.getLogger(__name__)
 
@@ -280,7 +281,7 @@ def retrain_on_real_data() -> dict:
     """
     global _model
     try:
-        from ..services.db import get_all_training_matches_sync, get_v1_training_matches_sync
+
 
         clean_rows = get_all_training_matches_sync()
         v1_rows    = get_v1_training_matches_sync()

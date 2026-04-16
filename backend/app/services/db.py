@@ -10,6 +10,7 @@ real 30-day LP history without any third-party data source.
 import asyncio
 import sqlite3
 import time
+import json
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent.parent.parent / "data" / "league_coach.db"
@@ -213,13 +214,13 @@ def _has_training_match_sync(match_id: str) -> bool:
 def _save_training_match_sync(
     match_id: str, blue_feats: list, red_feats: list, blue_won: bool
 ) -> None:
-    import json as _json
+
     with sqlite3.connect(DB_PATH) as conn:
         # INSERT OR IGNORE so duplicates are silently skipped
         cur = conn.execute(
             "INSERT OR IGNORE INTO training_matches (match_id, blue_feats, red_feats, blue_won, timestamp) "
             "VALUES (?, ?, ?, ?, ?)",
-            (match_id, _json.dumps(blue_feats), _json.dumps(red_feats), int(blue_won), int(time.time())),
+            (match_id, json.dumps(blue_feats), json.dumps(red_feats), int(blue_won), int(time.time())),
         )
         if cur.rowcount:
             # Only increment counter when a new row was actually inserted

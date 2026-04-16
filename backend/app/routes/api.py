@@ -9,6 +9,8 @@ from ..services.riot import (
 from ..services.groq import get_coaching_feedback, ask_coach_question
 from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, CACHE_VERSION, get_routing
 from ..models.requests import LiveEnrichRequest, AskRequest, WinPredictRequest
+from collections import Counter as _Counter
+
 from ..services import win_predictor
 from ..services import db
 
@@ -468,7 +470,7 @@ async def live_enrich(body: LiveEnrichRequest):
                                 streak += direction
                             else:
                                 break
-                        from collections import Counter as _Counter
+
                         main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
                         base.update({
                             "last5": recent_games[:5],   # newest first (leftmost), fetch 10 for duo detection

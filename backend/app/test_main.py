@@ -1,6 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+import httpx
+from app.services import win_predictor, db
+from app.services.riot import get_cached_rank
+from app.state import rank_cache
 
 client = TestClient(app)
 
@@ -123,7 +127,6 @@ async def test_get_history_invalid_params():
 
 @pytest.mark.asyncio
 async def test_win_predict():
-    from app.services import win_predictor
     participants = [
         {"puuid": "p1", "teamId": 100, "championId": 1},
         {"puuid": "p2", "teamId": 200, "championId": 2},
@@ -141,7 +144,6 @@ async def test_win_predict():
 
 @pytest.mark.asyncio
 async def test_db_lp_snapshot(mocker):
-    from app.services import db
     mock_sqlite = mocker.patch("sqlite3.connect")
     # Simulate first record
     mock_sqlite.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = None
@@ -154,9 +156,6 @@ async def test_db_lp_snapshot(mocker):
 
 @pytest.mark.asyncio
 async def test_get_cached_rank(mocker):
-    from app.services.riot import get_cached_rank
-    from app.state import rank_cache
-    import httpx
 
     # Clear the cache before tests
     rank_cache.cache.clear()
