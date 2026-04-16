@@ -46,38 +46,38 @@ _CALL_DELAY = 1.25
 
 _SEED_TIERS = [
     # Bronze — lower-elo representation
-    ("BRONZE",   "I"),
-    ("BRONZE",   "II"),
+    ("BRONZE", "I"),
+    ("BRONZE", "II"),
     # Silver
-    ("SILVER",   "I"),
-    ("SILVER",   "II"),
-    ("SILVER",   "III"),
-    ("SILVER",   "IV"),
+    ("SILVER", "I"),
+    ("SILVER", "II"),
+    ("SILVER", "III"),
+    ("SILVER", "IV"),
     # Gold
-    ("GOLD",     "I"),
-    ("GOLD",     "II"),
-    ("GOLD",     "III"),
-    ("GOLD",     "IV"),
+    ("GOLD", "I"),
+    ("GOLD", "II"),
+    ("GOLD", "III"),
+    ("GOLD", "IV"),
     # Platinum
     ("PLATINUM", "I"),
     ("PLATINUM", "II"),
     ("PLATINUM", "III"),
     ("PLATINUM", "IV"),
     # Emerald (added Season 2023, between Platinum and Diamond)
-    ("EMERALD",  "I"),
-    ("EMERALD",  "II"),
-    ("EMERALD",  "III"),
-    ("EMERALD",  "IV"),
+    ("EMERALD", "I"),
+    ("EMERALD", "II"),
+    ("EMERALD", "III"),
+    ("EMERALD", "IV"),
     # Diamond
-    ("DIAMOND",  "I"),
-    ("DIAMOND",  "II"),
-    ("DIAMOND",  "III"),
-    ("DIAMOND",  "IV"),
+    ("DIAMOND", "I"),
+    ("DIAMOND", "II"),
+    ("DIAMOND", "III"),
+    ("DIAMOND", "IV"),
     # Master — single-page endpoint, no division
-    ("MASTER",   None),
+    ("MASTER", None),
 ]
 
-_tier_idx  = 0
+_tier_idx = 0
 _tier_page = 1
 
 # ---------------------------------------------------------------------------
@@ -103,13 +103,16 @@ def _rank_cache_set(puuid: str, entry: dict | None) -> None:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 async def _riot_get(client: httpx.AsyncClient, url: str):
     """Minimal Riot GET with 429 back-off. Raises on non-200."""
     for attempt in range(3):
         response = await client.get(url, headers=RIOT_HEADERS)
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 10))
-            logger.warning("Ingest 429 – sleeping %ds (attempt %d)", retry_after + 2, attempt + 1)
+            logger.warning(
+                "Ingest 429 – sleeping %ds (attempt %d)", retry_after + 2, attempt + 1
+            )
             await asyncio.sleep(retry_after + 2)
             continue
         if response.status_code != 200:
@@ -122,15 +125,15 @@ def _rank_score_from_entry(entry: dict | None) -> tuple[float, float]:
     """Return (rank_score, season_wr) from a LeagueEntry dict, or (0.5, 0.5)."""
     if not entry:
         return 0.5, 0.5
-    tier_val   = TIER_SCORE.get(entry.get("tier", "SILVER"), 3.5)
-    div_val    = DIV_BONUS.get(entry.get("rank", ""), 0.0)
-    lp_bonus   = (entry.get("leaguePoints", 0) / 100.0) * 0.25
+    tier_val = TIER_SCORE.get(entry.get("tier", "SILVER"), 3.5)
+    div_val = DIV_BONUS.get(entry.get("rank", ""), 0.0)
+    lp_bonus = (entry.get("leaguePoints", 0) / 100.0) * 0.25
     rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.0)
 
     w = entry.get("wins", 0)
     l = entry.get("losses", 0)
-    raw_wr    = w / (w + l) if (w + l) > 0 else 0.5
-    conf      = min((w + l) / 100.0, 1.0)
+    raw_wr = w / (w + l) if (w + l) > 0 else 0.5
+    conf = min((w + l) / 100.0, 1.0)
     season_wr = raw_wr * conf + 0.5 * (1.0 - conf)
     return rank_score, season_wr
 
@@ -149,12 +152,14 @@ def _compute_seed_form(puuid: str, prior_match_data: list[dict]) -> float:
     scores = []
     for match_data in prior_match_data:
         try:
-            info         = match_data["info"]
+            info = match_data["info"]
             participants = info["participants"]
-            duration     = info["gameDuration"]
+            duration = info["gameDuration"]
             p = next((x for x in participants if x.get("puuid") == puuid), None)
             if p:
-                score = float(_compute_perf_score(p, participants, None, duration)) / 100.0
+                score = (
+                    float(_compute_perf_score(p, participants, None, duration)) / 100.0
+                )
                 scores.append(score)
         except Exception:
             continue
@@ -174,7 +179,7 @@ async def _process_player(
     - Seed player's form computed from previous matches in batch (no leakage)
     Returns the number of new matches saved.
     """
-    status = db._get_ingestion_status_sync()
+    status = await db.get_ingestion_status()
     if status["is_paused"] or status["processed_count"] >= status["total_target"]:
         return 0
 
@@ -194,7 +199,7 @@ async def _process_player(
     # Step 2: Fetch match details for all new matches
     match_details: dict[str, dict] = {}
     for mid in match_ids:
-        status = db._get_ingestion_status_sync()
+        status = await db.get_ingestion_status()
         if status["is_paused"] or status["processed_count"] >= status["total_target"]:
             break
         if await db.has_training_match(mid):
@@ -232,7 +237,7 @@ async def _process_player(
             rank_cache[other_puuid] = cached_entry
             continue
 
-        status = db._get_ingestion_status_sync()
+        status = await db.get_ingestion_status()
         if status["is_paused"]:
             return 0
 
@@ -246,7 +251,9 @@ async def _process_player(
                 entries = []
         await asyncio.sleep(_CALL_DELAY)
 
-        entry = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
+        entry = next(
+            (e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None
+        )
         _rank_cache_set(other_puuid, entry)
         rank_cache[other_puuid] = entry
 
@@ -256,22 +263,25 @@ async def _process_player(
     # Step 6: Save training samples — seed player's form from older matches in batch
     saved = 0
     for i, mid in enumerate(ordered):
-        status = db._get_ingestion_status_sync()
+        status = await db.get_ingestion_status()
         if status["is_paused"] or status["processed_count"] >= status["total_target"]:
             break
 
         try:
-            info         = match_details[mid]["info"]
+            info = match_details[mid]["info"]
             participants = info["participants"]
-            duration     = info["gameDuration"]
+            duration = info["gameDuration"]
 
             blue = [p for p in participants if p["teamId"] == 100]
-            red  = [p for p in participants if p["teamId"] == 200]
+            red = [p for p in participants if p["teamId"] == 200]
             if len(blue) < 1 or len(red) < 1:
                 continue
 
             # Seed player form = avg perf in matches[i+1 … i+5] (older = higher index)
-            prior = [match_details[ordered[j]] for j in range(i + 1, min(i + 6, len(ordered)))]
+            prior = [
+                match_details[ordered[j]]
+                for j in range(i + 1, min(i + 6, len(ordered)))
+            ]
             seed_form = _compute_seed_form(puuid, prior)
 
             def team_vec(players: list) -> list[float]:
@@ -285,8 +295,8 @@ async def _process_player(
                 return np.mean(feats, axis=0).tolist()
 
             blue_feats = team_vec(blue)
-            red_feats  = team_vec(red)
-            blue_won   = any(p.get("win") for p in blue)
+            red_feats = team_vec(red)
+            blue_won = any(p.get("win") for p in blue)
 
             await db.save_training_match(mid, blue_feats, red_feats, blue_won)
             saved += 1
@@ -301,6 +311,7 @@ async def _process_player(
 # Public worker — started once in main.py lifespan
 # ---------------------------------------------------------------------------
 
+
 async def ingestion_worker() -> None:
     """
     Long-running background task. Paused by default — resume via POST /ingest/toggle.
@@ -311,7 +322,7 @@ async def ingestion_worker() -> None:
 
     while True:
         try:
-            status = db._get_ingestion_status_sync()
+            status = await db.get_ingestion_status()
 
             if status["is_paused"]:
                 await asyncio.sleep(5)
@@ -320,7 +331,8 @@ async def ingestion_worker() -> None:
             if status["processed_count"] >= status["total_target"]:
                 logger.info(
                     "Ingestion target reached (%d / %d). Worker idle.",
-                    status["processed_count"], status["total_target"],
+                    status["processed_count"],
+                    status["total_target"],
                 )
                 await asyncio.sleep(60)
                 continue
@@ -346,14 +358,22 @@ async def ingestion_worker() -> None:
                                 f"RANKED_SOLO_5x5/{tier}/{division}?page={_tier_page}",
                             )
                     except Exception as exc:
-                        logger.warning("Ladder fetch failed (%s %s p%d): %s", tier, division, _tier_page, exc)
+                        logger.warning(
+                            "Ladder fetch failed (%s %s p%d): %s",
+                            tier,
+                            division,
+                            _tier_page,
+                            exc,
+                        )
                         entries = []
                 await asyncio.sleep(_CALL_DELAY)
 
                 if not entries:
                     _tier_idx += 1
                     _tier_page = 1
-                    logger.debug("Ladder exhausted for %s %s – advancing tier", tier, division)
+                    logger.debug(
+                        "Ladder exhausted for %s %s – advancing tier", tier, division
+                    )
                     continue
 
                 if division is None:
@@ -362,19 +382,22 @@ async def ingestion_worker() -> None:
                 else:
                     _tier_page += 1
 
-                status = db._get_ingestion_status_sync()
+                status = await db.get_ingestion_status()
                 for entry in entries[:8]:
                     puuid = entry.get("puuid")
                     if not puuid:
                         continue
 
-                    if status["is_paused"] or status["processed_count"] >= status["total_target"]:
+                    if (
+                        status["is_paused"]
+                        or status["processed_count"] >= status["total_target"]
+                    ):
                         break
 
                     saved = await _process_player(client, puuid, entry)
 
                     if saved:
-                        status = db._get_ingestion_status_sync()
+                        status = await db.get_ingestion_status()
                         logger.info(
                             "Ingestion +%d | %d / %d (%.1f%%)",
                             saved,
