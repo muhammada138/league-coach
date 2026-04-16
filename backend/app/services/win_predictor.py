@@ -60,6 +60,9 @@ def load_or_train_model() -> None:
     """Load persisted model from disk; if absent, train on synthetic data."""
     global _model
     try:
+        import joblib
+        from sklearn.ensemble import RandomForestClassifier
+
         if MODEL_PATH.exists():
             _model = joblib.load(MODEL_PATH)
             logger.info("Loaded win predictor model from %s", MODEL_PATH)
@@ -67,7 +70,7 @@ def load_or_train_model() -> None:
             logger.info("No saved model – training on synthetic data (one-time, ~5 s)")
             _train_and_save()
     except ImportError:
-        logger.warning("joblib/xgboost not installed – using linear fallback")
+        logger.error("scikit-learn is not installed.")
     except Exception as exc:
         logger.warning("Model load failed (%s) – using linear fallback", exc)
 
