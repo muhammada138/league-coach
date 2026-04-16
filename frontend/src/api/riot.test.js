@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getLiveEnrich, getSummoner, getProfile } from './riot';
+import { getLiveEnrich, getSummoner, getProfile, askCoach } from './riot';
 
 const { mockGet, mockPost } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -135,6 +135,37 @@ describe('Riot API Wrappers', () => {
       mockGet.mockRejectedValueOnce(mockError);
 
       await expect(getProfile('error-puuid')).rejects.toThrow('API Error');
+    });
+  });
+
+  describe('askCoach', () => {
+    it('should call api.post with correct endpoint and parameters, and return data', async () => {
+      const mockData = { answer: 'Buy control wards' };
+      mockPost.mockResolvedValueOnce({ data: mockData });
+
+      const question = 'How to win?';
+      const context = 'Playing Jungle';
+      const history = ['Hello', 'Hi'];
+
+      const result = await askCoach(question, context, history);
+
+      expect(mockPost).toHaveBeenCalledWith('/ask', {
+        question,
+        context,
+        history,
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should handle API errors correctly', async () => {
+      const mockError = new Error('API Timeout');
+      mockPost.mockRejectedValueOnce(mockError);
+
+      const question = 'How to win?';
+      const context = 'Playing Jungle';
+      const history = ['Hello', 'Hi'];
+
+      await expect(askCoach(question, context, history)).rejects.toThrow('API Timeout');
     });
   });
 });
