@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getLiveEnrich, getSummoner, getProfile } from './riot';
+import { getLiveEnrich, getSummoner, getProfile, askCoach } from './riot';
 
 const { mockGet, mockPost } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -135,6 +135,37 @@ describe('Riot API Wrappers', () => {
       mockGet.mockRejectedValueOnce(mockError);
 
       await expect(getProfile('error-puuid')).rejects.toThrow('API Error');
+    });
+  });
+
+  describe('askCoach', () => {
+    it('should call api.post with correct parameters and return data', async () => {
+      const mockData = { answer: 'Try building more armor.' };
+      mockPost.mockResolvedValueOnce({ data: mockData });
+
+      const question = 'What should I build?';
+      const context = 'Playing against heavy AD.';
+      const history = ['previous chat'];
+
+      const result = await askCoach(question, context, history);
+
+      expect(mockPost).toHaveBeenCalledWith('/ask', {
+        question,
+        context,
+        history,
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should throw an error if the API call fails', async () => {
+      const mockError = new Error('API Error');
+      mockPost.mockRejectedValueOnce(mockError);
+
+      const question = 'What should I build?';
+      const context = 'Playing against heavy AD.';
+      const history = ['previous chat'];
+
+      await expect(askCoach(question, context, history)).rejects.toThrow('API Error');
     });
   });
 });
