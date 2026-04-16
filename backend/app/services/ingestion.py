@@ -193,10 +193,11 @@ async def _process_player(
 
     # Step 2: Fetch match details for all new matches
     match_details: dict[str, dict] = {}
+    status = db._get_ingestion_status_sync()
+    if status["is_paused"] or status["processed_count"] >= status["total_target"]:
+        return 0
+
     for mid in match_ids:
-        status = db._get_ingestion_status_sync()
-        if status["is_paused"] or status["processed_count"] >= status["total_target"]:
-            break
         if await db.has_training_match(mid):
             continue
         async with _sem:
