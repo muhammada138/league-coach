@@ -207,3 +207,29 @@ async def test_get_cached_rank(mocker):
     assert rank == "Unranked"
     # Should not cache Unranked on failure
     assert "puuid-789" not in rank_cache
+
+def test_lp_history(mocker):
+    mock_get_lp_history = mocker.patch("app.routes.api.db.get_lp_history")
+
+    async def mock_get(*args, **kwargs):
+        return [{"lp": 50, "date": "2023-01-01"}]
+
+    mock_get_lp_history.side_effect = mock_get
+
+    response = client.get("/lp-history/fake-puuid")
+    assert response.status_code == 200
+    assert response.json() == [{"lp": 50, "date": "2023-01-01"}]
+    mock_get_lp_history.assert_called_once_with("fake-puuid", queue='RANKED_SOLO_5x5', days=30)
+
+def test_lp_history_custom_queue(mocker):
+    mock_get_lp_history = mocker.patch("app.routes.api.db.get_lp_history")
+
+    async def mock_get(*args, **kwargs):
+        return [{"lp": 60, "date": "2023-01-02"}]
+
+    mock_get_lp_history.side_effect = mock_get
+
+    response = client.get("/lp-history/fake-puuid?queue=RANKED_FLEX_SR")
+    assert response.status_code == 200
+    assert response.json() == [{"lp": 60, "date": "2023-01-02"}]
+    mock_get_lp_history.assert_called_once_with("fake-puuid", queue='RANKED_FLEX_SR', days=30)
