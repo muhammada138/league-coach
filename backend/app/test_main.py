@@ -108,6 +108,23 @@ async def test_get_history(mocker):
     assert data[0]["championName"] == "Ahri"
 
 @pytest.mark.asyncio
+async def test_lp_history(mocker):
+    mock_db_get_lp_history = mocker.patch("app.routes.api.db.get_lp_history")
+    mock_db_get_lp_history.return_value = [{"lp": 50, "date": "2023-10-01"}]
+
+    # Test default queue
+    response = client.get("/lp-history/fake-puuid")
+    assert response.status_code == 200
+    assert response.json() == [{"lp": 50, "date": "2023-10-01"}]
+    mock_db_get_lp_history.assert_called_with("fake-puuid", queue='RANKED_SOLO_5x5', days=30)
+
+    # Test custom queue parameter
+    response = client.get("/lp-history/fake-puuid?queue=RANKED_FLEX_SR")
+    assert response.status_code == 200
+    assert response.json() == [{"lp": 50, "date": "2023-10-01"}]
+    mock_db_get_lp_history.assert_called_with("fake-puuid", queue='RANKED_FLEX_SR', days=30)
+
+@pytest.mark.asyncio
 async def test_get_history_invalid_params():
     # Test invalid count parameter
     response = client.get("/history/fake-puuid?count=invalid")
