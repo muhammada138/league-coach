@@ -1,9 +1,8 @@
 import asyncio
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock
 
 from app.services import ingestion
-from app.services import db
 
 @pytest.fixture
 def mock_db_status(mocker):
@@ -61,7 +60,6 @@ async def test_worker_empty_ladder(mock_db_status, mocker):
 
     # Save the initial tier idx
     initial_tier_idx = ingestion._tier_idx
-    initial_tier_page = ingestion._tier_page
 
     with pytest.raises(asyncio.CancelledError):
         await ingestion.ingestion_worker()

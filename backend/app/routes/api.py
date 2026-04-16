@@ -208,7 +208,6 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10, regi
     n = len(games)
     player_avgs = {stat: sum(g["playerStats"][stat] for g in games) / n for stat in NUMERIC_STATS}
     lobby_avgs_agg = {stat: sum(g["lobbyAverages"][stat] for g in games) / n for stat in NUMERIC_STATS}
-    overall_deltas = {stat: player_avgs[stat] - lobby_avgs_agg[stat] for stat in NUMERIC_STATS}
     total_seconds = sum(g["playerStats"]["gameDuration"] for g in games)
     total_minutes = total_seconds / 60
     player_cspm = player_avgs["totalMinionsKilled"] / (total_minutes / n) if total_minutes > 0 else 0
