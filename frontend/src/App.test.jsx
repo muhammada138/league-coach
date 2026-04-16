@@ -1,23 +1,66 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from './App';
 
-// Mock the SpeedInsights component since we don't need to test it here
+// Mock the SpeedInsights component
 vi.mock('@vercel/speed-insights/react', () => ({
   SpeedInsights: () => <div data-testid="speed-insights" />
 }));
 
+// Mock the page components to easily identify them
+vi.mock('./pages/Home', () => ({ default: () => <div data-testid="home-page" /> }));
+vi.mock('./pages/Dashboard', () => ({ default: () => <div data-testid="dashboard-page" /> }));
+vi.mock('./pages/IngestDashboard', () => ({ default: () => <div data-testid="ingest-dashboard-page" /> }));
+vi.mock('./pages/TermsOfService', () => ({ default: () => <div data-testid="terms-page" /> }));
+vi.mock('./pages/PrivacyPolicy', () => ({ default: () => <div data-testid="privacy-page" /> }));
+vi.mock('./components/Navbar', () => ({ default: () => <nav data-testid="navbar" /> }));
+
 describe('App', () => {
-  it('renders without crashing', () => {
+  beforeEach(() => {
+    // Reset URL to root before each test
+    window.history.pushState({}, '', '/');
+  });
+
+  it('renders without crashing and shows Home on default route', () => {
     render(<App />);
 
-    // We should be on the home page by default
-    // Let's verify we see the Home text (assuming Home component has some recognizable text like "League Coach" or similar from the Navbar)
-    // Actually, we can just test if the Navbar is present as it's rendered on all routes
-    const navbars = document.querySelectorAll('nav');
-    expect(navbars.length).toBeGreaterThan(0);
-
-    // Check if the SpeedInsights component is rendered
+    expect(screen.getByTestId('navbar')).toBeInTheDocument();
+    expect(screen.getByTestId('home-page')).toBeInTheDocument();
     expect(screen.getByTestId('speed-insights')).toBeInTheDocument();
+  });
+
+  it('renders Dashboard component for /player/:region/:gameName/:tagLine route', () => {
+    window.history.pushState({}, '', '/player/na/Riot/123');
+    render(<App />);
+    expect(screen.getByTestId('dashboard-page')).toBeInTheDocument();
+  });
+
+  it('renders IngestDashboard component for /admin/ingest route', () => {
+    window.history.pushState({}, '', '/admin/ingest');
+    render(<App />);
+    expect(screen.getByTestId('ingest-dashboard-page')).toBeInTheDocument();
+  });
+
+  it('renders TermsOfService component for /terms route', () => {
+    window.history.pushState({}, '', '/terms');
+    render(<App />);
+    expect(screen.getByTestId('terms-page')).toBeInTheDocument();
+  });
+
+  it('renders PrivacyPolicy component for /privacy route', () => {
+    window.history.pushState({}, '', '/privacy');
+    render(<App />);
+    expect(screen.getByTestId('privacy-page')).toBeInTheDocument();
+  });
+
+  it('applies dark mode transition classes to the main container', () => {
+    const { container } = render(<App />);
+    const mainDiv = container.querySelector('.min-h-screen');
+
+    expect(mainDiv).toBeInTheDocument();
+    expect(mainDiv).toHaveClass('bg-slate-50');
+    expect(mainDiv).toHaveClass('dark:bg-[#05080f]');
+    expect(mainDiv).toHaveClass('transition-colors');
+    expect(mainDiv).toHaveClass('duration-300');
   });
 });
