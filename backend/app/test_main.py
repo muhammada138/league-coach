@@ -207,3 +207,40 @@ async def test_get_cached_rank(mocker):
     assert rank == "Unranked"
     # Should not cache Unranked on failure
     assert "puuid-789" not in rank_cache
+
+@pytest.mark.asyncio
+async def test_get_match_timeline(mocker):
+    from app.services.riot import get_match_timeline
+    from app.state import timeline_cache
+    import httpx
+
+    # Clear the cache before tests
+    timeline_cache.cache.clear()
+
+    # 1. Test cache miss (calls API)
+    mock_client = mocker.AsyncMock(spec=httpx.AsyncClient)
+    mock_response = mocker.Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"info": {"frames": []}}
+    mock_client.get.return_value = mock_response
+
+    timeline = await get_match_timeline(mock_client, "match-123", "americas")
+    assert timeline == {"info": {"frames": []}}
+    # Ensure it's in cache
+    assert "match-123" in timeline_cache
+
+    # 2. Test cache hit (doesn't call API again)
+    mock_client.get.reset_mock()
+    timeline = await get_match_timeline(mock_client, "match-123", "americas")
+    assert timeline == {"info": {"frames": []}}
+    mock_client.get.assert_not_called()
+
+    # 3. Test API failure/exception
+    # Use a generic Exception to simulate a network issue or missing error path coverage
+    # and to ensure the broader except Exception block works as expected.
+    mock_client.get.side_effect = Exception("API Error")
+
+    timeline = await get_match_timeline(mock_client, "match-456", "americas")
+    assert timeline is None
+    # Should not cache None on failure
+    assert "match-456" not in timeline_cache
