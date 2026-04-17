@@ -51,3 +51,7 @@ plan.md
 docs/maestro/
 docs/superpowers/
 docs/plans/
+
+.worktrees/
+docs/superpowers/
+ideas_temp.md

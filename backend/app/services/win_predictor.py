@@ -243,7 +243,7 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
 
     Returns
     -------
-    dict with ``bluePct`` and ``redPct`` integers that sum to 100.
+    dict with ``bluePct``, ``redPct``, and ``confidence``.
     """
     if not participants:
         return {"error": "No participants provided."}
@@ -255,15 +255,23 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
     blue_feats = [_player_features(live_stats.get(p.get("puuid", ""), {}), p.get("championId", 0)) for p in blue_raw]
     red_feats  = [_player_features(live_stats.get(p.get("puuid", ""), {}), p.get("championId", 0)) for p in red_raw]
 
-    # A team's vector is simply the mean of its known players.
-    # This prevents hidden players from dragging the team average toward the opponent's stats.
     blue_known = [f for f in blue_feats if f is not None]
     red_known  = [f for f in red_feats if f is not None]
     all_known  = blue_known + red_known
+    
+    # Calculate confidence based on ratio of known players
+    confidence = len(all_known) / len(participants) if participants else 0.0
+
+    # Global mean fallback if a team is entirely hidden
     global_mean = np.mean(all_known, axis=0) if all_known else _NEUTRAL.copy()
 
-    blue_vec = np.mean(blue_known, axis=0) if blue_known else global_mean.copy()
-    red_vec  = np.mean(red_known, axis=0) if red_known else global_mean.copy()
+    # Team-Mean Attribution: Impute hidden players with their team's mean
+    blue_team_mean = np.mean(blue_known, axis=0) if blue_known else global_mean.copy()
+    red_team_mean  = np.mean(red_known, axis=0) if red_known else global_mean.copy()
+
+    # Final team vectors (mean of imputed features)
+    blue_vec = blue_team_mean
+    red_vec  = red_team_mean
     diff_vec = blue_vec - red_vec
 
     X = np.concatenate([blue_vec, red_vec, diff_vec]).reshape(1, -1)
@@ -276,7 +284,11 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
         prob = 1.0 / (1.0 + np.exp(-diff_val * 25.0))
 
     blue_pct = max(1, min(99, round(prob * 100)))
-    return {"bluePct": blue_pct, "redPct": 100 - blue_pct}
+    return {
+        "bluePct": blue_pct,
+        "redPct": 100 - blue_pct,
+        "confidence": round(float(confidence), 2)
+    }
 
 
 # ---------------------------------------------------------------------------
