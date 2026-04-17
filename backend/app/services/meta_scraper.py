@@ -81,22 +81,42 @@ async def fetch_rank_meta(rank: str) -> dict:
                 resp = await client.get(url, headers=headers)
                 if resp.status_code != 200: continue
                 html = resp.text
+
                 if results["tier_avg"] == 50.0:
                     avg_match = re.search(r'Average .*? Win Rate:.*?([0-9\.]+)', html, re.DOTALL | re.IGNORECASE)
                     if avg_match: results["tier_avg"] = float(avg_match.group(1))
-                for clean_name, cid in _CHAMP_ID_MAP.items():
-                    if len(clean_name) < 3: continue
-                    pattern = re.compile(rf'/lol/{clean_name}/build/.*?q:key="5".*?>([456][0-9]\.[0-9]+)', re.IGNORECASE | re.DOTALL)
-                    match = pattern.search(html)
-                    if match:
-                        wr = float(match.group(1))
+
+                # Isolate the data rows using a more robust pattern
+                # Every row starts with a build link
+                rows = re.split(r'href="/lol/([^/"]+)/build/\??[^"]*"', html)
+
+                # re.split with a capturing group returns [pre, group, post, pre, group, post...]
+                # so index 1 is name, index 2 is the row content, etc.
+                for i in range(1, len(rows), 2):
+                    clean_name = rows[i].lower().replace("-", "")
+                    row_content = rows[i+1][:2000] # Limit search to the row area
+
+                    cid = _CHAMP_ID_MAP.get(clean_name)
+                    if not cid: continue
+
+                    # Target the Win Rate column (q:key="5") specifically
+                    # Text usually looks like: ...q:key="5"><div...>51.99</div>...
+                    wr_match = re.search(r'q:key="5".*?>([0-9\.]+)', row_content, re.DOTALL)
+
+                    if wr_match:
+                        wr = float(wr_match.group(1))
                         if str(cid) not in results["champions"]:
                             results["champions"][str(cid)] = {
-                                "name": clean_name, "wr": wr, "lane": lane,
+                                "name": clean_name,
+                                "wr": wr,
+                                "lane": lane,
                                 "delta": round(wr - results["tier_avg"], 2),
-                                "matchups": {}, "last_checked": 0
+                                "matchups": {},
+                                "last_checked": 0
                             }
+
                 await asyncio.sleep(1.0)
+
             except Exception as e:
                 logger.error("Error in fetch_rank_meta lane %s for %s: %s", lane, rank, e)
     return results
