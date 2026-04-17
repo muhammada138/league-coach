@@ -9,10 +9,10 @@ from ..state import META_FILE_PATH
 
 logger = logging.getLogger(__name__)
 
-# Lolalytics Rank Mappings
+# Lolalytics Rank Mappings - Aligned with seed tiers in ingestion.py
 RANKS = [
-    "iron", "bronze", "silver", "gold", "platinum", "emerald", 
-    "diamond", "master", "grandmaster", "challenger"
+    "bronze", "silver", "gold", "platinum", "emerald", 
+    "diamond", "master"
 ]
 
 # Lanes to scrape
