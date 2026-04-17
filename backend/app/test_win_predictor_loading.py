@@ -9,11 +9,12 @@ from app.services import win_predictor
 def test_load_or_train_model_import_error(mock_logger, mock_path):
     mock_path.exists.return_value = True
 
-    with patch("app.services.win_predictor.joblib.load", side_effect=ImportError("mock import error")):
+    import_err = ImportError("mock import error")
+    with patch("app.services.win_predictor.joblib.load", side_effect=import_err):
         with patch("app.services.win_predictor.MODEL_PATH", mock_path):
             load_or_train_model()
 
-    mock_logger.warning.assert_called_with("joblib/xgboost not installed – using linear fallback")
+    mock_logger.warning.assert_called_with("Model load failed (%s) – using linear fallback", import_err)
 
 
 @patch("app.services.win_predictor.Path")

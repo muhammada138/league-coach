@@ -367,6 +367,9 @@ async def ingestion_worker() -> None:
 
                     if saved:
                         processed_count += saved
+                        # Re-read pause state so a mid-loop toggle takes effect immediately
+                        _s = db._get_ingestion_status_sync()
+                        is_paused = _s["is_paused"]
                         logger.info(
                             "Ingestion +%d | %d / %d (%.1f%%)",
                             saved,

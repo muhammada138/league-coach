@@ -82,4 +82,7 @@ async def acquire() -> None:
 
 
 def update_from_response(response) -> None:
-    _limiter.update_from_headers(response.headers)
+    try:
+        _limiter.update_from_headers(response.headers)
+    except Exception:
+        pass

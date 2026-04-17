@@ -38,9 +38,8 @@ async def test_riot_get_429_retry(mocker):
     assert result == {"success": True}
     assert mock_client.get.call_count == 2
     mock_sleep.assert_called_once()
-    # sleep argument should be retry_after + 0.5 * (attempt + 1)
-    # attempt 0 -> retry_after=1 -> sleep(1.5)
-    mock_sleep.assert_called_with(1.5)
+    # retry_after=1, formula: retry_after + 1 = 2
+    mock_sleep.assert_called_with(2)
 
 
 @pytest.mark.asyncio
