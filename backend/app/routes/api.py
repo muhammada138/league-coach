@@ -247,11 +247,11 @@ async def get_live_game(puuid: str, region: str = RIOT_REGION):
         try:
             data = await riot_get(client, url)
             raw = data.get("participants", [])
-            blue_ids = [p.get("championId", 0) for p in raw if p.get("teamId") == 100]
-            red_ids  = [p.get("championId", 0) for p in raw if p.get("teamId") == 200]
+            blue_p = [{"championId": p.get("championId", 0), "spells": [p.get("spell1Id"), p.get("spell2Id")]} for p in raw if p.get("teamId") == 100]
+            red_p  = [{"championId": p.get("championId", 0), "spells": [p.get("spell1Id"), p.get("spell2Id")]} for p in raw if p.get("teamId") == 200]
             blue_roles, red_roles = await asyncio.gather(
-                assign_team_roles(blue_ids),
-                assign_team_roles(red_ids),
+                assign_team_roles(blue_p),
+                assign_team_roles(red_p),
             )
             all_roles = {**blue_roles, **red_roles}
             return {

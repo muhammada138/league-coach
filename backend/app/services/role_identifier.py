@@ -43,24 +43,50 @@ async def _load_rates() -> dict[int, dict[str, float]]:
     return _rates
 
 
-def _best_assignment(rates: dict[int, dict[str, float]], champ_ids: list[int]) -> dict[int, str]:
-    n = len(champ_ids)
+def _best_assignment(rates: dict[int, dict[str, float]], participants: list[dict]) -> dict[int, str]:
+    """
+    participants: list of {"championId": int, "spells": list[int]}
+    """
+    n = len(participants)
     roles = _ROLES[:n]
     best_score = -1.0
     best: dict[int, str] = {}
+    
+    # Smite detection
+    smite_spell_id = 11
+    
     for perm in permutations(roles):
-        score = sum(rates.get(cid, {}).get(role, 0.0) for cid, role in zip(champ_ids, perm))
+        score = 0.0
+        for p, role in zip(participants, perm):
+            p_cid = p["championId"]
+            p_spells = p.get("spells", [])
+            
+            # 1. Base Meraki Score (Play Rate)
+            score += rates.get(p_cid, {}).get(role, 0.0)
+            
+            # 2. Smite Signal (The "Constraint")
+            has_smite = smite_spell_id in p_spells
+            if role == "JUNGLE" and has_smite:
+                score += 1000.0  # Massive bonus for Smite in Jungle
+            elif role != "JUNGLE" and has_smite:
+                score -= 1000.0  # Massive penalty for Smite outside Jungle
+            elif role == "JUNGLE" and not has_smite:
+                score -= 500.0   # Penalty for Jungle without Smite
+
         if score > best_score:
             best_score = score
-            best = {cid: role for cid, role in zip(champ_ids, perm)}
+            best = {p["championId"]: role for p, role in zip(participants, perm)}
     return best
 
 
-async def assign_team_roles(champ_ids: list[int]) -> dict[int, str]:
-    """Return {championId: role} for one team. Returns UNKNOWN for all on error."""
+async def assign_team_roles(participants: list[dict]) -> dict[int, str]:
+    """
+    Return {championId: role} for one team.
+    participants: list of {"championId": int, "spells": list[int]}
+    """
     try:
         rates = await _load_rates()
-        return _best_assignment(rates, champ_ids)
+        return _best_assignment(rates, participants)
     except Exception as exc:
         logger.warning("Role assignment failed: %s", exc)
-        return {cid: "UNKNOWN" for cid in champ_ids}
+        return {p["championId"]: "UNKNOWN" for p in participants}
