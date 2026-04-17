@@ -128,10 +128,19 @@ async def fetch_rank_meta(rank: str) -> dict:
                     games_match = re.search(r'q:key="9".*?>\s*([0-9,]+)\s*<', content, re.DOTALL)
                     games = int(games_match.group(1).replace(",", "")) if games_match else 0
 
-                    if wr > 0:
+                    if wr > 0 and games > 0:
                         lane_key = lane if lane else "all"
                         entry_key = f"{cid}:{lane_key}"
                         
+                        # Deduplication: Keep the one with more games (Main Tierlist vs Counters)
+                        if entry_key in results["champions"]:
+                            existing = results["champions"][entry_key]
+                            # Only overwrite if the new one has more games or the existing one has no rank
+                            if games > existing["games"] or (existing["rank_label"] == "N/A" and rank_label != "N/A"):
+                                pass # Proceed to overwrite
+                            else:
+                                continue # Keep existing and skip this one
+
                         results["champions"][entry_key] = {
                             "cid": str(cid),
                             "name": champ_slug,
