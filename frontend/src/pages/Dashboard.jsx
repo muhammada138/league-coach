@@ -580,8 +580,20 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   const mins = Math.floor(elapsed / 60);
   const secs = String(elapsed % 60).padStart(2, "0");
   const queueLabel = QUEUE_LABELS[liveGame.queueId] ?? liveGame.gameMode ?? "Live Game";
-  const blueTeam = liveGame.participants.filter((p) => p.teamId === 100);
-  const redTeam = liveGame.participants.filter((p) => p.teamId === 200);
+  
+  const rolePriority = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5, UNKNOWN: 6 };
+  const getRoleSortScore = (p) => {
+    const stats = liveStats?.[p.puuid];
+    return rolePriority[stats?.most_common_position] || 99;
+  };
+
+  const blueTeam = [...liveGame.participants]
+    .filter((p) => p.teamId === 100)
+    .sort((a, b) => getRoleSortScore(a) - getRoleSortScore(b));
+    
+  const redTeam = [...liveGame.participants]
+    .filter((p) => p.teamId === 200)
+    .sort((a, b) => getRoleSortScore(a) - getRoleSortScore(b));
 
   const renderPlayer = (p) => {
     const isMe = p.puuid === puuid;
