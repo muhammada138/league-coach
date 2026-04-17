@@ -236,14 +236,21 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
     # Lolalytics WR is usually around 50.0. Scale to 0-1.
     meta_wr = champ_meta.get("wr", 50.0) / 100.0
     
-    # 9. Matchup Advantage — global winrate delta as proxy for lane counter
+    # 9. Matchup Advantage — Specific counter winrate from Lolalytics
     matchup_adv = 0.5
     if opponent_champion_id:
         opp_id_str = str(opponent_champion_id)
-        opp_meta = rank_meta.get(opp_id_str, {})
-        opp_wr = opp_meta.get("wr", 50.0) / 100.0
-        # Advantage is the difference between my meta WR and theirs
-        matchup_adv = 0.5 + (meta_wr - opp_wr)
+        # Check if we have a specific matchup winrate (e.g. Jax vs Camille)
+        matchups = champ_meta.get("matchups", {})
+        if opp_id_str in matchups:
+            # Matchup WR is e.g. 52.5. Scale to 0-1.
+            matchup_adv = matchups[opp_id_str] / 100.0
+        else:
+            # Fallback to global winrate delta as proxy for lane counter
+            opp_meta = rank_meta.get(opp_id_str, {})
+            opp_wr = opp_meta.get("wr", 50.0) / 100.0
+            # Advantage is the difference between my meta WR and theirs
+            matchup_adv = 0.5 + (meta_wr - opp_wr)
 
     return np.array([
         rank_score, season_wr, form_score, recent_wr, champ_wr, 
