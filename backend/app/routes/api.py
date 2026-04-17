@@ -273,7 +273,7 @@ async def live_enrich(body: LiveEnrichRequest):
         region = getattr(body, 'region', RIOT_REGION)
         routing = get_routing(region)
         
-        cache_key = f"v6:{puuid}:{body.queue_id}:{region}"
+        cache_key = f"v7:{puuid}:{body.queue_id}:{region}"
         cached = enriched_cache.get(cache_key)
         if cached: return cached
 
@@ -285,27 +285,13 @@ async def live_enrich(body: LiveEnrichRequest):
         api_failed = False
         try:
             async with httpx.AsyncClient(timeout=25.0) as client:
-                entries, match_ids_any, match_ids_queue = await asyncio.gather(
+                entries, match_ids = await asyncio.gather(
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                    # Any queue — gives us reliable teamPosition data from 5v5 games for role detection
-                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10"),
-                    # Queue-specific — used only for the W/L dots shown in the live banner
-                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
+                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=6&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
 
-                any_ids = match_ids_any if not isinstance(match_ids_any, Exception) else []
-                queue_ids = match_ids_queue if not isinstance(match_ids_queue, Exception) else []
-                queue_id_set = set(queue_ids)
-                # Deduplicated union — any-queue first so position history is prioritised
-                seen: set[str] = set()
-                all_ids: list[str] = []
-                for mid in any_ids + queue_ids:
-                    if mid not in seen:
-                        seen.add(mid)
-                        all_ids.append(mid)
-
-                if isinstance(entries, Exception) and not all_ids:
+                if isinstance(entries, Exception) or isinstance(match_ids, Exception):
                     api_failed = True
 
                 # Rank lookup — ranked queues use the matching entry; normals fall back to solo rank as skill proxy
@@ -320,21 +306,19 @@ async def live_enrich(body: LiveEnrichRequest):
                             "wins": ranked.get("wins", 0), "losses": ranked.get("losses", 0),
                         })
 
-                if all_ids:
+                if not isinstance(match_ids, Exception) and match_ids:
                     # Rate-limited match detail fetches — each call acquires the shared semaphore
                     async def _fetch(mid):
                         async with _match_sem:
                             return await riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/{mid}")
 
-                    match_datas = await asyncio.gather(*[_fetch(mid) for mid in all_ids], return_exceptions=True)
+                    match_datas = await asyncio.gather(*[_fetch(mid) for mid in match_ids], return_exceptions=True)
 
                     if all(isinstance(md, Exception) for md in match_datas):
                         api_failed = True
 
                     recent_games, champ_ids = [], []
-                    # champ_wr_map: {championId_str: [wins, total]}
                     champ_wr_map: dict[str, list[int]] = {}
-                    _FIVE_V_FIVE = {400, 420, 430, 440}
 
                     for md in match_datas:
                         if isinstance(md, Exception): continue
@@ -346,17 +330,9 @@ async def live_enrich(body: LiveEnrichRequest):
 
                         score = float(_compute_perf_score(player, participants, None, md["info"]["gameDuration"]))
                         won = bool(player["win"])
-                        game_queue_id = md["info"].get("queueId", 0)
-                        # Only record teamPosition for 5v5 queues — ARAM/URF leave it blank
-                        raw_pos = player.get("teamPosition", "") if game_queue_id in _FIVE_V_FIVE else ""
-                        pos = raw_pos if raw_pos else "UNKNOWN"
-                        match_id = md["metadata"]["matchId"]
+                        pos = player.get("teamPosition", "UNKNOWN")
                         participant_puuids = [p.get("puuid", "") for p in participants if p.get("puuid")]
-                        recent_games.append({
-                            "win": won, "score": round(score, 1), "matchId": match_id,
-                            "participants": participant_puuids, "position": pos,
-                            "is_queue_match": match_id in queue_id_set,
-                        })
+                        recent_games.append({"win": won, "score": round(score, 1), "matchId": md["metadata"]["matchId"], "participants": participant_puuids, "position": pos})
 
                         cid = str(player.get("championId", ""))
                         champ_ids.append(cid)
@@ -378,13 +354,10 @@ async def live_enrich(body: LiveEnrichRequest):
                                 break
                         from collections import Counter as _Counter
                         main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
-                        # Position from any 5v5 game — widest possible sample for accuracy
-                        positions = [g["position"] for g in recent_games if g.get("position") not in (None, "", "UNKNOWN")]
+                        positions = [g.get("position", "UNKNOWN") for g in recent_games if g.get("position") != "UNKNOWN"]
                         most_common_pos = _Counter(positions).most_common(1)[0][0] if positions else "UNKNOWN"
-                        # Dots: only games from the same queue as the live game
-                        queue_games = [g for g in recent_games if g.get("is_queue_match")]
                         base.update({
-                            "last5": queue_games[:5],
+                            "last5": recent_games[:5],
                             "avg_score": avg_score,
                             "recent_wr": recent_wr,
                             "champ_wr_map": champ_wr_map,
