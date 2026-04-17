@@ -53,11 +53,9 @@ async def fetch_rank_meta(rank: str) -> dict:
     """Scrape HTML tierlist for a specific rank."""
     await _ensure_champ_ids()
     
-    # User confirmed patch 16.8
     url = f"https://lolalytics.com/lol/tierlist/?tier={rank}&patch=16.8"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Referer": "https://lolalytics.com/"
     }
     
@@ -70,35 +68,32 @@ async def fetch_rank_meta(rank: str) -> dict:
             
             html = resp.text
             
-            # Find champion names from their build links
-            # Example: href="/lol/sona/build/"
-            champ_names = re.findall(r'href="/lol/([^/"]+)/build/', html)
-            champ_names = list(dict.fromkeys(champ_names)) # unique
-            
-            results = {}
-            for name in champ_names:
-                # Map name to ID
-                cid = _CHAMP_ID_MAP.get(name.lower().replace("-", ""))
-                if not cid: continue
-                
-                # Search for the winrate near the champion name link
-                # Pattern: we look for the name in the text, then the next occurrence of a decimal (winrate)
-                # Lolalytics typically shows WR as "52.66" or similar
-                # We'll use a regex that looks for the name followed by stats
-                pattern = re.compile(rf'>{name.capitalize()}<.*?Win\s*([0-9\.]+)', re.IGNORECASE | re.DOTALL)
-                match = pattern.search(html)
-                if not match:
-                    # Try a simpler decimal search near the name
-                    pattern = re.compile(rf'{name}.*?([456][0-9]\.[0-9]+)', re.IGNORECASE | re.DOTALL)
-                    match = pattern.search(html)
+            # Find the tier average winrate
+            # Text: Average Emerald Win Rate: <!--t=2k-->50.96<!---->%
+            avg_wr = 50.0
+            avg_match = re.search(r'Average .*? Win Rate:.*?([0-9\.]+)', html, re.DOTALL | re.IGNORECASE)
+            if avg_match:
+                avg_wr = float(avg_match.group(1))
 
+            results = {"tier_avg": avg_wr, "champions": {}}
+            
+            # Exhaustive sweep for all champions we know about
+            for name, cid in _CHAMP_ID_MAP.items():
+                # Lolalytics typically capitalizes names in the table
+                # regex that looks for name in a tag/div then a winrate decimal
+                # We search for the name then find the next decimal between 40-65%
+                pattern = re.compile(rf'{name}.*?([456][0-9]\.[0-9]+)', re.IGNORECASE | re.DOTALL)
+                match = pattern.search(html)
+                
                 if match:
-                    results[str(cid)] = {
-                        "wr": float(match.group(1)),
-                        "pr": 0.0 
+                    wr = float(match.group(1))
+                    results["champions"][str(cid)] = {
+                        "name": name,
+                        "wr": wr,
+                        "delta": round(wr - avg_wr, 2)
                     }
             
-            logger.info("Scraped %d champions for rank %s", len(results), rank)
+            logger.info("Exhaustively scraped %d champions for rank %s", len(results["champions"]), rank)
             return results
         except Exception as e:
             logger.error("Error scraping Lolalytics %s: %s", rank, e)
@@ -106,16 +101,17 @@ async def fetch_rank_meta(rank: str) -> dict:
 
 async def sync_meta():
     """Cycles through all ranks and updates the local meta file."""
-    logger.info("Starting champion meta sync (HTML Scraper)...")
+    logger.info("Starting champion meta sync (Exhaustive HTML Scraper)...")
     full_meta = {}
     
+    # User specifically wanted: BRONZE → SILVER → GOLD → PLATINUM → EMERALD → DIAMOND → MASTER
     for rank in RANKS:
         logger.info("Syncing meta for rank: %s", rank)
         rank_data = await fetch_rank_meta(rank)
-        if rank_data:
+        if rank_data and rank_data.get("champions"):
             full_meta[rank] = rank_data
         # Sleep to avoid hitting rate limits
-        await asyncio.sleep(5.0)
+        await asyncio.sleep(3.0)
     
     if full_meta:
         META_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
