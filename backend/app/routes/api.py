@@ -240,15 +240,36 @@ async def get_scoreboard(match_id: str, region: str = RIOT_REGION):
 
 @router.get("/live/{puuid}")
 async def get_live_game(puuid: str, region: str = RIOT_REGION):
+    from ..services.role_identifier import assign_team_roles
     url = f"https://{region}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/{puuid}"
     async with httpx.AsyncClient() as client:
         try:
             data = await riot_get(client, url)
+            raw = data.get("participants", [])
+            blue_ids = [p.get("championId", 0) for p in raw if p.get("teamId") == 100]
+            red_ids  = [p.get("championId", 0) for p in raw if p.get("teamId") == 200]
+            blue_roles, red_roles = await asyncio.gather(
+                assign_team_roles(blue_ids),
+                assign_team_roles(red_ids),
+            )
+            all_roles = {**blue_roles, **red_roles}
             return {
                 "inGame": True, "gameId": data.get("gameId"), "gameMode": data.get("gameMode", ""),
                 "gameLength": data.get("gameLength", 0),
                 "queueId": data.get("gameQueueConfigId", 420),
-                "participants": [{"puuid": p.get("puuid", ""), "summonerName": (p.get("riotId") or p.get("summonerName") or "Unknown").split("#")[0], "tagLine": (p.get("riotId") or "").split("#")[1] if "#" in (p.get("riotId") or "") else "", "teamId": p.get("teamId", 0), "championId": p.get("championId", 0), "spell1Id": p.get("spell1Id"), "spell2Id": p.get("spell2Id")} for p in data.get("participants", [])],
+                "participants": [
+                    {
+                        "puuid": p.get("puuid", ""),
+                        "summonerName": (p.get("riotId") or p.get("summonerName") or "Unknown").split("#")[0],
+                        "tagLine": (p.get("riotId") or "").split("#")[1] if "#" in (p.get("riotId") or "") else "",
+                        "teamId": p.get("teamId", 0),
+                        "championId": p.get("championId", 0),
+                        "spell1Id": p.get("spell1Id"),
+                        "spell2Id": p.get("spell2Id"),
+                        "assignedPosition": all_roles.get(p.get("championId", 0), "UNKNOWN"),
+                    }
+                    for p in raw
+                ],
             }
         except HTTPException as e:
             if e.status_code in (404, 502, 503): return {"inGame": False}

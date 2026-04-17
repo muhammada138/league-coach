@@ -2,19 +2,20 @@ import httpx
 import asyncio
 import logging
 from fastapi import HTTPException
-from ..state import RIOT_HEADERS, api_semaphore, rank_cache, timeline_cache, RIOT_REGION, RIOT_ROUTING
+from ..state import RIOT_HEADERS, rank_cache, timeline_cache, RIOT_REGION, RIOT_ROUTING
+from .rate_limiter import acquire as _rl_acquire, update_from_response as _rl_update
 
 logger = logging.getLogger(__name__)
 
 async def riot_get(client: httpx.AsyncClient, url: str) -> dict:
     for attempt in range(3):
-        async with api_semaphore:
-            response = await client.get(url, headers=RIOT_HEADERS)
-            
+        await _rl_acquire()
+        response = await client.get(url, headers=RIOT_HEADERS)
+        _rl_update(response)
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 1))
-            logger.warning("Riot API 429 (attempt %d). Retrying after %d s", attempt + 1, retry_after)
-            await asyncio.sleep(retry_after + 0.5 * (attempt + 1))
+            logger.warning("Riot API 429 despite limiter (attempt %d) — sleeping %ds", attempt + 1, retry_after)
+            await asyncio.sleep(retry_after + 1)
             continue
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=response.text)
