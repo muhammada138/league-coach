@@ -137,14 +137,16 @@ async def fetch_rank_meta(rank: str) -> dict:
 # ---------------------------------------------------------------------------
 _sync_active = False
 _cancel_requested = False
+_sync_paused = False
 
 async def sync_meta():
     """Daily sync: Performs incremental updates to meta data, only scraping missing matchups."""
-    global _sync_active, _cancel_requested
+    global _sync_active, _cancel_requested, _sync_paused
     if _sync_active: return False
     
     _sync_active = True
     _cancel_requested = False
+    _sync_paused = False
     logger.info("Starting Incremental Meta Sync...")
     
     try:
@@ -152,9 +154,12 @@ async def sync_meta():
         existing = get_meta_data()
         full_meta = existing.get("data", {})
         
-        # 1. Update Tierlist Global Stats (Always fast, ensures we see new champs)
+        # 1. Update Tierlist Global Stats
         for rank in RANKS:
             if _cancel_requested: break
+            while _sync_paused and not _cancel_requested:
+                await asyncio.sleep(1.0)
+            
             logger.info("Updating global stats for rank: %s", rank)
             rank_data = await fetch_rank_meta(rank)
             
@@ -162,18 +167,16 @@ async def sync_meta():
                 if rank not in full_meta:
                     full_meta[rank] = rank_data
                 else:
-                    # Merge: keep existing matchups, update current stats
                     full_meta[rank]["tier_avg"] = rank_data["tier_avg"]
                     for cid, cdata in rank_data["champions"].items():
                         if cid not in full_meta[rank]["champions"]:
                             full_meta[rank]["champions"][cid] = cdata
                         else:
-                            # Update WR/Delta but keep existing matchups
                             full_meta[rank]["champions"][cid]["wr"] = cdata["wr"]
                             full_meta[rank]["champions"][cid]["delta"] = cdata["delta"]
                             full_meta[rank]["champions"][cid]["lane"] = cdata["lane"]
 
-        # 2. Fill Missing Matchups (The slow part)
+        # 2. Fill Missing Matchups
         import random
         for rank in RANKS:
             if _cancel_requested: break
@@ -182,8 +185,9 @@ async def sync_meta():
             champs = full_meta[rank].get("champions", {})
             for cid_str, cdata in champs.items():
                 if _cancel_requested: break
+                while _sync_paused and not _cancel_requested:
+                    await asyncio.sleep(1.0)
                 
-                # ONLY scrape if matchups are missing or empty
                 if not cdata.get("matchups"):
                     name, lane = cdata["name"], cdata["lane"]
                     logger.info("  -> Filling missing matchups: %s (%s) in %s", name, lane, rank)
@@ -191,14 +195,11 @@ async def sync_meta():
                     matchups = await fetch_champion_matchups(rank, name, lane)
                     if matchups:
                         full_meta[rank]["champions"][cid_str]["matchups"] = matchups
-                        # Incremental save
                         with open(META_FILE_PATH, "w") as f:
                             json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
                     
-                    # Slower scraping with jitter
                     await asyncio.sleep(random.uniform(4.0, 8.0))
                 else:
-                    # Skip already scraped champion
                     continue
 
         if not _cancel_requested:
@@ -211,6 +212,7 @@ async def sync_meta():
     finally:
         _sync_active = False
         _cancel_requested = False
+        _sync_paused = False
     return True
 
 def cancel_sync():
@@ -220,8 +222,16 @@ def cancel_sync():
         return True
     return False
 
+def toggle_pause():
+    global _sync_paused
+    _sync_paused = not _sync_paused
+    return _sync_paused
+
 def is_sync_active():
     return _sync_active
+
+def is_sync_paused():
+    return _sync_paused
 
 def get_meta_data() -> dict:
     if not META_FILE_PATH.exists(): return {}

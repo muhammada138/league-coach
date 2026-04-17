@@ -572,9 +572,24 @@ async def admin_cancel_sync():
 
 @router.get("/admin/sync-status")
 async def admin_sync_status():
-    from ..services.meta_scraper import is_sync_active
-    return {"active": is_sync_active()}
+    from ..services.meta_scraper import is_sync_active, is_sync_paused
+    return {
+        "active": is_sync_active(),
+        "paused": is_sync_paused()
+    }
 
+@router.post("/admin/toggle-sync-pause")
+async def admin_toggle_sync_pause():
+    from ..services.meta_scraper import toggle_pause
+    new_state = toggle_pause()
+    return {"ok": True, "paused": new_state}
+
+
+@router.post("/admin/cleanup")
+async def admin_cleanup():
+    from ..services.db import cleanup_stale_data
+    counts = cleanup_stale_data()
+    return {"ok": True, "counts": counts}
 
 @router.post("/ask")
 async def ask_coach(body: AskRequest):
