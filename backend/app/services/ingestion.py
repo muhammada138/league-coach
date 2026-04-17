@@ -363,24 +363,28 @@ async def ingestion_worker() -> None:
                     _tier_page += 1
 
                 status = db._get_ingestion_status_sync()
+                is_paused = status["is_paused"]
+                processed_count = status["processed_count"]
+                total_target = status["total_target"]
+
                 for entry in entries[:8]:
                     puuid = entry.get("puuid")
                     if not puuid:
                         continue
 
-                    if status["is_paused"] or status["processed_count"] >= status["total_target"]:
+                    if is_paused or processed_count >= total_target:
                         break
 
                     saved = await _process_player(client, puuid, entry)
 
                     if saved:
-                        status = db._get_ingestion_status_sync()
+                        processed_count += saved
                         logger.info(
                             "Ingestion +%d | %d / %d (%.1f%%)",
                             saved,
-                            status["processed_count"],
-                            status["total_target"],
-                            status["processed_count"] / status["total_target"] * 100,
+                            processed_count,
+                            total_target,
+                            processed_count / total_target * 100,
                         )
 
         except asyncio.CancelledError:
