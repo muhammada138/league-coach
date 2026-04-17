@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import RegionSelector from "./RegionSelector";
 import useSearchHistory from "../hooks/useSearchHistory";
 
@@ -35,7 +35,9 @@ export default function SearchInput({
 
   const queryParams = gameName.trim().toLowerCase();
 
-  const suggestions = (() => {
+  // Bolt Optimization: Memoize the suggestions array to avoid running O(N) filtering, mapping,
+  // and Set deduplication logic on every render, significantly reducing CPU overhead during typing.
+  const suggestions = useMemo(() => {
     const list = queryParams ? (() => {
       const seen = new Set();
       const results = [];
@@ -70,7 +72,7 @@ export default function SearchInput({
       );
       return { ...item, isSaved };
     }).slice(0, 10);
-  })();
+  }, [queryParams, saved, history, suggestionTab]);
 
   const applySuggestion = (s) => {
     setGameName(s.gameName);

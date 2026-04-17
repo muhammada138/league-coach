@@ -82,7 +82,7 @@ export default function AdminData() {
     try {
       const res = await toggleSyncPause();
       setPaused(res.paused);
-    } catch (err) {
+    } catch {
       setError("Pause failed.");
     }
   };
@@ -94,7 +94,7 @@ export default function AdminData() {
       const res = await cleanupData();
       alert(`Maintenance complete. Pruned ${res.counts.lp_history} old entries.`);
       fetchData();
-    } catch (err) {
+    } catch {
       setError("Cleanup failed.");
     } finally {
       setCleaning(false);
