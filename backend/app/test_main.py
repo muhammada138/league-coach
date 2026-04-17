@@ -177,6 +177,12 @@ async def test_win_predict():
     assert "redPct" in prediction
     assert prediction["bluePct"] + prediction["redPct"] == 100
 
+def test_win_predict_empty_participants():
+    from app.services import win_predictor
+    prediction = win_predictor.predict([], {})
+    assert "error" in prediction
+    assert prediction["error"] == "No participants provided."
+
 @pytest.mark.asyncio
 async def test_db_lp_snapshot(mocker):
     from app.services import db
