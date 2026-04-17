@@ -12,8 +12,7 @@ import json
 import sqlite3
 import time
 from pathlib import Path
-
-DB_PATH = Path(__file__).parent.parent.parent / "data" / "league_coach.db"
+from ..state import DB_PATH
 
 # ---------------------------------------------------------------------------
 # Schema init  (called once at startup)

@@ -537,14 +537,21 @@ async def admin_data_summary():
 
     # Pick any available rank for the count
     ranks_data = meta.get("data", {})
-    first_rank = next(iter(ranks_data.values())) if ranks_data else {}
+    total_champs = 0
+    if ranks_data:
+        # Sum of unique champions across all ranks (using name/cid)
+        all_cids = set()
+        for r_data in ranks_data.values():
+            all_cids.update(r_data.get("champions", {}).keys())
+        total_champs = len(all_cids)
     
     return {
         "ingestion": ingest,
         "meta": {
             "updated_at": meta.get("updated_at"),
             "ranks": list(ranks_data.keys()),
-            "champion_count": len(first_rank)
+            "champion_count": total_champs,
+            "details": ranks_data # The full data
         },
         "training": {
             "match_count": match_count
