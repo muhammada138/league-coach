@@ -1765,7 +1765,7 @@ export default function Dashboard() {
 
   const { state } = useLocation();
   const navigate = useNavigate();
-  const gameCount = 20; // Hardcoded to 20 to fix rate limiting issues
+  const gameCount = 10; // Reduced from 20 to fix rate limiting issues
 
   const [resolvedPuuid, setResolvedPuuid] = useState(state?.puuid ?? null);
   const [profile, setProfile] = useState(null);
