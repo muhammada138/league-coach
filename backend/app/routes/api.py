@@ -334,8 +334,9 @@ async def live_enrich(body: LiveEnrichRequest):
 
                         score = float(_compute_perf_score(player, participants, None, md["info"]["gameDuration"]))
                         won = bool(player["win"])
+                        pos = player.get("teamPosition", "UNKNOWN")
                         participant_puuids = [p.get("puuid", "") for p in participants if p.get("puuid")]
-                        recent_games.append({"win": won, "score": round(score, 1), "matchId": md["metadata"]["matchId"], "participants": participant_puuids})
+                        recent_games.append({"win": won, "score": round(score, 1), "matchId": md["metadata"]["matchId"], "participants": participant_puuids, "position": pos})
 
                         cid = str(player.get("championId", ""))
                         champ_ids.append(cid)
@@ -357,6 +358,8 @@ async def live_enrich(body: LiveEnrichRequest):
                                 break
                         from collections import Counter as _Counter
                         main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
+                        positions = [g.get("position", "UNKNOWN") for g in recent_games if g.get("position") != "UNKNOWN"]
+                        most_common_pos = _Counter(positions).most_common(1)[0][0] if positions else "UNKNOWN"
                         base.update({
                             "last5": recent_games[:5],   # newest first (leftmost), fetch 10 for duo detection
                             "avg_score": avg_score,
@@ -364,6 +367,7 @@ async def live_enrich(body: LiveEnrichRequest):
                             "champ_wr_map": champ_wr_map,
                             "main_champs": main_champs,
                             "streak": streak,
+                            "most_common_position": most_common_pos,
                         })
         except Exception:
             api_failed = True
