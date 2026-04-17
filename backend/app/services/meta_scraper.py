@@ -15,27 +15,6 @@ RANKS = [
     "diamond", "master"
 ]
 
-# --- QWIK STATE DECODER ---
-class QwikDecoder:
-    """Decodes Lolalytics' Qwik framework JSON state."""
-    def __init__(self, pool):
-        self.pool = pool
-    
-    def resolve(self, val):
-        if not isinstance(val, str) or not val: return val
-        try:
-            # Qwik uses base-36 indices to refer to the 'objs' pool
-            idx = int(val, 36)
-            if 0 <= idx < len(self.pool):
-                return self.pool[idx]
-        except ValueError:
-            pass
-        return val
-
-    def resolve_obj(self, obj):
-        if not isinstance(obj, dict): return obj
-        return {k: self.resolve(v) for k, v in obj.items()}
-
 # --- CONFIG ---
 LANES = ["", "top", "jungle", "middle", "bottom", "support"]
 
@@ -125,72 +104,85 @@ async def fetch_rank_meta(rank: str) -> dict:
                 try:
                     state = json.loads(json_match.group(1))
                     objs = state.get("objs", [])
-                    decoder = QwikDecoder(objs)
-                    
-                    # Pass 1: Build a resolved pool to make linkage fast
-                    resolved_pool = {}
-                    for j, raw in enumerate(objs):
-                        if isinstance(raw, dict):
-                            resolved_pool[j] = decoder.resolve_obj(raw)
-                    
+                    n = len(objs)
+
+                    def _res(val):
+                        """Resolve a base-36 reference string to its pool value."""
+                        if not isinstance(val, str):
+                            return val
+                        try:
+                            idx = int(val, 36)
+                            if 0 <= idx < n:
+                                return objs[idx]
+                        except (ValueError, TypeError):
+                            pass
+                        return val
+
                     found_count = 0
-                    for idx, obj in resolved_pool.items():
-                        # Linkage Logic: Component Object (has row + cid) -> Stats Object
-                        if "row" in obj and ("cid" in obj or "hero" in obj):
+                    for raw in objs:
+                        # Component objects link a champion (cid) to a stats row (row)
+                        if not isinstance(raw, dict) or "row" not in raw or "cid" not in raw:
+                            continue
+                        try:
+                            # 1. Resolve champion ID (cid is a base-36 ref → numeric ID)
+                            cid_val = _res(raw["cid"])
                             try:
-                                # 1. Identify Champion
-                                raw_cid = obj.get("cid") or obj.get("hero")
-                                # If cid is a reference index, resolve it
-                                cid_val = decoder.resolve(raw_cid)
-                                if isinstance(cid_val, dict):
-                                    cid_val = decoder.resolve(cid_val.get("cid") or cid_val.get("id"))
-                                
-                                cid_str = str(cid_val)
-                                champ_info = _ID_CHAMP_MAP.get(cid_str)
-                                if not champ_info: continue
-                                
-                                cid = champ_info["id"]
-                                champ_slug = champ_info["slug"]
+                                cid_str = str(int(cid_val))
+                            except (ValueError, TypeError):
+                                continue
+                            champ_info = _ID_CHAMP_MAP.get(cid_str)
+                            if not champ_info:
+                                continue
 
-                                # 2. Find Stats Row
-                                row_idx = int(obj["row"], 36)
-                                stats = resolved_pool.get(row_idx)
-                                if not stats or "wr" not in stats: continue
-                                
-                                # 3. Resolve Values
-                                wr_val = float(re.search(r'([0-9\.]+)', str(stats["wr"])).group(1))
-                                games_val = int(re.search(r'([0-9]+)', str(stats["games"]).replace(",", "")).group(1))
-                                tier = str(stats.get("tier") or "N/A")
-                                rank_label = str(stats.get("rank") or "N/A")
-                                
-                                if wr_val > 0 and games_val > 0:
-                                    lane_key = lane if lane else "all"
-                                    entry_key = f"{cid}:{lane_key}"
-                                    
-                                    # Deduplication: Keep best record
-                                    if entry_key in results["champions"]:
-                                        existing = results["champions"][entry_key]
-                                        if games_val > existing["games"] or (existing["rank_label"] == "N/A" and rank_label != "N/A"):
-                                            pass 
-                                        else: continue
+                            cid = champ_info["id"]
+                            champ_slug = champ_info["slug"]
 
-                                    results["champions"][entry_key] = {
-                                        "cid": str(cid),
-                                        "name": champ_slug,
-                                        "wr": wr_val,
-                                        "tier": tier,
-                                        "games": games_val,
-                                        "lane": lane_key,
-                                        "rank_label": rank_label,
-                                        "delta": round(wr_val - results["tier_avg"], 2),
-                                        "matchups": {},
-                                        "last_checked": 0
-                                    }
-                                    found_count += 1
-                            except: continue
-                    
+                            # 2. Resolve stats object (row is a base-36 index into objs)
+                            row_idx = int(raw["row"], 36)
+                            if row_idx >= n:
+                                continue
+                            stats_raw = objs[row_idx]
+                            if not isinstance(stats_raw, dict) or "wr" not in stats_raw:
+                                continue
+
+                            # 3. Resolve each stat value one level from the stats object
+                            wr_val = _res(stats_raw["wr"])
+                            games_val = _res(stats_raw["games"])
+                            tier = str(_res(stats_raw.get("tier", "")) or "N/A")
+                            rank_label = str(_res(stats_raw.get("rank", "")) or "N/A")
+
+                            wr_float = float(wr_val)
+                            games_int = int(str(games_val).replace(",", ""))
+
+                            if wr_float > 0 and games_int > 0:
+                                lane_key = lane if lane else "all"
+                                entry_key = f"{cid}:{lane_key}"
+
+                                # Deduplication: keep entry with more games or a real rank
+                                if entry_key in results["champions"]:
+                                    existing = results["champions"][entry_key]
+                                    if not (games_int > existing["games"] or
+                                            (existing["rank_label"] == "N/A" and rank_label != "N/A")):
+                                        continue
+
+                                results["champions"][entry_key] = {
+                                    "cid": str(cid),
+                                    "name": champ_slug,
+                                    "wr": wr_float,
+                                    "tier": tier,
+                                    "games": games_int,
+                                    "lane": lane_key,
+                                    "rank_label": rank_label,
+                                    "delta": round(wr_float - results["tier_avg"], 2),
+                                    "matchups": {},
+                                    "last_checked": 0
+                                }
+                                found_count += 1
+                        except Exception:
+                            continue
+
                     logger.info("  -> Extracted %d champions from Qwik state.", found_count)
-                
+
                 except Exception as je:
                     logger.error("Failed to parse Qwik JSON: %s", je)
 
