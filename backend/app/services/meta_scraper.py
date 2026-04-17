@@ -99,22 +99,30 @@ async def fetch_rank_meta(rank: str) -> dict:
                     cid = _CHAMP_ID_MAP.get(clean_name)
                     if not cid: continue
 
-                    # Target the Win Rate column (q:key="5") specifically
-                    # Text usually looks like: ...q:key="5"><div...>51.99</div>...
+                    # 1. Win Rate (q:key="5")
                     wr_match = re.search(r'q:key="5".*?>([0-9\.]+)', row_content, re.DOTALL)
+                    # 2. Tier (q:key="3") - looks like <!--t=4t-->S+<!---->
+                    tier_match = re.search(r'q:key="3".*?-->([SABCD\+\-]+)<!', row_content, re.DOTALL)
+                    # 3. Games (q:key="9") - looks like >7,863<
+                    games_match = re.search(r'q:key="9".*?>([0-9,]+)<', row_content, re.DOTALL)
 
                     if wr_match:
                         wr = float(wr_match.group(1))
+                        tier = tier_match.group(1) if tier_match else "N/A"
+                        games_str = games_match.group(1).replace(",", "") if games_match else "0"
+                        games = int(games_str)
+
                         if str(cid) not in results["champions"]:
                             results["champions"][str(cid)] = {
                                 "name": clean_name,
                                 "wr": wr,
+                                "tier": tier,
+                                "games": games,
                                 "lane": lane,
                                 "delta": round(wr - results["tier_avg"], 2),
                                 "matchups": {},
                                 "last_checked": 0
                             }
-
                 await asyncio.sleep(1.0)
 
             except Exception as e:
