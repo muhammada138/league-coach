@@ -1,0 +1,173 @@
+Apr 17 07:37:37 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Syncing meta for rank: bronze
+Apr 17 07:37:37 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=bronze&patch=16.8 "HTTP/1.1 200 OK"   
+Apr 17 07:37:38 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Scraped 20 champions for rank bronze
+Apr 17 07:37:43 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Syncing meta for rank: silver
+Apr 17 07:37:43 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=silver&patch=16.8 "HTTP/1.1 200 OK"
+Apr 17 07:37:43 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Scraped 20 champions for rank silver
+Apr 17 07:37:48 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Syncing meta for rank: gold
+Apr 17 07:37:48 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=gold&patch=16.8 "HTTP/1.1 200 OK"     
+Apr 17 07:37:48 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Scraped 19 champions for rank gold
+Apr 17 07:37:53 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Syncing meta for rank: platinum
+Apr 17 07:37:53 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=platinum&patch=16.8 "HTTP/1.1 200 OK" 
+Apr 17 07:37:53 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Scraped 20 champions for rank platinum
+Apr 17 07:37:58 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Syncing meta for rank: emerald
+Apr 17 07:37:58 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=emerald&patch=16.8 "HTTP/1.1 200 OK"
+Apr 17 07:37:58 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Scraped 20 champions for rank emerald
+Apr 17 07:38:03 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Syncing meta for rank: diamond
+Apr 17 07:38:04 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=diamond&patch=16.8 "HTTP/1.1 200 OK"  
+Apr 17 07:38:04 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Scraped 20 champions for rank diamond
+Apr 17 07:38:09 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Syncing meta for rank: master
+Apr 17 07:38:09 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=master&patch=16.8 "HTTP/1.1 200 OK"   
+Apr 17 07:38:09 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Scraped 20 champions for rank master
+Apr 17 07:38:14 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Syncing meta for rank: grandmaster
+Apr 17 07:38:14 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=grandmaster&patch=16.8 "HTTP/1.1 200 OK"
+Apr 17 07:38:14 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Scraped 18 champions for rank grandmaster
+Apr 17 07:38:19 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Syncing meta for rank: challenger
+Apr 17 07:38:19 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=challenger&patch=16.8 "HTTP/1.1 200 OK"
+Apr 17 07:38:19 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Scraped 18 champions for rank challenger
+Apr 17 07:38:24 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.meta_scraper:Champion meta sync complete. Saved to /home/ubuntu/league-coach/backend/data/champion_meta.json
+Apr 17 07:40:00 minecraft-server-20250602-old-one-was-stuck-on-starting systemd[1]: Stopping riftiq.service - Rift IQ FastAPI Backend...
+Apr 17 07:40:01 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:     Shutting down
+Apr 17 07:40:01 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:     Waiting for application shutdown.
+Apr 17 07:40:01 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:app.services.ingestion:Ingestion worker shutting down
+Apr 17 07:40:01 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:     Application shutdown complete.
+Apr 17 07:40:01 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282294]: INFO:     Finished server process [282294]
+Apr 17 07:40:01 minecraft-server-20250602-old-one-was-stuck-on-starting systemd[1]: riftiq.service: Deactivated successfully.
+Apr 17 07:40:01 minecraft-server-20250602-old-one-was-stuck-on-starting systemd[1]: Stopped riftiq.service - Rift IQ FastAPI Backend.
+Apr 17 07:40:01 minecraft-server-20250602-old-one-was-stuck-on-starting systemd[1]: riftiq.service: Consumed 9.374s CPU time.
+Apr 17 07:40:01 minecraft-server-20250602-old-one-was-stuck-on-starting systemd[1]: Started riftiq.service - Rift IQ FastAPI Backend.
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:     Started server process [282510]
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:     Waiting for application startup.
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.win_predictor:Loaded win predictor model from /home/ubuntu/league-coach/backend/model/win_predictor_v4.pkl
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.ingestion:ML ingestion worker started (paused by default)
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:     Application startup complete.
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Starting champion meta sync (HTML Scraper)...
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Syncing meta for rank: bronze
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:httpx:HTTP Request: GET https://ddragon.leagueoflegends.com/cdn/14.5.1/data/en_US/champion.json "HTTP/1.1 200 OK"
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Loaded 170 champion mappings
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=bronze&patch=16.8 "HTTP/1.1 200 OK"   
+Apr 17 07:40:02 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Scraped 20 champions for rank bronze
+Apr 17 07:40:07 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Syncing meta for rank: silver
+Apr 17 07:40:07 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=silver&patch=16.8 "HTTP/1.1 200 OK"
+Apr 17 07:40:08 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Scraped 20 champions for rank silver
+Apr 17 07:40:13 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Syncing meta for rank: gold
+Apr 17 07:40:13 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=gold&patch=16.8 "HTTP/1.1 200 OK"     
+Apr 17 07:40:13 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Scraped 19 champions for rank gold
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:     52.11.17.126:25459 - "GET /admin/data-summary HTTP/1.1" 500 Internal Server Error
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: ERROR:    Exception in ASGI application
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: Traceback (most recent call last):
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 410, in run_asgi
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     result = await app(  # type: ignore[func-returns-value]
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     return await self.app(scope, receive, send)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/applications.py", line 1159, in __call__
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await super().__call__(scope, receive, send)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.middleware_stack(scope, receive, send)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     raise exc
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.app(scope, receive, _send)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.app(scope, receive, send)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     raise exc
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await app(scope, receive, sender)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.app(scope, receive, send)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.middleware_stack(scope, receive, send)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/routing.py", line 680, in app  
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await route.handle(scope, receive, send)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/routing.py", line 276, in handle
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.app(scope, receive, send)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/routing.py", line 134, in app    
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     raise exc
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await app(scope, receive, sender)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/routing.py", line 120, in app    
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     response = await f(request)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:                ^^^^^^^^^^^^^^^^
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/routing.py", line 674, in app    
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     raw_response = await run_endpoint_function(
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/routing.py", line 328, in run_endpoint_function
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     return await dependant.call(**values)
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/backend/app/routes/api.py", line 526, in admin_data_summary
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     from ..state import DB_PATH
+Apr 17 07:40:17 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: ImportError: cannot import name 'DB_PATH' from 'app.state' (/home/ubuntu/league-coach/backend/app/state.py)  
+Apr 17 07:40:18 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:     52.11.17.126:33534 - "POST /admin/sync-meta HTTP/1.1" 200 OK
+Apr 17 07:40:18 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Starting champion meta sync (HTML Scraper)...
+Apr 17 07:40:18 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Syncing meta for rank: bronze
+Apr 17 07:40:18 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=bronze&patch=16.8 "HTTP/1.1 200 OK"   
+Apr 17 07:40:18 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Scraped 20 champions for rank bronze
+Apr 17 07:40:18 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Syncing meta for rank: platinum
+Apr 17 07:40:18 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=platinum&patch=16.8 "HTTP/1.1 200 OK" 
+Apr 17 07:40:18 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Scraped 20 champions for rank platinum
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:     34.220.29.199:37497 - "GET /admin/data-summary HTTP/1.1" 500 Internal Server Error
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: ERROR:    Exception in ASGI application
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: Traceback (most recent call last):
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 410, in run_asgi
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     result = await app(  # type: ignore[func-returns-value]
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     return await self.app(scope, receive, send)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/applications.py", line 1159, in __call__
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await super().__call__(scope, receive, send)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.middleware_stack(scope, receive, send)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     raise exc
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.app(scope, receive, _send)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.app(scope, receive, send)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     raise exc
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await app(scope, receive, sender)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.app(scope, receive, send)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.middleware_stack(scope, receive, send)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/routing.py", line 680, in app  
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await route.handle(scope, receive, send)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/routing.py", line 276, in handle
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await self.app(scope, receive, send)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/routing.py", line 134, in app    
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     raise exc
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     await app(scope, receive, sender)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/routing.py", line 120, in app    
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     response = await f(request)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:                ^^^^^^^^^^^^^^^^
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/routing.py", line 674, in app    
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     raw_response = await run_endpoint_function(
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/venv/lib/python3.12/site-packages/fastapi/routing.py", line 328, in run_endpoint_function
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     return await dependant.call(**values)
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:   File "/home/ubuntu/league-coach/backend/app/routes/api.py", line 526, in admin_data_summary
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]:     from ..state import DB_PATH
+Apr 17 07:40:20 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: ImportError: cannot import name 'DB_PATH' from 'app.state' (/home/ubuntu/league-coach/backend/app/state.py)  
+Apr 17 07:40:23 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Syncing meta for rank: silver
+Apr 17 07:40:23 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=silver&patch=16.8 "HTTP/1.1 200 OK"   
+Apr 17 07:40:23 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Scraped 20 champions for rank silver
+Apr 17 07:40:23 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Syncing meta for rank: emerald
+Apr 17 07:40:23 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:httpx:HTTP Request: GET https://lolalytics.com/lol/tierlist/?tier=emerald&patch=16.8 "HTTP/1.1 200 OK"  
+Apr 17 07:40:23 minecraft-server-20250602-old-one-was-stuck-on-starting uvicorn[282510]: INFO:app.services.meta_scraper:Scraped 20 champions for rank emerald
+A

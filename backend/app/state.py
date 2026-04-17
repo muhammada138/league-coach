@@ -11,6 +11,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
 META_FILE_PATH = DATA_DIR / "champion_meta.json"
+DB_PATH = DATA_DIR / "league_coach.db"
 
 # Ensure data dir exists
 DATA_DIR.mkdir(parents=True, exist_ok=True)
