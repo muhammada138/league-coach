@@ -381,7 +381,6 @@ export default function AdminData() {
               </tbody>
             </table>
           </div>
-        </div>
       </div>
     </div>
   );
