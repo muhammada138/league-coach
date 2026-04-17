@@ -520,7 +520,7 @@ async def ingest_toggle():
 
 @router.get("/admin/data-summary")
 async def admin_data_summary():
-    from ..services.meta_scraper import get_meta_data, _CHAMP_ID_MAP
+    from ..services.meta_scraper import get_meta_data, _CHAMP_ID_MAP, is_sync_active, is_sync_paused
     from ..services.db import get_ingestion_status
     import sqlite3
     from ..state import DB_PATH
@@ -529,7 +529,6 @@ async def admin_data_summary():
     meta = get_meta_data()
     
     # Build a reverse map for the frontend: ID -> Name
-    # We use the Data Dragon map we already have
     champ_names = {str(v): k.capitalize() for k, v in _CHAMP_ID_MAP.items()}
 
     match_count = 0
@@ -550,12 +549,14 @@ async def admin_data_summary():
     
     return {
         "ingestion": ingest,
-        "champ_names": champ_names, # Global resolver
+        "champ_names": champ_names,
         "meta": {
             "updated_at": meta.get("updated_at"),
             "ranks": list(ranks_data.keys()),
             "champion_count": total_champs,
-            "details": ranks_data
+            "details": ranks_data,
+            "active": is_sync_active(),
+            "paused": is_sync_paused()
         },
         "training": {
             "match_count": match_count
