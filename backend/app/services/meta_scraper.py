@@ -311,8 +311,9 @@ async def sync_meta(mode="full"):
                     if sync_state["cancel_requested"]: return
                     while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(1.0)
                     
-                    # Only crawl if missing or old (24h+)
-                    if not cdata.get("matchups") or (now_ts - cdata.get("last_checked", 0)) > 86400:
+                    # Force re-crawl on explicit matchups mode; otherwise skip if fresh (<24h)
+                    stale = not cdata.get("matchups") or (now_ts - cdata.get("last_checked", 0)) > 86400
+                    if mode == "matchups" or stale:
                         name, lane = cdata["name"], cdata["lane"]
                         logger.info("  -> Crawling matchups: %s (%s) in %s", name, lane, rank)
                         matchups = await fetch_champion_matchups(rank, name, lane)
