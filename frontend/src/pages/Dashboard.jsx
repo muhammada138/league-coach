@@ -668,6 +668,9 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
           <div className="flex items-center gap-1.5 min-w-0">
             {(() => {
               const stats = liveStats?.[p.puuid];
+              // Map ID to Name for guess lookup
+              const realChampName = champIdMap[p.championId] || p.championName;
+              
               // Smite detection (Smites are 11) - use relaxed equality for string/number mixing
               const isJg = p.spell1Id == 11 || p.spell2Id == 11 || stats?.most_common_position === "JUNGLE";
               
@@ -676,8 +679,8 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
                 pos = "JUNGLE";
               } else if (stats?.most_common_position && stats.most_common_position !== "UNKNOWN" && stats.most_common_position !== "") {
                 pos = stats.most_common_position;
-              } else if (CHAMP_ROLE_GUESS[p.championName]) {
-                pos = CHAMP_ROLE_GUESS[p.championName];
+              } else if (CHAMP_ROLE_GUESS[realChampName]) {
+                pos = CHAMP_ROLE_GUESS[realChampName];
               }
 
               // Normalization
