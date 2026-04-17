@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 import httpx
 import asyncio
+import itertools
 from collections import Counter
 from ..services.riot import (
     riot_get, get_cached_rank, get_match_timeline, 
@@ -404,13 +405,18 @@ async def live_enrich(body: LiveEnrichRequest):
     # Track unique shared matchIds per pair — a set so each game counts exactly once
     # even if it appears in both players' histories.
     pair_match_sets = {}  # {(puuid_a, puuid_b): set of matchIds}
+    match_outcomes = {}   # (puuid, matchId) -> win
     for r in results:
         p_puuid = r["puuid"]
+        if not p_puuid: continue
         for g in r.get("last5", []):
             match_participants = g.get("participants", [])
             match_id = g.get("matchId", "")
             if not match_id:
                 continue
+            
+            match_outcomes[(p_puuid, match_id)] = g.get("win", False)
+            
             for other_puuid in match_participants:
                 if other_puuid != p_puuid and other_puuid in live_puuids:
                     pair = tuple(sorted([p_puuid, other_puuid]))
@@ -442,13 +448,58 @@ async def live_enrich(body: LiveEnrichRequest):
                     q.extend(list(adj[curr]))
             
             if len(component) > 1:
+                # Calculate shared stats for this component
+                # Intersect match sets of all pairs in the component
+                shared_matches = None
+                for p1, p2 in itertools.combinations(sorted(component), 2):
+                    m_set = pair_match_sets.get((p1, p2), set())
+                    if shared_matches is None:
+                        shared_matches = m_set.copy()
+                    else:
+                        shared_matches &= m_set
+                
+                if shared_matches is None: shared_matches = set()
+                
+                shared_total = len(shared_matches)
+                shared_wr = 0
+                label = "Premade"
+                
+                if shared_total > 0:
+                    shared_wins = 0
+                    for mid in shared_matches:
+                        # Find any member who has this match outcome recorded
+                        for m in component:
+                            if (m, mid) in match_outcomes:
+                                if match_outcomes[(m, mid)]:
+                                    shared_wins += 1
+                                break
+                    shared_wr = (shared_wins / shared_total) * 100
+                    
+                    label = "Solid Duo"
+                    if shared_wr > 65 and shared_total >= 3:
+                        label = "Terror Duo"
+                    elif 55 <= shared_wr <= 65:
+                        label = "Synergy Found"
+                    elif shared_wr < 45:
+                        label = "Learning Phase"
+                
                 for member in component:
-                    duo_groups[member] = next_gid
+                    duo_groups[member] = {
+                        "gid": next_gid,
+                        "wr": round(shared_wr, 1),
+                        "label": label
+                    }
                 next_gid += 1
             
     # Inject duo info back into results
     for r in results:
-        r["duo_group"] = duo_groups.get(r["puuid"], 0)
+        info = duo_groups.get(r["puuid"])
+        if info:
+            r["duo_group"] = info["gid"]
+            r["duo_wr"] = info["wr"]
+            r["duo_label"] = info["label"]
+        else:
+            r["duo_group"] = 0
 
     return {r["puuid"]: r for r in results}
 
