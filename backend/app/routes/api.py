@@ -273,7 +273,7 @@ async def live_enrich(body: LiveEnrichRequest):
         region = getattr(body, 'region', RIOT_REGION)
         routing = get_routing(region)
         
-        cache_key = f"v4:{puuid}:{body.queue_id}:{region}"
+        cache_key = f"v5:{puuid}:{body.queue_id}:{region}"
         cached = enriched_cache.get(cache_key)
         if cached: return cached
 
@@ -287,7 +287,7 @@ async def live_enrich(body: LiveEnrichRequest):
             async with httpx.AsyncClient(timeout=25.0) as client:
                 entries, match_ids = await asyncio.gather(
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                        riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10"),
+                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
                 
@@ -334,7 +334,10 @@ async def live_enrich(body: LiveEnrichRequest):
 
                         score = float(_compute_perf_score(player, participants, None, md["info"]["gameDuration"]))
                         won = bool(player["win"])
-                        pos = player.get("teamPosition", "UNKNOWN")
+                        # ARAM/non-SR queues never populate teamPosition — guard against that
+                        _FIVE_V_FIVE = {400, 420, 430, 440}
+                        raw_pos = player.get("teamPosition", "") if match_queue_filter in _FIVE_V_FIVE else ""
+                        pos = raw_pos if raw_pos else "UNKNOWN"
                         participant_puuids = [p.get("puuid", "") for p in participants if p.get("puuid")]
                         recent_games.append({"win": won, "score": round(score, 1), "matchId": md["metadata"]["matchId"], "participants": participant_puuids, "position": pos})
 
