@@ -1865,10 +1865,10 @@ export default function Dashboard() {
         setAnalysisLoading(false);
         localStorage.setItem("lastRegion", region);
       })
-      .catch(() => {
+      .catch((err) => {
         setLoading(false);
         setAnalysisLoading(false);
-        setError("Failed to load data. Check that the backend is running.");
+        setError(err.message || "Failed to load data. Check that the backend is running.");
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameName, tagLine]);

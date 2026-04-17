@@ -6,10 +6,9 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 429) {
-      console.error("Riot API rate limit exceeded. Please try again in a few seconds.");
-    }
-    if (error.code === 'ECONNABORTED') {
-      console.error("The request timed out. The backend or Riot API is slow.");
+      error.message = "Riot API is overloaded. Please wait 2 minutes.";
+    } else if (error.code === 'ECONNABORTED') {
+      error.message = "Request timed out. The server is taking too long.";
     }
     return Promise.reject(error);
   }

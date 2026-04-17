@@ -286,7 +286,7 @@ async def live_enrich(body: LiveEnrichRequest):
 
     # Single semaphore shared across all concurrent players — caps total simultaneous
     # match-detail fetches so we stay within the dev key 100 req/2 min limit.
-    _match_sem = asyncio.Semaphore(8)
+    _match_sem = asyncio.Semaphore(4)
 
     async def enrich_one(puuid: str):
         # We need region here from body, but LiveEnrichRequest would need updating
@@ -309,7 +309,7 @@ async def live_enrich(body: LiveEnrichRequest):
             async with httpx.AsyncClient(timeout=25.0) as client:
                 entries, match_ids = await asyncio.gather(
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=6&queue={match_queue_filter}"),
+                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=3&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
 

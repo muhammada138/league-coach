@@ -2,7 +2,19 @@ import httpx
 import asyncio
 import logging
 from fastapi import HTTPException
-from ..state import RIOT_HEADERS, rank_cache, timeline_cache, RIOT_REGION, RIOT_ROUTING
+from ..state import RIOT_HEADERS, rank_cache, timeline_cache, match_cache, RIOT_REGION, RIOT_ROUTING
+
+async def get_match_details(client: httpx.AsyncClient, match_id: str, routing: str = RIOT_ROUTING) -> dict:
+    if match_id in match_cache:
+        return match_cache[match_id]
+    url = f"https://{routing}.api.riotgames.com/lol/match/v5/matches/{match_id}"
+    try:
+        data = await riot_get(client, url)
+        match_cache[match_id] = data
+        return data
+    except Exception as e:
+        logger.warning("Failed to fetch match details for %s: %s", match_id, e)
+        raise e
 from .rate_limiter import acquire as _rl_acquire, update_from_response as _rl_update
 
 logger = logging.getLogger(__name__)
