@@ -727,7 +727,18 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
       <div className="px-3 pb-3">
         <div className="rounded-xl border border-slate-100 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.02] p-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/30">Win Predictor</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/30">Win Predictor</span>
+              {predictor && (
+                <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[8px] font-black text-white/20 uppercase tracking-widest">v4</span>
+              )}
+            </div>
+            {predictor && predictor.confidence !== undefined && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] font-bold text-slate-300 dark:text-white/20 uppercase tracking-tighter">Confidence:</span>
+                <span className="text-[10px] font-black text-[#c89b3c]">{Math.round(predictor.confidence * 100)}%</span>
+              </div>
+            )}
             {!predictor && (
               <span className="text-[10px] text-slate-300 dark:text-white/20 animate-pulse">Analysing…</span>
             )}

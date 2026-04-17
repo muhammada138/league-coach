@@ -5,7 +5,7 @@ import itertools
 from collections import Counter
 from ..services.riot import (
     riot_get, get_cached_rank, get_match_timeline, 
-    _compute_perf_score, _compute_diffed_lane
+    _compute_perf_score, _compute_diffed_lane, get_match_details
 )
 from ..services.groq import get_coaching_feedback, ask_coach_question
 from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, CACHE_VERSION, get_routing
@@ -309,7 +309,7 @@ async def live_enrich(body: LiveEnrichRequest):
             async with httpx.AsyncClient(timeout=25.0) as client:
                 entries, match_ids = await asyncio.gather(
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=3&queue={match_queue_filter}"),
+                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
 
@@ -332,7 +332,7 @@ async def live_enrich(body: LiveEnrichRequest):
                     # Rate-limited match detail fetches — each call acquires the shared semaphore
                     async def _fetch(mid):
                         async with _match_sem:
-                            return await riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/{mid}")
+                            return await get_match_details(client, mid, routing)
 
                     match_datas = await asyncio.gather(*[_fetch(mid) for mid in match_ids], return_exceptions=True)
 
@@ -506,7 +506,7 @@ async def live_enrich(body: LiveEnrichRequest):
 @router.post("/win-predict")
 async def win_predict(body: WinPredictRequest):
     participants = [p.model_dump() for p in body.participants]
-    return win_predictor.predict(participants, body.live_stats)
+    return await win_predictor.predict(participants, body.live_stats)
 
 @router.get("/ingest/status")
 async def ingest_status():
@@ -518,10 +518,40 @@ async def ingest_toggle():
     return await db.toggle_ingestion()
 
 
-@router.post("/admin/retrain")
-async def admin_retrain():
-    result = await asyncio.to_thread(win_predictor.retrain_on_real_data)
-    return result
+@router.get("/admin/data-summary")
+async def admin_data_summary():
+    from ..services.meta_scraper import get_meta_data
+    from ..services.db import get_ingestion_status
+    import sqlite3
+    from ..state import DB_PATH
+
+    ingest = await get_ingestion_status()
+    meta = get_meta_data()
+    
+    match_count = 0
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            match_count = conn.execute("SELECT COUNT(*) FROM training_matches").fetchone()[0]
+    except Exception:
+        pass
+
+    return {
+        "ingestion": ingest,
+        "meta": {
+            "updated_at": meta.get("updated_at"),
+            "ranks": list(meta.get("data", {}).keys()),
+            "champion_count": len(meta.get("data", {}).get("emerald", {}))
+        },
+        "training": {
+            "match_count": match_count
+        }
+    }
+
+@router.post("/admin/sync-meta")
+async def admin_sync_meta():
+    from ..services.meta_scraper import sync_meta
+    asyncio.create_task(sync_meta())
+    return {"ok": True, "message": "Meta sync started in background"}
 
 
 @router.post("/ask")

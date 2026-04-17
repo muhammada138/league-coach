@@ -231,6 +231,12 @@ export default function Navbar() {
           <NavSearch />
           <div className="flex items-center gap-2.5">
             <SavedDropdown />
+            <Link
+              to="/admin/data"
+              className="text-[10px] font-black uppercase tracking-widest text-white/20 hover:text-[#c89b3c] transition-colors"
+            >
+              Data
+            </Link>
             <div className="w-px h-4 bg-slate-200 dark:bg-white/10 mx-1 hidden sm:block" />
             <ThemeToggle />
           </div>

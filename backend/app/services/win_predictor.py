@@ -22,6 +22,7 @@ history (see MEMORY.md future plans) for better accuracy.
 
 import json
 import logging
+import asyncio
 from pathlib import Path
 
 import numpy as np
@@ -38,6 +39,8 @@ except ImportError:
     train_test_split = None
 
 from ..services.db import get_all_training_matches_sync, get_v1_training_matches_sync
+from .meta_scraper import get_meta_data
+from .role_identifier import assign_team_roles
 
 logger = logging.getLogger(__name__)
 
@@ -86,11 +89,12 @@ def load_or_train_model() -> None:
 def _generate_synthetic(n: int, seed: int = 42) -> tuple:
     """
     Generate n synthetic match rows. Returns (X, y) numpy arrays.
-    All 7 features vary — teaches the model to weight form/streak/champ_wr
-    in addition to rank and season WR.
+    All 9 features vary — teaches the model to weight form/streak/champ_wr
+    in addition to rank and meta stats.
     """
     rng = np.random.RandomState(seed)
-    WEIGHTS = np.array([0.30, 0.10, 0.25, 0.20, 0.08, 0.04, 0.03])
+    # Weights for rank, season, form, recent, champ, mastery, streak, meta_wr, matchup
+    WEIGHTS = np.array([0.30, 0.10, 0.25, 0.20, 0.08, 0.04, 0.03, 0.15, 0.10])
     mastery_choices = [0.0, 0.02, 0.04, 0.06]
     mastery_probs   = [0.55, 0.15, 0.15, 0.15]
 
@@ -106,6 +110,8 @@ def _generate_synthetic(n: int, seed: int = 42) -> tuple:
                 rng.beta(4, 4),
                 rng.choice(mastery_choices, p=mastery_probs),
                 rng.uniform(-1.0, 1.0),
+                rng.beta(5, 5), # meta_wr
+                rng.beta(5, 5), # matchup
             ])
             r_feats.append([
                 rng.beta(4, 4),
@@ -115,6 +121,8 @@ def _generate_synthetic(n: int, seed: int = 42) -> tuple:
                 rng.beta(4, 4),
                 rng.choice(mastery_choices, p=mastery_probs),
                 rng.uniform(-1.0, 1.0),
+                rng.beta(5, 5), # meta_wr
+                rng.beta(5, 5), # matchup
             ])
         blue = np.mean(b_feats, axis=0)
         red  = np.mean(r_feats, axis=0)
@@ -143,7 +151,7 @@ def _train_and_save() -> None:
         joblib.dump(model, MODEL_PATH)
         global _model
         _model = model
-        logger.info("Trained and saved win predictor model to %s", MODEL_PATH)
+        logger.info("Trained and saved win predictor model (9-dim) to %s", MODEL_PATH)
     except Exception as exc:
         logger.warning("Model training failed (%s) – using linear fallback", exc)
 
@@ -151,11 +159,11 @@ def _train_and_save() -> None:
 # ---------------------------------------------------------------------------
 # Feature extraction
 # ---------------------------------------------------------------------------
-_NEUTRAL = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.0, 0.0], dtype=float)
+_NEUTRAL = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.0, 0.0, 0.5, 0.5], dtype=float)
 
 
-def _player_features(stats: dict, champion_id: int):
-    """Return a 7-dim feature vector for a single player, or None if hidden."""
+def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald", opponent_champion_id: int = 0):
+    """Return a 9-dim feature vector for a single player, or None if hidden."""
     tier = stats.get("tier", "UNRANKED")
     wins = stats.get("wins", 0)
     losses = stats.get("losses", 0)
@@ -218,7 +226,29 @@ def _player_features(stats: dict, champion_id: int):
     streak      = max(-5, min(5, stats.get("streak", 0)))
     streak_norm = streak / 5.0
 
-    return np.array([rank_score, season_wr, form_score, recent_wr, champ_wr, mastery_score, streak_norm], dtype=float)
+    # 8. Meta WR (Lolalytics) — how good is the champ in this rank?
+    meta = get_meta_data()
+    rank_key = lobby_rank.lower()
+    if rank_key == "unranked": rank_key = "emerald"
+    
+    rank_meta = meta.get("data", {}).get(rank_key, {})
+    champ_meta = rank_meta.get(champ_id_str, {})
+    # Lolalytics WR is usually around 50.0. Scale to 0-1.
+    meta_wr = champ_meta.get("wr", 50.0) / 100.0
+    
+    # 9. Matchup Advantage — global winrate delta as proxy for lane counter
+    matchup_adv = 0.5
+    if opponent_champion_id:
+        opp_id_str = str(opponent_champion_id)
+        opp_meta = rank_meta.get(opp_id_str, {})
+        opp_wr = opp_meta.get("wr", 50.0) / 100.0
+        # Advantage is the difference between my meta WR and theirs
+        matchup_adv = 0.5 + (meta_wr - opp_wr)
+
+    return np.array([
+        rank_score, season_wr, form_score, recent_wr, champ_wr, 
+        mastery_score, streak_norm, meta_wr, matchup_adv
+    ], dtype=float)
 
 
 def _team_vector(player_feat_list: list) -> np.ndarray:
@@ -229,47 +259,60 @@ def _team_vector(player_feat_list: list) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Public inference function
 # ---------------------------------------------------------------------------
-def predict(participants: list[dict], live_stats: dict) -> dict:
+async def predict(participants: list[dict], live_stats: dict) -> dict:
     """
     Estimate win probability for both teams.
-
-    Parameters
-    ----------
-    participants : list of dicts
-        Each entry must have keys: ``puuid``, ``championId`` (int), ``teamId``
-        (100 = blue, 200 = red).
-    live_stats : dict
-        Mapping of puuid → enrichment dict (from /live-enrich).
-
-    Returns
-    -------
-    dict with ``bluePct``, ``redPct``, and ``confidence``.
     """
     if not participants:
         return {"error": "No participants provided."}
 
+    # Identify roles for lane-specific features (matchup advantage)
     blue_raw = [p for p in participants if p.get("teamId") == 100]
     red_raw  = [p for p in participants if p.get("teamId") == 200]
+    
+    blue_ids = [p.get("championId", 0) for p in blue_raw]
+    red_ids  = [p.get("championId", 0) for p in red_raw]
+    
+    blue_roles, red_roles = await asyncio.gather(
+        assign_team_roles(blue_ids),
+        assign_team_roles(red_ids)
+    )
+    
+    # Map role -> championId for matchup lookup
+    blue_role_map = {role: cid for cid, role in blue_roles.items()}
+    red_role_map  = {role: cid for cid, role in red_roles.items()}
 
-    # Extract features, leaving None for hidden players
-    blue_feats = [_player_features(live_stats.get(p.get("puuid", ""), {}), p.get("championId", 0)) for p in blue_raw]
-    red_feats  = [_player_features(live_stats.get(p.get("puuid", ""), {}), p.get("championId", 0)) for p in red_raw]
+    # Determine lobby average rank
+    known_tiers = [live_stats.get(p.get("puuid"), {}).get("tier") for p in participants if live_stats.get(p.get("puuid"), {}).get("tier")]
+    lobby_rank = "EMERALD"
+    if known_tiers:
+        # Pick the most common tier as the anchor for meta stats
+        from collections import Counter
+        lobby_rank = Counter(known_tiers).most_common(1)[0][0]
+
+    def get_feats(team_players, roles, opp_role_map):
+        feats = []
+        for p in team_players:
+            cid = p.get("championId", 0)
+            role = roles.get(cid, "UNKNOWN")
+            opp_cid = opp_role_map.get(role, 0)
+            f = _player_features(live_stats.get(p.get("puuid", ""), {}), cid, lobby_rank, opp_cid)
+            feats.append(f)
+        return feats
+
+    blue_feats = get_feats(blue_raw, blue_roles, red_role_map)
+    red_feats  = get_feats(red_raw, red_roles, blue_role_map)
 
     blue_known = [f for f in blue_feats if f is not None]
     red_known  = [f for f in red_feats if f is not None]
     all_known  = blue_known + red_known
     
-    # Calculate confidence based on ratio of known players
     confidence = len(all_known) / len(participants) if participants else 0.0
-
-    # Global mean fallback if a team is entirely hidden
     global_mean = np.mean(all_known, axis=0) if all_known else _NEUTRAL.copy()
 
-    # Team-Mean Attribution: Impute hidden players with their team's mean
     blue_team_mean = np.mean(blue_known, axis=0) if blue_known else global_mean.copy()
     red_team_mean  = np.mean(red_known, axis=0) if red_known else global_mean.copy()
 
-    # Final team vectors (mean of imputed features)
     blue_vec = blue_team_mean
     red_vec  = red_team_mean
     diff_vec = blue_vec - red_vec
@@ -277,9 +320,20 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
     X = np.concatenate([blue_vec, red_vec, diff_vec]).reshape(1, -1)
 
     if _model is not None:
+        # Ensure X is the right shape for the model (might be 7 or 9 dim depending on training)
+        # If model is 7-dim, truncate X to 7 features per team (total 21)
+        expected_dim = _model.n_features_in_
+        if expected_dim == 21 and X.shape[1] == 27:
+            # Truncate each team's features (first 7 of 9)
+            blue_7 = blue_vec[:7]
+            red_7 = red_vec[:7]
+            diff_7 = diff_vec[:7]
+            X = np.concatenate([blue_7, red_7, diff_7]).reshape(1, -1)
+        
         prob = float(_model.predict_proba(X)[0][1])
     else:
-        w = np.array([0.30, 0.10, 0.25, 0.20, 0.08, 0.04, 0.03])
+        # Linear fallback with 9-dim weights
+        w = np.array([0.30, 0.10, 0.25, 0.20, 0.08, 0.04, 0.03, 0.15, 0.10])
         diff_val = float(np.dot(blue_vec - red_vec, w))
         prob = 1.0 / (1.0 + np.exp(-diff_val * 25.0))
 
