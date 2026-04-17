@@ -142,6 +142,18 @@ export default function AdminData() {
               </div>
               
               <div className="flex flex-wrap items-center gap-3">
+                <div className="relative">
+                  <input 
+                    type="text"
+                    placeholder="Search champion..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-[#c89b3c]/50 w-64 transition-all"
+                  />
+                  {search && (
+                    <button onClick={() => setSearch("")} className="absolute right-3 top-2.5 text-white/20 hover:text-white">×</button>
+                  )}
+                </div>
                 {selectedChamp ? (
                   <button
                     onClick={() => setSelectedChamp(null)}
@@ -150,36 +162,22 @@ export default function AdminData() {
                     Back to Tierlist
                   </button>
                 ) : (
-                  <>
-                    <div className="relative">
-                      <input 
-                        type="text"
-                        placeholder="Search champion..."
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-[#c89b3c]/50 w-64 transition-all"
-                      />
-                      {search && (
-                        <button onClick={() => setSearch("")} className="absolute right-3 top-2.5 text-white/20 hover:text-white">×</button>
-                      )}
-                    </div>
-                    <button
-                      onClick={handleSyncMeta}
-                      disabled={syncing}
-                      className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2 ${
-                        syncing ? 'bg-amber-500/20 text-amber-500' : 'bg-[#c89b3c] text-black hover:bg-[#a67c2e]'
-                      }`}
-                    >
-                      {syncing ? (
-                        <>
-                          <span className="w-3 h-3 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
-                          Syncing...
-                        </>
-                      ) : (
-                        "Deep Sync All"
-                      )}
-                    </button>
-                  </>
+                  <button
+                    onClick={handleSyncMeta}
+                    disabled={syncing}
+                    className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2 ${
+                      syncing ? 'bg-amber-500/20 text-amber-500' : 'bg-[#c89b3c] text-black hover:bg-[#a67c2e]'
+                    }`}
+                  >
+                    {syncing ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+                        Syncing...
+                      </>
+                    ) : (
+                      "Deep Sync All"
+                    )}
+                  </button>
                 )}
               </div>
             </div>
