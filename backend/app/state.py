@@ -96,3 +96,10 @@ timeline_cache = TTLCache(ttl_seconds=86400)  # 24 hours
 route_cache = TTLCache(ttl_seconds=60)   # 1 minute for analyze/history results
 enriched_cache = TTLCache(ttl_seconds=3600)  # 1 hour for enriched player stats
 match_cache = TTLCache(ttl_seconds=86400)  # 24 hours
+
+# Global Sync Control (Persistent for the process life)
+sync_state = {
+    "active": False,
+    "paused": False,
+    "cancel_requested": False
+}

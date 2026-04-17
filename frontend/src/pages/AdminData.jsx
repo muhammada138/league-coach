@@ -58,7 +58,7 @@ export default function AdminData() {
   const handleCancelSync = async () => {
     try {
       await cancelSync();
-      setSyncing(false);
+      // Status poller will pick up the change
     } catch (err) {
       setError("Cancel request failed.");
     }
@@ -91,11 +91,12 @@ export default function AdminData() {
   }, [data, selectedRank]);
 
   const champions = useMemo(() => {
-    return Object.entries(rankData.champions).map(([cid, info]) => ({
-      id: cid,
-      ...info
-    }));
-  }, [rankData]);
+    return Object.entries(rankData.champions).map(([cid, info]) => {
+      // Resolve name globally if missing in this rank
+      const name = info.name || data?.champ_names?.[cid] || "Unknown";
+      return { id: cid, ...info, name };
+    });
+  }, [rankData, data]);
 
   const requestSort = (key) => {
     let direction = 'desc';
@@ -131,17 +132,17 @@ export default function AdminData() {
   }, [champions, search, selectedRole, sortConfig]);
 
   const selectedChampData = selectedChamp ? rankData.champions[selectedChamp] : null;
-  
+  const selectedChampName = selectedChampData?.name || data?.champ_names?.[selectedChamp] || "Champion";
+
   const matchupData = useMemo(() => {
     if (!selectedChampData || !selectedChampData.matchups) return [];
     
     return Object.entries(selectedChampData.matchups).map(([opp_cid, wr]) => {
-      const opp_champ = rankData.champions[opp_cid];
-      const opp_name = opp_champ ? opp_champ.name : "Unknown";
+      const opp_name = data?.champ_names?.[opp_cid] || "Unknown";
       const delta = wr - 50.0;
       return { id: opp_cid, name: opp_name, wr, delta };
     }).sort((a, b) => b.wr - a.wr);
-  }, [selectedChampData, rankData]);
+  }, [selectedChampData, data]);
 
   if (!data && !error) return (
     <div className="min-h-screen flex items-center justify-center bg-[#05080f]">
@@ -200,14 +201,14 @@ export default function AdminData() {
                     <>
                       <button onClick={() => setSelectedChamp(null)} className="hover:text-[#c89b3c] transition-colors">Explorer</button>
                       <span className="text-white/20">/</span>
-                      <span>{selectedChampData?.name} Matchups</span>
+                      <span>{selectedChampName} Matchups</span>
                     </>
                   ) : (
                     "Lolalytics Meta Explorer"
                   )}
                 </h2>
                 <p className="text-white/30 text-[10px] font-black uppercase tracking-widest leading-relaxed">
-                  {selectedChamp ? `Specific counter winrates for ${selectedChampData?.name} in ${selectedRank}` : "Verifying role-specific winrates & lane deltas"}
+                  {selectedChamp ? `Specific counter winrates for ${selectedChampName} in ${selectedRank}` : "Verifying role-specific winrates & lane deltas"}
                 </p>
               </div>
               
