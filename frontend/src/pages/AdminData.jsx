@@ -46,12 +46,12 @@ export default function AdminData() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleSyncMeta = async () => {
+  const handleSyncMeta = async (mode = "full") => {
     if (syncing) return;
     setSyncing(true);
     setError("");
     try {
-      await syncMeta();
+      await syncMeta(mode);
     } catch (err) {
       setError("Sync failed: " + (err.response?.data?.detail || err.message));
       setSyncing(false);
@@ -77,11 +77,11 @@ export default function AdminData() {
   };
 
   const handleCleanup = async () => {
-    if (!confirm("Are you sure? This will delete old history permanently.")) return;
+    if (!confirm("Run standard maintenance? (Prunes LP history entries older than 30 days. Training matches are NEVER deleted.)")) return;
     setCleaning(true);
     try {
       const res = await cleanupData();
-      alert(`Deleted ${res.counts.lp_history} entries.`);
+      alert(`Maintenance complete. Pruned ${res.counts.lp_history} old entries.`);
       fetchData();
     } catch (err) {
       setError("Cleanup failed.");
@@ -95,13 +95,20 @@ export default function AdminData() {
   }, [data, selectedRank]);
 
   const champions = useMemo(() => {
-    return Object.entries(rankData.champions).map(([cid, info]) => ({
-      id: cid,
-      ...info,
-      name: info.name || data?.champ_names?.[cid] || "Unknown",
-      tier_val: TIER_ORDER[info.tier] ?? 15
-    }));
-  }, [rankData, data]);
+    return Object.entries(rankData.champions)
+      .filter(([key, info]) => {
+        const lane = info.lane || "all";
+        return selectedRole === "all" ? lane === "all" : lane === selectedRole;
+      })
+      .map(([key, info]) => ({
+        id: key,
+        cid: info.cid,
+        ...info,
+        name: info.name || data?.champ_names?.[info.cid] || "Unknown",
+        tier_val: TIER_ORDER[info.tier] ?? 15,
+        rank_num: info.rank_label || "N/A"
+      }));
+  }, [rankData, data, selectedRole]);
 
   const requestSort = (key) => {
     let direction = 'desc';
@@ -116,31 +123,7 @@ export default function AdminData() {
   };
 
   const processedChamps = useMemo(() => {
-    // 1. First, calculate rankings per role
-    const byRole = {};
-    [...champions].sort((a, b) => b.wr - a.wr).forEach(c => {
-      const role = c.lane || 'unknown';
-      if (!byRole[role]) byRole[role] = [];
-      byRole[role].push(c);
-    });
-
-    // Map champion -> their rank in their specific lane
-    const rankMap = {};
-    Object.values(byRole).forEach(list => {
-      list.forEach((c, idx) => {
-        rankMap[c.id] = idx + 1;
-      });
-    });
-
-    let list = champions.map(c => ({
-      ...c,
-      rank_num: rankMap[c.id]
-    }));
-
-    // 2. Role Filter
-    if (selectedRole !== "all") {
-      list = list.filter(c => c.lane?.toLowerCase() === selectedRole);
-    }
+    let list = [...champions];
     
     // 3. Search Filter
     if (search) {
@@ -162,7 +145,7 @@ export default function AdminData() {
   }, [champions, search, selectedRole, sortConfig]);
 
   const selectedChampData = selectedChamp ? rankData.champions[selectedChamp] : null;
-  const selectedChampName = selectedChampData?.name || data?.champ_names?.[selectedChamp] || "Champion";
+  const selectedChampName = selectedChampData?.name || data?.champ_names?.[selectedChampData?.cid || selectedChamp] || "Champion";
 
   const matchupData = useMemo(() => {
     if (!selectedChampData || !selectedChampData.matchups) return [];
@@ -190,17 +173,21 @@ export default function AdminData() {
           <StatCard title="Inventory" value={data?.meta?.champion_count} label="Champions" color="#3b82f6" />
           <StatCard 
             title="Status" 
-            value={syncing ? (paused ? "Paused" : "Syncing") : "Standby"} 
+            value={syncing ? (paused ? "Paused" : (data?.meta?.mode === 'matchups' ? "Deep Crawl" : "Fast Sync")) : "Standby"} 
             label={data?.meta?.updated_at ? new Date(data.meta.updated_at * 1000).toLocaleTimeString() : "No Data"}
             color={syncing ? (paused ? "#f87171" : "#f59e0b") : "#10b981"} 
           />
-          <button
-            onClick={handleCleanup}
-            disabled={cleaning}
-            className="h-full bg-white/[0.03] border border-white/[0.07] rounded-3xl p-6 hover:bg-white/[0.05] transition-all text-xs font-black uppercase tracking-widest text-white/40 hover:text-white"
-          >
-            {cleaning ? "Cleaning..." : "Purge Stale Data"}
-          </button>
+          <div className="bg-white/[0.03] border border-white/[0.07] rounded-3xl p-6 backdrop-blur-sm shadow-xl flex flex-col justify-between">
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-[#c89b3c]">Maintenance</h2>
+            <div className="text-[9px] font-bold text-white/20 uppercase leading-relaxed mt-2">Training data and LP history are protected from deletion.</div>
+            <button
+              onClick={handleCleanup}
+              disabled={cleaning}
+              className="mt-3 w-full bg-white/5 border border-white/10 rounded-xl py-2 hover:bg-white/10 transition-all text-[9px] font-black uppercase tracking-widest text-white/40 hover:text-white"
+            >
+              {cleaning ? "Running..." : "Prune Old LP Data"}
+            </button>
+          </div>
         </div>
 
         {/* Sync Controls */}
@@ -208,7 +195,7 @@ export default function AdminData() {
           <div className="mb-8 flex items-center justify-between bg-white/[0.03] border border-white/[0.07] p-6 rounded-3xl">
             <div>
               <h3 className="text-sm font-black uppercase tracking-widest text-[#c89b3c]">Control Panel</h3>
-              <p className="text-[10px] text-white/30 uppercase font-bold">Manage background meta-data crawling</p>
+              <p className="text-[10px] text-white/30 uppercase font-bold">Update Tierlist (Fast) or Matchups (Deep)</p>
             </div>
             <div className="flex gap-3">
               {syncing && (
@@ -219,14 +206,29 @@ export default function AdminData() {
                   {paused ? "Resume Sync" : "Pause Sync"}
                 </button>
               )}
-              <button
-                onClick={syncing ? handleCancelSync : handleSyncMeta}
-                className={`px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                  syncing ? 'bg-rose-500/20 text-rose-500 border border-rose-500/20 hover:bg-rose-500/30' : 'bg-[#c89b3c] text-black hover:bg-[#a67c2e]'
-                }`}
-              >
-                {syncing ? "Stop Crawl" : "Start Deep Sync"}
-              </button>
+              {!syncing ? (
+                <>
+                  <button
+                    onClick={() => handleSyncMeta("tierlist")}
+                    className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-blue-600/20 text-blue-400 border border-blue-600/20 hover:bg-blue-600/30"
+                  >
+                    Update Tierlist
+                  </button>
+                  <button
+                    onClick={() => handleSyncMeta("full")}
+                    className="px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-[#c89b3c] text-black hover:bg-[#a67c2e]"
+                  >
+                    Start Deep Sync
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleCancelSync}
+                  className="px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-rose-500/20 text-rose-500 border border-rose-500/20 hover:bg-rose-500/30"
+                >
+                  Stop {data?.meta?.mode === 'tierlist' ? 'Tierlist Sync' : 'Deep Crawl'}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -235,14 +237,23 @@ export default function AdminData() {
         <div className="bg-white/[0.03] border border-white/[0.07] rounded-3xl overflow-hidden shadow-2xl backdrop-blur-sm">
           <div className="p-8 border-b border-white/[0.05]">
             <div className="flex flex-col gap-8">
-              <div className="flex justify-between items-end">
-                <div>
-                  <h2 className="text-2xl font-black uppercase italic tracking-tighter">
-                    {selectedChamp ? selectedChampName : "Meta Explorer"}
-                  </h2>
-                  <p className="text-white/20 text-xs font-bold uppercase tracking-widest mt-1">
-                    {selectedChamp ? "Specific Lane Matchups" : "Global performance across tiers"}
-                  </p>
+                <div className="flex gap-4 items-center">
+                  {selectedChamp && (
+                    <button 
+                      onClick={() => setSelectedChamp(null)}
+                      className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2"
+                    >
+                      <span className="text-[#c89b3c]">←</span> Back to Tierlist
+                    </button>
+                  )}
+                  <div>
+                    <h2 className="text-2xl font-black uppercase italic tracking-tighter">
+                      {selectedChamp ? selectedChampName : "Meta Explorer"}
+                    </h2>
+                    <p className="text-white/20 text-xs font-bold uppercase tracking-widest mt-1">
+                      {selectedChamp ? "Specific Lane Matchups" : "Global performance across tiers"}
+                    </p>
+                  </div>
                 </div>
                 <div className="relative">
                   <input 

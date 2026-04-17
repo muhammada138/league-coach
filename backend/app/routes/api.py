@@ -520,7 +520,7 @@ async def ingest_toggle():
 
 @router.get("/admin/data-summary")
 async def admin_data_summary():
-    from ..services.meta_scraper import get_meta_data, _CHAMP_ID_MAP, is_sync_active, is_sync_paused
+    from ..services.meta_scraper import get_meta_data, _CHAMP_ID_MAP, is_sync_active, is_sync_paused, get_sync_mode
     from ..services.db import get_ingestion_status
     import sqlite3
     from ..state import DB_PATH
@@ -556,7 +556,8 @@ async def admin_data_summary():
             "champion_count": total_champs,
             "details": ranks_data,
             "active": is_sync_active(),
-            "paused": is_sync_paused()
+            "paused": is_sync_paused(),
+            "mode": get_sync_mode()
         },
         "training": {
             "match_count": match_count
@@ -564,10 +565,10 @@ async def admin_data_summary():
     }
 
 @router.post("/admin/sync-meta")
-async def admin_sync_meta():
+async def admin_sync_meta(mode: str = "full"):
     from ..services.meta_scraper import sync_meta
-    asyncio.create_task(sync_meta())
-    return {"ok": True, "message": "Meta sync started in background"}
+    asyncio.create_task(sync_meta(mode))
+    return {"ok": True, "message": f"Meta sync ({mode}) started in background"}
 
 @router.post("/admin/cancel-sync")
 async def admin_cancel_sync():

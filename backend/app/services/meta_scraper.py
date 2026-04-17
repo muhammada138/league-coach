@@ -16,7 +16,8 @@ RANKS = [
 ]
 
 # Lanes to scrape
-LANES = ["top", "jungle", "middle", "bottom", "support"]
+# Lanes to scrape (empty string = All Roles)
+LANES = ["", "top", "jungle", "middle", "bottom", "support"]
 
 # Champion Name -> ID mapping
 _CHAMP_ID_MAP = {}
@@ -73,11 +74,14 @@ async def fetch_champion_matchups(rank: str, champ_name: str, lane: str) -> dict
 async def fetch_rank_meta(rank: str) -> dict:
     await _ensure_champ_ids()
     results = {"tier_avg": 50.0, "champions": {}}
-    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://lolalytics.com/"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://lolalytics.com/"}
+    
     async with httpx.AsyncClient(timeout=30.0) as client:
         for lane in LANES:
-            url = f"https://lolalytics.com/lol/tierlist/?lane={lane}&tier={rank}&patch=16.8"
+            lane_query = f"&lane={lane}" if lane else ""
+            url = f"https://lolalytics.com/lol/tierlist/?tier={rank}&patch=16.8{lane_query}"
             try:
+                logger.info("Scraping tierlist: rank=%s, lane=%s", rank, lane or "all")
                 resp = await client.get(url, headers=headers)
                 if resp.status_code != 200: continue
                 html = resp.text
@@ -87,113 +91,166 @@ async def fetch_rank_meta(rank: str) -> dict:
                     if avg_match: results["tier_avg"] = float(avg_match.group(1))
 
                 # Isolate the data rows using a more robust pattern
-                # Every row starts with a build link
                 rows = re.split(r'href="/lol/([^/"]+)/build/\??[^"]*"', html)
 
-                # re.split with a capturing group returns [pre, group, post, pre, group, post...]
-                # so index 1 is name, index 2 is the row content, etc.
                 for i in range(1, len(rows), 2):
                     clean_name = rows[i].lower().replace("-", "")
-                    row_content = rows[i+1][:2000] # Limit search to the row area
+                    row_content = rows[i+1][:2000]
 
                     cid = _CHAMP_ID_MAP.get(clean_name)
                     if not cid: continue
 
-                    # 1. Win Rate (q:key="5")
-                    wr_match = re.search(r'q:key="5".*?>([0-9\.]+)', row_content, re.DOTALL)
-                    # 2. Tier (q:key="3") - looks like <!--t=4t-->S+<!---->
-                    tier_match = re.search(r'q:key="3".*?-->([SABCD\+\-]+)<!', row_content, re.DOTALL)
-                    # 3. Games (q:key="9") - looks like >7,863<
-                    games_match = re.search(r'q:key="9".*?>([0-9,]+)<', row_content, re.DOTALL)
+                    # Target Rank (q:key="1")
+                    rank_match = re.search(r'q:key="1".*?>(#[0-9]+)<', row_content, re.DOTALL)
+                    rank_label = rank_match.group(1) if rank_match else "N/A"
+
+                    # Target Global Win Rate column (q:key="5")
+                    wr_match = re.search(r'q:key="5".*?>([456][0-9]\.[0-9]+)<', row_content, re.DOTALL)
+                    if not wr_match:
+                        wr_match = re.search(r'q:key="5".*?([456][0-9]\.[0-9]+)', row_content, re.DOTALL)
 
                     if wr_match:
                         wr = float(wr_match.group(1))
+                        
+                        # Target Tier (q:key="3") and Games (q:key="9")
+                        tier_match = re.search(r'q:key="3".*?>\s*([SABCD\+\-]+|N/A)\s*<', row_content, re.DOTALL)
+                        games_match = re.search(r'q:key="9".*?>\s*([0-9,]+)\s*<', row_content, re.DOTALL)
+
                         tier = tier_match.group(1) if tier_match else "N/A"
                         games_str = games_match.group(1).replace(",", "") if games_match else "0"
                         games = int(games_str)
 
-                        if str(cid) not in results["champions"]:
-                            results["champions"][str(cid)] = {
-                                "name": clean_name,
-                                "wr": wr,
-                                "tier": tier,
-                                "games": games,
-                                "lane": lane,
-                                "delta": round(wr - results["tier_avg"], 2),
-                                "matchups": {},
-                                "last_checked": 0
-                            }
-                await asyncio.sleep(1.0)
+                        # Store with composite key cid:lane (or cid:all)
+                        lane_key = lane if lane else "all"
+                        entry_key = f"{cid}:{lane_key}"
+                        
+                        results["champions"][entry_key] = {
+                            "cid": str(cid),
+                            "name": clean_name,
+                            "wr": wr,
+                            "tier": tier,
+                            "games": games,
+                            "lane": lane_key,
+                            "rank_label": rank_label,
+                            "delta": round(wr - results["tier_avg"], 2),
+                            "matchups": {},
+                            "last_checked": 0
+                        }
+                # Minimal sleep between lanes
+                await asyncio.sleep(0.1)
 
             except Exception as e:
                 logger.error("Error in fetch_rank_meta lane %s for %s: %s", lane, rank, e)
     return results
 
+sync_state = {"active": False, "paused": False, "cancel_requested": False, "mode": "idle"}
+
 def is_sync_active(): return sync_state["active"]
 def is_sync_paused(): return sync_state["paused"]
+def get_sync_mode(): return sync_state["mode"]
+
 def toggle_pause():
     sync_state["paused"] = not sync_state["paused"]
     return sync_state["paused"]
+
 def cancel_sync():
     if sync_state["active"]:
         sync_state["cancel_requested"] = True
         return True
     return False
 
-async def sync_meta():
+async def sync_meta(mode="full"):
     if sync_state["active"]: return False
     sync_state["active"] = True
     sync_state["cancel_requested"] = False
     sync_state["paused"] = False
-    logger.info("Starting Role-Aware Meta Sync...")
+    sync_state["mode"] = mode
+    
+    logger.info("Starting Meta Sync (Mode: %s)...", mode)
     try:
         existing = get_meta_data()
         full_meta = existing.get("data", {})
-        for rank in RANKS:
-            if sync_state["cancel_requested"]: break
-            while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(1.0)
-            logger.info("Syncing tierlist: %s", rank)
-            rank_data = await fetch_rank_meta(rank)
-            if not rank_data: continue
-            if rank not in full_meta:
-                full_meta[rank] = rank_data
-            else:
-                full_meta[rank]["tier_avg"] = rank_data["tier_avg"]
-                for cid, cdata in rank_data["champions"].items():
-                    if cid not in full_meta[rank]["champions"]:
-                        full_meta[rank]["champions"][cid] = cdata
-                    else:
-                        full_meta[rank]["champions"][cid]["wr"] = cdata["wr"]
-                        full_meta[rank]["champions"][cid]["delta"] = cdata["delta"]
-                        full_meta[rank]["champions"][cid]["lane"] = cdata["lane"]
-        import random
-        now_ts = int(time.time())
-        for rank in RANKS:
-            if sync_state["cancel_requested"]: break
-            if rank not in full_meta: continue
-            champs = full_meta[rank].get("champions", {})
-            for cid_str, cdata in champs.items():
+        
+        # --- PHASE 1: TIERLIST (FAST) ---
+        if mode in ("full", "tierlist"):
+            for rank in RANKS:
                 if sync_state["cancel_requested"]: break
                 while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(1.0)
-                if not cdata.get("matchups") and (now_ts - cdata.get("last_checked", 0)) > 86400:
-                    name, lane = cdata["name"], cdata["lane"]
-                    logger.info("  -> Crawling matchups: %s (%s) in %s", name, lane, rank)
-                    matchups = await fetch_champion_matchups(rank, name, lane)
-                    full_meta[rank]["champions"][cid_str]["last_checked"] = now_ts
-                    if matchups:
-                        full_meta[rank]["champions"][cid_str]["matchups"] = matchups
-                    if int(cid_str) % 5 == 0:
-                        with open(META_FILE_PATH, "w") as f:
-                            json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
-                    await asyncio.sleep(random.uniform(4.0, 8.0))
+                
+                logger.info("Syncing tierlist: %s", rank)
+                rank_data = await fetch_rank_meta(rank)
+                if not rank_data: continue
+                
+                if rank not in full_meta:
+                    full_meta[rank] = rank_data
+                else:
+                    full_meta[rank]["tier_avg"] = rank_data["tier_avg"]
+                    for cid, cdata in rank_data["champions"].items():
+                        if cid not in full_meta[rank]["champions"]:
+                            full_meta[rank]["champions"][cid] = cdata
+                        else:
+                            target = full_meta[rank]["champions"][cid]
+                            target["wr"] = cdata["wr"]
+                            target["tier"] = cdata["tier"]
+                            target["games"] = cdata["games"]
+                            target["lane"] = cdata["lane"]
+                            target["delta"] = cdata["delta"]
+                            target["rank_label"] = cdata.get("rank_label", "N/A")
+
+            # Save Tierlist immediately
+            with open(META_FILE_PATH, "w") as f:
+                json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
+            logger.info("Tierlist Phase Complete.")
+
+        # --- PHASE 2: MATCHUPS (DEEP) ---
+        if mode in ("full", "matchups") and not sync_state["cancel_requested"]:
+            import random
+            sem = asyncio.Semaphore(10)
+            now_ts = int(time.time())
+
+            async def crawl_one(rank, cid_str, cdata):
+                async with sem:
+                    if sync_state["cancel_requested"]: return
+                    while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(1.0)
+                    
+                    # Only crawl if missing or old (24h+)
+                    if not cdata.get("matchups") or (now_ts - cdata.get("last_checked", 0)) > 86400:
+                        name, lane = cdata["name"], cdata["lane"]
+                        logger.info("  -> Crawling matchups: %s (%s) in %s", name, lane, rank)
+                        matchups = await fetch_champion_matchups(rank, name, lane)
+                        
+                        full_meta[rank]["champions"][cid_str]["last_checked"] = now_ts
+                        if matchups:
+                            full_meta[rank]["champions"][cid_str]["matchups"] = matchups
+                        
+                        await asyncio.sleep(random.uniform(0.2, 0.8))
+                        
+                        if random.random() < 0.15: # 15% chance to save
+                            with open(META_FILE_PATH, "w") as f:
+                                json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
+
+            tasks = []
+            for rank in RANKS:
+                if sync_state["cancel_requested"]: break
+                if rank not in full_meta: continue
+                champs = full_meta[rank].get("champions", {})
+                for cid_str, cdata in champs.items():
+                    tasks.append(crawl_one(rank, cid_str, cdata))
+            
+            if tasks:
+                await asyncio.gather(*tasks)
+            logger.info("Matchup Phase Complete.")
+
         if not sync_state["cancel_requested"]:
             with open(META_FILE_PATH, "w") as f:
                 json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": False}, f, indent=2)
-            logger.info("Incremental Sync Complete.")
+            logger.info("Sync Process Finished.")
+
+    except Exception as e:
+        logger.error("Sync failed: %s", e)
     finally:
         sync_state["active"] = False
-        sync_state["cancel_requested"] = False
-        sync_state["paused"] = False
+        sync_state["mode"] = "idle"
     return True
 
 def get_meta_data() -> dict:

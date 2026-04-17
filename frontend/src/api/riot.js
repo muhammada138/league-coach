@@ -50,8 +50,8 @@ export const getTeammates = (puuid) =>
 export const getAdminDataSummary = () =>
   api.get("/admin/data-summary").then((r) => r.data);
 
-export const syncMeta = () =>
-  api.post("/admin/sync-meta").then((r) => r.data);
+export const syncMeta = (mode = "full") =>
+  api.post("/admin/sync-meta", null, { params: { mode } }).then((r) => r.data);
 
 export const cancelSync = () =>
   api.post("/admin/cancel-sync").then((r) => r.data);
