@@ -162,7 +162,7 @@ def _train_and_save() -> None:
 _NEUTRAL = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.0, 0.0, 0.5, 0.5], dtype=float)
 
 
-def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald", opponent_champion_id: int = 0):
+def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald", opponent_champion_id: int = 0, role: str = "all"):
     """Return a 9-dim feature vector for a single player, or None if hidden."""
     tier = stats.get("tier", "UNRANKED")
     wins = stats.get("wins", 0)
@@ -232,7 +232,15 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
     if rank_key == "unranked": rank_key = "emerald"
     
     rank_meta = meta.get("data", {}).get(rank_key, {})
-    champ_meta = rank_meta.get(champ_id_str, {})
+    
+    # Try lane-specific lookup first, then fall back to 'all'
+    role_key = role.lower()
+    if role_key == "utility": role_key = "support" # Normalize Riot positional to scraper
+    
+    champ_meta = rank_meta.get(f"{champ_id_str}:{role_key}")
+    if not champ_meta:
+        champ_meta = rank_meta.get(f"{champ_id_str}:all", rank_meta.get(champ_id_str, {}))
+
     # Lolalytics WR is usually around 50.0. Scale to 0-1.
     meta_wr = champ_meta.get("wr", 50.0) / 100.0
     
@@ -247,7 +255,8 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
             matchup_adv = matchups[opp_id_str] / 100.0
         else:
             # Fallback to global winrate delta as proxy for lane counter
-            opp_meta = rank_meta.get(opp_id_str, {})
+            # Use 'all' role for opponent meta if specific not found
+            opp_meta = rank_meta.get(f"{opp_id_str}:{role_key}", rank_meta.get(f"{opp_id_str}:all", {}))
             opp_wr = opp_meta.get("wr", 50.0) / 100.0
             # Advantage is the difference between my meta WR and theirs
             matchup_adv = 0.5 + (meta_wr - opp_wr)
@@ -303,7 +312,7 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
             cid = p.get("championId", 0)
             role = roles.get(cid, "UNKNOWN")
             opp_cid = opp_role_map.get(role, 0)
-            f = _player_features(live_stats.get(p.get("puuid", ""), {}), cid, lobby_rank, opp_cid)
+            f = _player_features(live_stats.get(p.get("puuid", ""), {}), cid, lobby_rank, opp_cid, role)
             feats.append(f)
         return feats
 

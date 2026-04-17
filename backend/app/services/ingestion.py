@@ -335,8 +335,7 @@ async def ingestion_worker() -> None:
     global _tier_idx, _tier_page
     logger.info("ML ingestion worker started (paused by default)")
     
-    # Initial meta sync on startup
-    asyncio.create_task(sync_meta())
+    # Initial setup
     db.cleanup_stale_data()
     last_meta_sync = _time.time()
     last_cleanup = _time.time()
@@ -345,6 +344,7 @@ async def ingestion_worker() -> None:
         try:
             # Sync meta and cleanup daily
             now = _time.time()
+            # We still keep the periodic auto-sync but remove the immediate startup trigger
             if (now - last_meta_sync) > 86400:
                 asyncio.create_task(sync_meta())
                 last_meta_sync = now

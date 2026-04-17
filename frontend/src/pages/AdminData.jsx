@@ -5,6 +5,10 @@ function fmt(n) {
   return n?.toLocaleString() ?? "0";
 }
 
+const TIER_ORDER = {
+  "S+": 0, "S": 1, "S-": 2, "A+": 3, "A": 4, "A-": 5, "B+": 6, "B": 7, "B-": 8, "C+": 9, "C": 10, "C-": 11, "D+": 12, "D": 13, "D-": 14, "N/A": 15
+};
+
 export default function AdminData() {
   const [data, setData] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -15,14 +19,13 @@ export default function AdminData() {
   const [selectedRole, setSelectedRole] = useState("all");
   const [search, setSearch] = useState("");
   const [selectedChamp, setSelectedChamp] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: 'wr', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'tier_val', direction: 'asc' });
 
   const fetchData = async () => {
     try {
       const summary = await getAdminDataSummary();
       setData(summary);
       setError("");
-      
       setSyncing(summary?.meta?.active || false);
       setPaused(summary?.meta?.paused || false);
       
@@ -39,16 +42,16 @@ export default function AdminData() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 4000); 
+    const interval = setInterval(fetchData, 5000); 
     return () => clearInterval(interval);
   }, []);
 
-  const handleSyncMeta = async () => {
+  const handleSyncMeta = async (mode = "full") => {
     if (syncing) return;
     setSyncing(true);
     setError("");
     try {
-      await syncMeta();
+      await syncMeta(mode);
     } catch (err) {
       setError("Sync failed: " + (err.response?.data?.detail || err.message));
       setSyncing(false);
@@ -74,11 +77,11 @@ export default function AdminData() {
   };
 
   const handleCleanup = async () => {
-    if (!confirm("Are you sure? This will delete old history permanently.")) return;
+    if (!confirm("Run standard maintenance? (Prunes LP history entries older than 30 days. Training matches are NEVER deleted.)")) return;
     setCleaning(true);
     try {
       const res = await cleanupData();
-      alert(`Deleted ${res.counts.lp_history} entries.`);
+      alert(`Maintenance complete. Pruned ${res.counts.lp_history} old entries.`);
       fetchData();
     } catch (err) {
       setError("Cleanup failed.");
@@ -92,36 +95,49 @@ export default function AdminData() {
   }, [data, selectedRank]);
 
   const champions = useMemo(() => {
-    return Object.entries(rankData.champions).map(([cid, info]) => ({
-      id: cid,
-      ...info,
-      name: info.name || data?.champ_names?.[cid] || "Unknown"
-    }));
-  }, [rankData, data]);
+    return Object.entries(rankData.champions)
+      .filter(([key, info]) => {
+        const lane = info.lane || "all";
+        return selectedRole === "all" ? lane === "all" : lane === selectedRole;
+      })
+      .map(([key, info]) => ({
+        id: key,
+        cid: info.cid,
+        ...info,
+        name: info.name || data?.champ_names?.[info.cid] || "Unknown",
+        tier_val: TIER_ORDER[info.tier] ?? 15,
+        rank_num: info.rank_label || "N/A"
+      }));
+  }, [rankData, data, selectedRole]);
 
   const requestSort = (key) => {
     let direction = 'desc';
     if (sortConfig.key === key && sortConfig.direction === 'desc') {
       direction = 'asc';
     }
+    // For tier_val and rank, default ASC is better (S+ first, #1 first)
+    if (key === 'tier_val' || key === 'rank_num') {
+      direction = (sortConfig.key === key && sortConfig.direction === 'asc') ? 'desc' : 'asc';
+    }
     setSortConfig({ key, direction });
   };
 
-  const filteredChamps = useMemo(() => {
+  const processedChamps = useMemo(() => {
     let list = [...champions];
-    if (selectedRole !== "all") {
-      list = list.filter(c => c.lane?.toLowerCase() === selectedRole);
-    }
+    
+    // 3. Search Filter
     if (search) {
       const s = search.toLowerCase();
       list = list.filter(c => c.name.toLowerCase().includes(s));
     }
     
+    // 4. Final Sort
     return list.sort((a, b) => {
       let aVal = a[sortConfig.key] ?? 0;
       let bVal = b[sortConfig.key] ?? 0;
       if (typeof aVal === 'string') aVal = aVal.toLowerCase();
       if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+
       if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
@@ -129,7 +145,7 @@ export default function AdminData() {
   }, [champions, search, selectedRole, sortConfig]);
 
   const selectedChampData = selectedChamp ? rankData.champions[selectedChamp] : null;
-  const selectedChampName = selectedChampData?.name || data?.champ_names?.[selectedChamp] || "Champion";
+  const selectedChampName = selectedChampData?.name || data?.champ_names?.[selectedChampData?.cid || selectedChamp] || "Champion";
 
   const matchupData = useMemo(() => {
     if (!selectedChampData || !selectedChampData.matchups) return [];
@@ -157,17 +173,21 @@ export default function AdminData() {
           <StatCard title="Inventory" value={data?.meta?.champion_count} label="Champions" color="#3b82f6" />
           <StatCard 
             title="Status" 
-            value={syncing ? (paused ? "Paused" : "Syncing") : "Standby"} 
+            value={syncing ? (paused ? "Paused" : (data?.meta?.mode === 'matchups' ? "Deep Crawl" : "Fast Sync")) : "Standby"} 
             label={data?.meta?.updated_at ? new Date(data.meta.updated_at * 1000).toLocaleTimeString() : "No Data"}
             color={syncing ? (paused ? "#f87171" : "#f59e0b") : "#10b981"} 
           />
-          <button
-            onClick={handleCleanup}
-            disabled={cleaning}
-            className="h-full bg-white/[0.03] border border-white/[0.07] rounded-3xl p-6 hover:bg-white/[0.05] transition-all text-xs font-black uppercase tracking-widest text-white/40 hover:text-white"
-          >
-            {cleaning ? "Cleaning..." : "Purge Stale Data"}
-          </button>
+          <div className="bg-white/[0.03] border border-white/[0.07] rounded-3xl p-6 backdrop-blur-sm shadow-xl flex flex-col justify-between">
+            <h2 className="text-[10px] font-black uppercase tracking-widest text-[#c89b3c]">Maintenance</h2>
+            <div className="text-[9px] font-bold text-white/20 uppercase leading-relaxed mt-2">Training data and LP history are protected from deletion.</div>
+            <button
+              onClick={handleCleanup}
+              disabled={cleaning}
+              className="mt-3 w-full bg-white/5 border border-white/10 rounded-xl py-2 hover:bg-white/10 transition-all text-[9px] font-black uppercase tracking-widest text-white/40 hover:text-white"
+            >
+              {cleaning ? "Running..." : "Prune Old LP Data"}
+            </button>
+          </div>
         </div>
 
         {/* Sync Controls */}
@@ -175,7 +195,7 @@ export default function AdminData() {
           <div className="mb-8 flex items-center justify-between bg-white/[0.03] border border-white/[0.07] p-6 rounded-3xl">
             <div>
               <h3 className="text-sm font-black uppercase tracking-widest text-[#c89b3c]">Control Panel</h3>
-              <p className="text-[10px] text-white/30 uppercase font-bold">Manage background meta-data crawling</p>
+              <p className="text-[10px] text-white/30 uppercase font-bold">Update Tierlist (Fast) or Matchups (Deep)</p>
             </div>
             <div className="flex gap-3">
               {syncing && (
@@ -186,14 +206,29 @@ export default function AdminData() {
                   {paused ? "Resume Sync" : "Pause Sync"}
                 </button>
               )}
-              <button
-                onClick={syncing ? handleCancelSync : handleSyncMeta}
-                className={`px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                  syncing ? 'bg-rose-500/20 text-rose-500 border border-rose-500/20 hover:bg-rose-500/30' : 'bg-[#c89b3c] text-black hover:bg-[#a67c2e]'
-                }`}
-              >
-                {syncing ? "Stop Crawl" : "Start Deep Sync"}
-              </button>
+              {!syncing ? (
+                <>
+                  <button
+                    onClick={() => handleSyncMeta("tierlist")}
+                    className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-blue-600/20 text-blue-400 border border-blue-600/20 hover:bg-blue-600/30"
+                  >
+                    Update Tierlist
+                  </button>
+                  <button
+                    onClick={() => handleSyncMeta("full")}
+                    className="px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-[#c89b3c] text-black hover:bg-[#a67c2e]"
+                  >
+                    Start Deep Sync
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleCancelSync}
+                  className="px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-rose-500/20 text-rose-500 border border-rose-500/20 hover:bg-rose-500/30"
+                >
+                  Stop {data?.meta?.mode === 'tierlist' ? 'Tierlist Sync' : 'Deep Crawl'}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -202,14 +237,23 @@ export default function AdminData() {
         <div className="bg-white/[0.03] border border-white/[0.07] rounded-3xl overflow-hidden shadow-2xl backdrop-blur-sm">
           <div className="p-8 border-b border-white/[0.05]">
             <div className="flex flex-col gap-8">
-              <div className="flex justify-between items-end">
-                <div>
-                  <h2 className="text-2xl font-black uppercase italic tracking-tighter">
-                    {selectedChamp ? selectedChampName : "Meta Explorer"}
-                  </h2>
-                  <p className="text-white/20 text-xs font-bold uppercase tracking-widest mt-1">
-                    {selectedChamp ? "Specific Lane Matchups" : "Global performance across tiers"}
-                  </p>
+                <div className="flex gap-4 items-center">
+                  {selectedChamp && (
+                    <button 
+                      onClick={() => setSelectedChamp(null)}
+                      className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2"
+                    >
+                      <span className="text-[#c89b3c]">←</span> Back to Tierlist
+                    </button>
+                  )}
+                  <div>
+                    <h2 className="text-2xl font-black uppercase italic tracking-tighter">
+                      {selectedChamp ? selectedChampName : "Meta Explorer"}
+                    </h2>
+                    <p className="text-white/20 text-xs font-bold uppercase tracking-widest mt-1">
+                      {selectedChamp ? "Specific Lane Matchups" : "Global performance across tiers"}
+                    </p>
+                  </div>
                 </div>
                 <div className="relative">
                   <input 
@@ -223,176 +267,119 @@ export default function AdminData() {
                 </div>
               </div>
 
-              {/* Lane Filter (Top Level) */}
-              <div className="flex items-center gap-6">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#c89b3c]">Role</span>
-                <div className="flex flex-wrap gap-2">
-                  {["all", "top", "jungle", "middle", "bottom", "support"].map(role => (
-                    <button
-                      key={role}
-                      onClick={() => { setSelectedRole(role); setSelectedChamp(null); }}
-                      className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
-                        selectedRole === role ? "bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-600/20" : "bg-white/5 border-white/5 text-white/30 hover:text-white/60"
-                      }`}
-                    >
-                      {role}
-                    </button>
-                  ))}
+              <div className="flex flex-col gap-6">
+                <div className="flex items-center gap-6">
+                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#c89b3c] w-12 text-right">Role</span>
+                  <div className="flex flex-wrap gap-2">
+                    {["all", "top", "jungle", "middle", "bottom", "support"].map(role => (
+                      <button
+                        key={role}
+                        onClick={() => setSelectedRole(role)}
+                        className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                          selectedRole === role ? "bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-600/20" : "bg-white/5 border-white/5 text-white/30 hover:text-white/60"
+                        }`}
+                      >
+                        {role}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Rank Filter (Sub Level) */}
-              <div className="flex items-center gap-6 border-t border-white/[0.03] pt-6">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/20">Tier</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {data?.meta?.ranks.map(rank => (
-                    <button
-                      key={rank}
-                      onClick={() => { setSelectedRank(rank); setSelectedChamp(null); }}
-                      className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
-                        selectedRank === rank ? "bg-white/10 border-white/20 text-white" : "bg-transparent border-transparent text-white/20 hover:text-white/40"
-                      }`}
-                    >
-                      {rank}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-6 border-t border-white/[0.03] pt-6">
+                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white/20 w-12 text-right">Rank</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {data?.meta?.ranks.map(rank => (
+                      <button
+                        key={rank}
+                        onClick={() => setSelectedRank(rank)}
+                        className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
+                          selectedRank === rank ? "bg-white/10 border-white/20 text-white" : "bg-transparent border-transparent text-white/20 hover:text-white/40"
+                        }`}
+                      >
+                        {rank}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            {selectedChamp ? (
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="text-[10px] font-black uppercase tracking-widest text-white/20 border-b border-white/[0.05] bg-white/[0.01]">
-                    <th className="px-8 py-5 cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('name')}>
-                      Opponent {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th className="px-8 py-5 cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('wr')}>
-                      Matchup Winrate {sortConfig.key === 'wr' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                    </th>
-                    <th className="px-8 py-5 text-center cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('delta')}>
-                      Advantage (Delta) {sortConfig.key === 'delta' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/[0.02]">
-                  {matchupData.map((m, i) => (
-                    <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-8 py-4 flex items-center gap-4">
-                        <img 
-                          src={`https://cdn.communitydragon.org/latest/champion/${m.name.toLowerCase().replace(/[^a-z]/g, '')}/square`} 
-                          className="w-8 h-8 rounded-lg border border-white/10"
-                          alt=""
-                          onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
-                        />
-                        <span className="text-sm font-bold capitalize group-hover:text-[#c89b3c] transition-colors">{m.name}</span>
-                      </td>
-                      <td className="px-8 py-4 tabular-nums">
-                        <span className={`text-sm font-black ${m.wr >= 52 ? 'text-emerald-400' : m.wr <= 48 ? 'text-rose-400' : 'text-white'}`}>
-                          {m.wr.toFixed(2)}%
-                        </span>
-                      </td>
-                      <td className="px-8 py-4 text-center tabular-nums">
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${m.delta > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                          {m.delta > 0 ? '+' : ''}{m.delta.toFixed(2)}%
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {matchupData.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="px-8 py-24 text-center bg-white/[0.01]">
-                        <p className="text-white/40 text-sm font-bold italic mb-3">No specific matchup data for this champion yet.</p>
-                        <button 
-                          onClick={handleSyncMeta}
-                          className="text-[#c89b3c] text-[10px] uppercase font-black tracking-widest border border-[#c89b3c]/20 px-4 py-2 rounded-xl hover:bg-[#c89b3c]/10 transition-all"
-                        >
-                          Run Deep Sync to Populate
-                        </button>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            ) : (
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="text-[10px] font-black uppercase tracking-widest text-white/20 border-b border-white/[0.05] bg-white/[0.01]">
-                    <th className="px-8 py-5 w-16">Rank</th>
-                    <th className="px-8 py-5 cursor-pointer hover:text-white transition-colors group/header" onClick={() => requestSort('name')}>
-                      <div className="flex items-center gap-2">
-                        Champion
-                        <span className={`transition-all ${sortConfig.key === 'name' ? 'text-[#c89b3c]' : 'text-white/10 opacity-0 group-hover/header:opacity-100'}`}>
-                          {sortConfig.direction === 'asc' ? '↑' : '↓'}
-                        </span>
-                      </div>
-                    </th>
-                    <th className="px-8 py-5 w-24">Role</th>
-                    <th className="px-8 py-5 cursor-pointer hover:text-white transition-colors group/header" onClick={() => requestSort('wr')}>
-                      <div className="flex items-center gap-2">
-                        Win Rate
-                        <span className={`transition-all ${sortConfig.key === 'wr' ? 'text-[#c89b3c]' : 'text-white/10 opacity-0 group-hover/header:opacity-100'}`}>
-                          {sortConfig.direction === 'asc' ? '↑' : '↓'}
-                        </span>
-                      </div>
-                    </th>
-                    <th className="px-8 py-5 text-center cursor-pointer hover:text-white transition-colors group/header" onClick={() => requestSort('delta')}>
-                      <div className="flex items-center justify-center gap-2">
-                        Delta
-                        <span className={`transition-all ${sortConfig.key === 'delta' ? 'text-[#c89b3c]' : 'text-white/10 opacity-0 group-hover/header:opacity-100'}`}>
-                          {sortConfig.direction === 'asc' ? '↑' : '↓'}
-                        </span>
-                      </div>
-                    </th>
-                    <th className="px-8 py-5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/[0.02]">
-                  {filteredChamps.map((c, i) => (
-                    <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-8 py-4 tabular-nums text-white/20 font-black text-xs">
-                        #{i + 1}
-                      </td>
-                      <td className="px-8 py-4 flex items-center gap-4">
-                        <img 
-                          src={`https://cdn.communitydragon.org/latest/champion/${c.name.toLowerCase().replace(/[^a-z]/g, '')}/square`} 
-                          className="w-8 h-8 rounded-lg border border-white/10"
-                          alt=""
-                          onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
-                        />
-                        <span className="text-sm font-bold capitalize group-hover:text-[#c89b3c] transition-colors">{c.name}</span>
-                      </td>
-                      <td className="px-8 py-4">
-                        <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-black uppercase text-white/30">
-                          {c.lane || 'unknown'}
-                        </span>
-                      </td>
-                      <td className="px-8 py-4 tabular-nums">
-                        <span className={`text-sm font-black ${c.wr >= 52 ? 'text-emerald-400' : c.wr <= 48 ? 'text-rose-400' : 'text-white'}`}>
-                          {c.wr.toFixed(2)}%
-                        </span>
-                      </td>
-                      <td className="px-8 py-4 text-center tabular-nums">
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${c.delta > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                          {c.delta > 0 ? '+' : ''}{c.delta.toFixed(2)}
-                        </span>
-                      </td>
-                      <td className="px-8 py-4 text-right">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="text-[10px] font-black uppercase tracking-widest text-white/20 border-b border-white/[0.05] bg-white/[0.01]">
+                  <th className="px-8 py-5 w-16 cursor-pointer hover:text-white" onClick={() => requestSort('rank_num')}>
+                    Rank {sortConfig.key === 'rank_num' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="px-4 py-5 w-16">Icon</th>
+                  <th className="px-4 py-5 cursor-pointer hover:text-white" onClick={() => requestSort('name')}>
+                    Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="px-8 py-5 cursor-pointer hover:text-white" onClick={() => requestSort('tier_val')}>
+                    Tier {sortConfig.key === 'tier_val' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="px-8 py-5 cursor-pointer hover:text-white" onClick={() => requestSort('lane')}>
+                    Lane {sortConfig.key === 'lane' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="px-8 py-5 cursor-pointer hover:text-white" onClick={() => requestSort('wr')}>
+                    Win Rate {sortConfig.key === 'wr' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="px-8 py-5 cursor-pointer hover:text-white" onClick={() => requestSort('games')}>
+                    Games {sortConfig.key === 'games' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                  </th>
+                  <th className="px-8 py-5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.02]">
+                {(selectedChamp ? matchupData : processedChamps).map((c, i) => (
+                  <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
+                    <td className="px-8 py-4 tabular-nums text-white/20 font-black text-xs">
+                      #{c.rank_num || i + 1}
+                    </td>
+                    <td className="px-4 py-4">
+                      <img 
+                        src={`https://cdn.communitydragon.org/latest/champion/${c.name.toLowerCase().replace(/[^a-z]/g, '')}/square`} 
+                        className="w-8 h-8 rounded-lg border border-white/10"
+                        alt=""
+                        onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
+                      />
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="text-sm font-bold capitalize group-hover:text-[#c89b3c] transition-colors">{c.name}</span>
+                    </td>
+                    <td className="px-8 py-4">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black border ${
+                        c.tier?.startsWith('S') ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' :
+                        c.tier?.startsWith('A') ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
+                        c.tier?.startsWith('B') ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' :
+                        'bg-white/5 border-white/10 text-white/30'
+                      }`}>
+                        {c.tier || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-8 py-4">
+                      <span className="text-[10px] font-black uppercase text-white/30">{c.lane || (selectedChamp ? 'Matchup' : 'unknown')}</span>
+                    </td>
+                    <td className="px-8 py-4 tabular-nums">
+                      <span className={`text-sm font-black ${c.wr >= 52 ? 'text-emerald-400' : c.wr <= 48 ? 'text-rose-400' : 'text-white'}`}>
+                        {c.wr.toFixed(2)}%
+                      </span>
+                    </td>
+                    <td className="px-8 py-4 tabular-nums text-xs text-white/20">
+                      {fmt(c.games)}
+                    </td>
+                    <td className="px-8 py-4 text-right">
+                       {!selectedChamp ? (
                          <button onClick={() => setSelectedChamp(c.id)} className="text-[10px] font-black uppercase tracking-widest text-[#c89b3c]/40 hover:text-[#c89b3c] transition-all">Matchups</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {filteredChamps.length === 0 && !selectedChamp && (
-              <div className="py-32 text-center bg-white/[0.01]">
-                <p className="text-white/10 text-sm font-black uppercase tracking-widest mb-3">No champions match "{search}" in this role</p>
-                <button onClick={() => { setSearch(""); setSelectedRole("all"); }} className="text-[#c89b3c] text-xs font-bold uppercase underline decoration-2 underline-offset-8">Reset All Filters</button>
-              </div>
-            )}
+                       ) : (
+                         <span className="text-[10px] font-black uppercase text-white/5">VS</span>
+                       )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
