@@ -14,6 +14,7 @@ async def test_worker_paused(mocker):
         asyncio.CancelledError()
     ]
     mock_sleep = mocker.patch("asyncio.sleep", new_callable=AsyncMock)
+    mocker.patch("app.services.db.cleanup_stale_data")
 
     with pytest.raises(asyncio.CancelledError):
         await ingestion.ingestion_worker()
@@ -28,6 +29,7 @@ async def test_worker_target_reached(mocker):
         asyncio.CancelledError()
     ]
     mock_sleep = mocker.patch("asyncio.sleep", new_callable=AsyncMock)
+    mocker.patch("app.services.db.cleanup_stale_data")
 
     with pytest.raises(asyncio.CancelledError):
         await ingestion.ingestion_worker()
@@ -60,6 +62,7 @@ async def test_worker_master_tier(mocker):
     mock_process_player.return_value = 1
 
     mock_sleep = mocker.patch("asyncio.sleep", new_callable=AsyncMock)
+    mocker.patch("app.services.db.cleanup_stale_data")
     mocker.patch("app.services.ingestion.sync_meta", new_callable=AsyncMock)
 
     with pytest.raises(asyncio.CancelledError):
@@ -81,6 +84,7 @@ async def test_worker_ladder_fetch_failed(mocker):
     mock_riot_get.side_effect = Exception("Ladder fetch failed")
 
     mock_sleep = mocker.patch("asyncio.sleep", new_callable=AsyncMock)
+    mocker.patch("app.services.db.cleanup_stale_data")
     mocker.patch("app.services.ingestion.sync_meta", new_callable=AsyncMock)
 
     original_idx = ingestion._tier_idx
@@ -112,6 +116,7 @@ async def test_worker_normal_tier_advance_page(mocker):
     mock_process_player.return_value = 0 # No save
 
     mock_sleep = mocker.patch("asyncio.sleep", new_callable=AsyncMock)
+    mocker.patch("app.services.db.cleanup_stale_data")
     mocker.patch("app.services.ingestion.sync_meta", new_callable=AsyncMock)
 
     with pytest.raises(asyncio.CancelledError):
@@ -130,6 +135,7 @@ async def test_worker_outer_exception(mocker):
         asyncio.CancelledError()
     ]
     mock_sleep = mocker.patch("asyncio.sleep", new_callable=AsyncMock)
+    mocker.patch("app.services.db.cleanup_stale_data")
     mocker.patch("app.services.ingestion.sync_meta", new_callable=AsyncMock)
 
     with pytest.raises(asyncio.CancelledError):

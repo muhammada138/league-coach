@@ -11,8 +11,11 @@ import asyncio
 import json
 import sqlite3
 import time
+import logging
 from pathlib import Path
 from ..state import DB_PATH
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Schema init  (called once at startup)
