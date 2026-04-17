@@ -284,12 +284,9 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
 # ---------------------------------------------------------------------------
 def retrain_on_real_data() -> dict:
     """
-    Hybrid retrain strategy:
-    - If clean training_matches has >= 5k rows: train on clean data + 5k synthetic
-    - Otherwise: fall back to v1 legacy data (form zeroed) + 20k synthetic
-
-    Synthetic data teaches the model to weight form/streak/champ_wr correctly
-    for live game prediction, while real data anchors rank and season_WR signal.
+    Train on real ingested match data. Synthetic data is only used when there
+    are fewer than 500 real rows — at scale it biases the model toward manually-
+    guessed feature weights instead of learning the true ones from outcomes.
     Hot-swaps the in-memory model on success.
     """
     global _model
@@ -300,24 +297,32 @@ def retrain_on_real_data() -> dict:
         clean_rows = get_all_training_matches_sync()
         v1_rows    = get_v1_training_matches_sync()
 
-        if len(clean_rows) >= 5000:
-            real_rows  = clean_rows
-            zero_form  = False        # clean data has non-leaking form
-            synth_n    = 5000
-            source     = "clean"
+        if len(clean_rows) >= 500:
+            real_rows = clean_rows
+            zero_form = False
+            source    = "clean"
         elif len(v1_rows) >= 100:
-            real_rows  = v1_rows
-            zero_form  = True         # v1 form leaks outcome, zero it
-            synth_n    = 20000
-            source     = "v1+synthetic"
+            real_rows = v1_rows
+            zero_form = True   # v1 form leaks outcome, zero it
+            source    = "v1"
         else:
-            real_rows  = []
-            zero_form  = False
-            synth_n    = 20000
-            source     = "synthetic-only"
+            # Not enough real data yet — fall back to synthetic only
+            X, y = _generate_synthetic(20_000, seed=99)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.15, random_state=42)
+            model = xgb.XGBClassifier(
+                n_estimators=300, max_depth=4, learning_rate=0.05,
+                subsample=0.8, colsample_bytree=0.8,
+                eval_metric="logloss", random_state=42,
+            )
+            model.fit(X_train, y_train)
+            acc = float((model.predict(X_test) == y_test).mean())
+            MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+            joblib.dump(model, MODEL_PATH)
+            _model = model
+            return {"ok": True, "source": "synthetic-only", "real_rows": 0, "synthetic_rows": 20_000, "test_accuracy": round(acc, 4)}
 
-        # Build feature matrix from real rows
-        X_real, y_real = [], []
+        # Build feature matrix — no synthetic mixing at this scale
+        X_all, y_all = [], []
         for row in real_rows:
             blue = np.array(json.loads(row["blue_feats"]), dtype=float)
             red  = np.array(json.loads(row["red_feats"]),  dtype=float)
@@ -325,27 +330,37 @@ def retrain_on_real_data() -> dict:
                 blue[2] = 0.5
                 red[2]  = 0.5
             diff = blue - red
-            X_real.append(np.concatenate([blue, red, diff]))
-            y_real.append(int(row["blue_won"]))
+            X_all.append(np.concatenate([blue, red, diff]))
+            y_all.append(int(row["blue_won"]))
 
-        # Combine with synthetic
-        X_syn, y_syn = _generate_synthetic(synth_n, seed=99)
-        if X_real:
-            X = np.vstack([np.array(X_real), X_syn])
-            y = np.concatenate([np.array(y_real), y_syn])
-        else:
-            X, y = X_syn, y_syn
+        X = np.array(X_all)
+        y = np.array(y_all)
 
+        # 85/15 stratified split preserves class balance in both sets
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.1, random_state=42
+            X, y, test_size=0.15, random_state=42, stratify=y
+        )
+
+        # Validation set for early stopping (carved from train)
+        X_tr, X_val, y_tr, y_val = train_test_split(
+            X_train, y_train, test_size=0.15, random_state=42, stratify=y_train
         )
 
         model = xgb.XGBClassifier(
-            n_estimators=200, max_depth=4, learning_rate=0.05,
-            subsample=0.8, colsample_bytree=0.8,
-            eval_metric="logloss", random_state=42,
+            n_estimators=1000,      # high ceiling; early stopping finds the right number
+            max_depth=4,
+            learning_rate=0.02,     # lower lr → more trees → better generalisation
+            subsample=0.8,
+            colsample_bytree=0.7,
+            min_child_weight=5,     # prevents splits on tiny leaf populations
+            gamma=0.1,              # minimum gain to make a split
+            reg_alpha=0.05,         # L1 regularisation
+            reg_lambda=1.0,         # L2 regularisation
+            eval_metric="logloss",
+            early_stopping_rounds=50,
+            random_state=42,
         )
-        model.fit(X_train, y_train)
+        model.fit(X_tr, y_tr, eval_set=[(X_val, y_val)], verbose=False)
 
         acc = float((model.predict(X_test) == y_test).mean())
 
@@ -353,15 +368,14 @@ def retrain_on_real_data() -> dict:
         joblib.dump(model, MODEL_PATH)
         _model = model
 
-        logger.info(
-            "Retrained (%s) on %d real + %d synthetic — test acc %.3f",
-            source, len(real_rows), synth_n, acc,
-        )
+        best_n = model.best_iteration + 1
+        logger.info("Retrained (%s) on %d rows, best_iteration=%d, test_acc=%.4f", source, len(real_rows), best_n, acc)
         return {
             "ok": True,
             "source": source,
             "real_rows": len(real_rows),
-            "synthetic_rows": synth_n,
+            "synthetic_rows": 0,
+            "best_iteration": best_n,
             "test_accuracy": round(acc, 4),
         }
 
