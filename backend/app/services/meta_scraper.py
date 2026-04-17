@@ -102,19 +102,31 @@ async def fetch_rank_meta(rank: str) -> dict:
             if avg_match: avg_wr = float(avg_match.group(1))
             results["tier_avg"] = avg_wr
 
-            # 1. Find which lane each champ is listed in on the main tierlist
-            # Example: sona ... alt="support lane"
-            for name, cid in _CHAMP_ID_MAP.items():
-                if len(name) < 3: continue
-                pattern = re.compile(rf'{name}.*?alt="(\w+) lane".*?([456][0-9]\.[0-9]+)', re.IGNORECASE | re.DOTALL)
+            # Exhaustive sweep for all champions we know about
+            for clean_name, cid in _CHAMP_ID_MAP.items():
+                if len(clean_name) < 3: continue
+                
+                # Anchor to the specific build link for this champion to avoid confusion
+                # Then skip ahead to the winrate column (q:key="5")
+                # Pattern: /lol/vayne/build/ ... q:key="5" ... >51.99
+                pattern = re.compile(rf'/lol/{clean_name}/build/.*?q:key="5".*?>([456][0-9]\.[0-9]+)', re.IGNORECASE | re.DOTALL)
                 match = pattern.search(html)
+                
                 if match:
-                    lane = match.group(1).lower()
-                    wr = float(match.group(2))
+                    wr = float(match.group(1))
                     results["champions"][str(cid)] = {
-                        "name": name, "wr": wr, "lane": lane,
-                        "delta": round(wr - avg_wr, 2), "matchups": {}
+                        "name": clean_name,
+                        "wr": wr,
+                        "lane": "unknown",
+                        "delta": round(wr - avg_wr, 2),
+                        "matchups": {}
                     }
+                    
+                    # Also find the lane icon nearby
+                    # Pattern: /lol/vayne/build/ ... alt="bottom lane"
+                    lane_match = re.search(rf'/lol/{clean_name}/build/.*?alt="(\w+) lane"', html, re.IGNORECASE | re.DOTALL)
+                    if lane_match:
+                        results["champions"][str(cid)]["lane"] = lane_match.group(1).lower()
             return results
         except Exception as e:
             logger.error("Error in fetch_rank_meta for %s: %s", rank, e)
