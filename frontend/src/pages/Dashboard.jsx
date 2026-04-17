@@ -506,18 +506,6 @@ function StarButton({ gameName, tagLine, puuid, profileIconId, region, tier, div
   );
 }
 
-const CHAMP_ROLE_GUESS = {
-  // Common Top
-  "Aatrox": "TOP", "Camille": "TOP", "Darius": "TOP", "Fiora": "TOP", "Garen": "TOP", "Jax": "TOP", "Malphite": "TOP", "Nasus": "TOP", "Ornn": "TOP", "Riven": "TOP", "Sett": "TOP", "Teemo": "TOP",
-  // Common Jungle
-  "LeeSin": "JUNGLE", "JarvanIV": "JUNGLE", "KhaZix": "JUNGLE", "MasterYi": "JUNGLE", "Nidalee": "JUNGLE", "Rengar": "JUNGLE", "Vi": "JUNGLE", "Warwick": "JUNGLE", "Shaco": "JUNGLE", "Graves": "JUNGLE",
-  // Common Mid
-  "Ahri": "MIDDLE", "Akali": "MIDDLE", "Anivia": "MIDDLE", "Azir": "MIDDLE", "Katarina": "MIDDLE", "Lux": "MIDDLE", "Orianna": "MIDDLE", "Sylas": "MIDDLE", "Yasuo": "MIDDLE", "Yone": "MIDDLE", "Zed": "MIDDLE",
-  // Common Bot
-  "Ashe": "BOTTOM", "Caitlyn": "BOTTOM", "Ezreal": "BOTTOM", "Jhin": "BOTTOM", "KaiSa": "BOTTOM", "Lucian": "BOTTOM", "MissFortune": "BOTTOM", "Vayne": "BOTTOM", "Xayah": "BOTTOM",
-  // Common Supp
-  "Braum": "UTILITY", "Leona": "UTILITY", "Lulu": "UTILITY", "Morgana": "UTILITY", "Nami": "UTILITY", "Pyke": "UTILITY", "Senna": "UTILITY", "Thresh": "UTILITY", "Yuumi": "UTILITY", "Janna": "UTILITY",
-};
 
 const LANE_META = {
   TOP: { abbr: "TOP", color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/25" },
@@ -594,24 +582,25 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   const mins = Math.floor(elapsed / 60);
   const secs = String(elapsed % 60).padStart(2, "0");
   const queueLabel = QUEUE_LABELS[liveGame.queueId] ?? liveGame.gameMode ?? "Live Game";
-  console.log("LiveGame participants:", liveGame.participants);
-  
-  const rolePriority = { 
-    TOP: 1, 
-    JUNGLE: 2, JGL: 2,
-    MIDDLE: 3, MID: 3, 
-    BOTTOM: 4, BOT: 4, ADC: 4,
-    UTILITY: 5, SUP: 5, SUPPORT: 5,
-    UNKNOWN: 6 
+
+  const ROLE_SORT_ORDER = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5, UNKNOWN: 6 };
+
+  const detectRole = (p, stats) => {
+    if (p.spell1Id == 11 || p.spell2Id == 11) return "JUNGLE";
+    const hist = stats?.most_common_position;
+    if (hist && hist !== "UNKNOWN" && hist !== "") {
+      if (hist === "ADC") return "BOTTOM";
+      if (hist === "MID") return "MIDDLE";
+      if (hist === "SUP" || hist === "SUPPORT") return "UTILITY";
+      if (hist === "JGL") return "JUNGLE";
+      return hist;
+    }
+    return "UNKNOWN";
   };
+
   const getRoleSortScore = (p) => {
     const stats = liveStats?.[p.puuid];
-    // Smite is the absolute indicator for Jungle
-    if (p.spell1Id === 11 || p.spell2Id === 11) return 2;
-    
-    const pos = stats?.most_common_position;
-    if (pos && rolePriority[pos]) return rolePriority[pos];
-    return 99;
+    return ROLE_SORT_ORDER[detectRole(p, stats)] ?? 99;
   };
 
   const blueTeam = [...liveGame.participants]
@@ -668,28 +657,8 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
           <div className="flex items-center gap-1.5 min-w-0">
             {(() => {
               const stats = liveStats?.[p.puuid];
-              // Map ID to Name for guess lookup
-              const realChampName = champMap ? (champMap[String(p.championId)] || p.championName) : p.championName;
-              
-              // Smite detection (Smites are 11) - use relaxed equality for string/number mixing
-              const isJg = p.spell1Id == 11 || p.spell2Id == 11 || stats?.most_common_position === "JUNGLE";
-              
-              let pos = "UNKNOWN";
-              if (isJg) {
-                pos = "JUNGLE";
-              } else if (stats?.most_common_position && stats.most_common_position !== "UNKNOWN" && stats.most_common_position !== "") {
-                pos = stats.most_common_position;
-              } else if (CHAMP_ROLE_GUESS[realChampName]) {
-                pos = CHAMP_ROLE_GUESS[realChampName];
-              }
-
-              // Normalization
-              if (pos === "ADC") pos = "BOTTOM";
-              if (pos === "MID") pos = "MIDDLE";
-              if (pos === "SUP" || pos === "SUPPORT") pos = "UTILITY";
-              if (pos === "JGL") pos = "JUNGLE";
-
-              const m = LANE_META[pos] || LANE_META["UNKNOWN"];
+              const pos = detectRole(p, stats);
+              const m = LANE_META[pos] ?? LANE_META["UNKNOWN"];
               return (
                 <span title={`Pos: ${pos} | S1: ${p.spell1Id} | S2: ${p.spell2Id}`} className={`text-[9px] font-black px-1.5 py-0.5 rounded flex-shrink-0 border uppercase tracking-tighter ${m.bg} ${m.border} ${m.color}`}>
                   {m.abbr}
