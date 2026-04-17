@@ -251,8 +251,10 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
         # Check if we have a specific matchup winrate (e.g. Jax vs Camille)
         matchups = champ_meta.get("matchups", {})
         if opp_id_str in matchups:
-            # Matchup WR is e.g. 52.5. Scale to 0-1.
-            matchup_adv = matchups[opp_id_str] / 100.0
+            # Matchup WR is e.g. 52.5 or {'wr': 52.5, 'games': 368}. Scale to 0-1.
+            raw = matchups[opp_id_str]
+            wr = raw["wr"] if isinstance(raw, dict) else raw
+            matchup_adv = wr / 100.0
         else:
             # Fallback to global winrate delta as proxy for lane counter
             # Use 'all' role for opponent meta if specific not found

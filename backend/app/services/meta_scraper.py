@@ -18,6 +18,14 @@ RANKS = [
 # --- CONFIG ---
 LANES = ["", "top", "jungle", "middle", "bottom", "support"]
 
+_TIER_LABELS = {
+    1: "S+", 2: "S", 3: "S-",
+    4: "A+", 5: "A", 6: "A-",
+    7: "B+", 8: "B", 9: "B-",
+    10: "C+", 11: "C", 12: "C-",
+    13: "D+", 14: "D", 15: "D-",
+}
+
 # Champion Name -> ID mapping
 _CHAMP_ID_MAP = {}
 _ID_CHAMP_MAP = {} # CID string -> {id, name, slug}
@@ -50,6 +58,7 @@ async def _ensure_champ_ids():
             logger.error("Failed to fetch champion IDs: %s", e)
 
 async def fetch_champion_matchups(rank: str, champ_name: str, lane: str) -> dict:
+    """Returns {opp_cid_str: {'wr': float, 'games': int}} via Qwik state extraction."""
     url = f"https://lolalytics.com/lol/{champ_name.lower()}/counters/?lane={lane}&tier={rank}&patch=16.8"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -60,14 +69,49 @@ async def fetch_champion_matchups(rank: str, champ_name: str, lane: str) -> dict
             resp = await client.get(url, headers=headers)
             if resp.status_code != 200: return {}
             html = resp.text
+
+            json_match = re.search(r'<script type="qwik/json">(.*?)</script>', html, re.DOTALL)
+            if not json_match: return {}
+
+            state = json.loads(json_match.group(1))
+            objs = state.get("objs", [])
+            n = len(objs)
+
+            def _res(val):
+                if not isinstance(val, str): return val
+                try:
+                    idx = int(val, 36)
+                    if 0 <= idx < n: return objs[idx]
+                except (ValueError, TypeError): pass
+                return val
+
+            # Find the matchup list: a list of refs where each resolves to a dict with cid+vsWr
+            matchup_list = None
+            for obj in objs:
+                if isinstance(obj, list) and len(obj) > 3:
+                    sample = _res(obj[0])
+                    if isinstance(sample, dict) and "cid" in sample and "vsWr" in sample:
+                        matchup_list = obj
+                        break
+
+            if not matchup_list:
+                return {}
+
             matchups = {}
-            for opp_name, opp_cid in _CHAMP_ID_MAP.items():
-                if opp_name == champ_name.lower() or len(opp_name) < 3: continue
-                pattern = re.compile(rf'>{opp_name.capitalize()}<.*?([34567][0-9]\.[0-9]+)<!---->%<div class="text-cyan-200">VS</div>', re.IGNORECASE | re.DOTALL)
-                match = pattern.search(html)
-                if match:
-                    wr = float(match.group(1))
-                    matchups[str(opp_cid)] = wr
+            for ref in matchup_list:
+                entry = _res(ref)
+                if not isinstance(entry, dict):
+                    continue
+                try:
+                    cid_val = _res(entry["cid"])
+                    cid_str = str(int(cid_val))
+                    wr_val = float(_res(entry["vsWr"]))
+                    games_val = int(_res(entry.get("n", 0)) or 0)
+                    if wr_val > 0:
+                        matchups[cid_str] = {"wr": wr_val, "games": games_val}
+                except Exception:
+                    continue
+
             return matchups
         except Exception as e:
             logger.error("Error scraping %s matchups for %s: %s", lane, champ_name, e)
@@ -148,7 +192,11 @@ async def fetch_rank_meta(rank: str) -> dict:
                             # 3. Resolve each stat value one level from the stats object
                             wr_val = _res(stats_raw["wr"])
                             games_val = _res(stats_raw["games"])
-                            tier = str(_res(stats_raw.get("tier", "")) or "N/A")
+                            tier_raw = _res(stats_raw.get("tier", ""))
+                            try:
+                                tier = _TIER_LABELS.get(int(tier_raw), "N/A")
+                            except (ValueError, TypeError):
+                                tier = str(tier_raw) if tier_raw else "N/A"
                             rank_label = str(_res(stats_raw.get("rank", "")) or "N/A")
 
                             wr_float = float(wr_val)
@@ -186,8 +234,8 @@ async def fetch_rank_meta(rank: str) -> dict:
                 except Exception as je:
                     logger.error("Failed to parse Qwik JSON: %s", je)
 
-                # Minimal sleep between lanes
-                await asyncio.sleep(0.1)
+                # Brief delay between lane requests
+                await asyncio.sleep(0.3)
 
             except Exception as e:
                 logger.error("Error in fetch_rank_meta lane %s for %s: %s", lane, rank, e)
