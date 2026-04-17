@@ -4,9 +4,6 @@ import json
 import logging
 import time
 import re
-from pathlib import Path
-from ..state import META_FILE_PATH, sync_state
-
 logger = logging.getLogger(__name__)
 
 # Lolalytics Rank Mappings - Aligned with seed tiers in ingestion.py
@@ -15,8 +12,28 @@ RANKS = [
     "diamond", "master"
 ]
 
-# Lanes to scrape
-# Lanes to scrape (empty string = All Roles)
+# --- QWIK STATE DECODER ---
+class QwikDecoder:
+    """Decodes Lolalytics' Qwik framework JSON state."""
+    def __init__(self, pool):
+        self.pool = pool
+    
+    def resolve(self, val):
+        if not isinstance(val, str) or not val: return val
+        try:
+            # Qwik uses base-36 indices to refer to the 'objs' pool
+            idx = int(val, 36)
+            if 0 <= idx < len(self.pool):
+                return self.pool[idx]
+        except ValueError:
+            pass
+        return val
+
+    def resolve_obj(self, obj):
+        if not isinstance(obj, dict): return obj
+        return {k: self.resolve(v) for k, v in obj.items()}
+
+# --- CONFIG ---
 LANES = ["", "top", "jungle", "middle", "bottom", "support"]
 
 # Champion Name -> ID mapping
@@ -86,73 +103,90 @@ async def fetch_rank_meta(rank: str) -> dict:
                 if resp.status_code != 200: continue
                 html = resp.text
 
+                # Extract Average Tier WR
                 if results["tier_avg"] == 50.0:
                     avg_match = re.search(r'Average .*? Win Rate:.*?([0-9\.]+)', html, re.DOTALL | re.IGNORECASE)
                     if avg_match: results["tier_avg"] = float(avg_match.group(1))
 
-                # Robust extraction: split on champion build links which are present for all champions in the state
-                # even if virtualized in the DOM.
-                blocks = re.split(r'href="/lol/([^/"]+)/build/', html)
-                
-                # Each champion entry starts at indices 1, 3, 5... (index 0 is header stuff)
-                for i in range(1, len(blocks), 2):
-                    champ_slug = blocks[i].lower().replace("-", "")
-                    content = blocks[i+1][:3000] # Increased context window
+                # --- QWIK JSON EXTRACTION ---
+                # Lolalytics embeds all data in a qwik/json script tag.
+                # Standard HTML parsing only sees 20 rows due to virtualization.
+                json_match = re.search(r'<script type="qwik/json">(.*?)</script>', html, re.DOTALL)
+                if not json_match:
+                    logger.warning("No qwik/json found for %s %s", rank, lane)
+                    continue
 
-                    cid = _CHAMP_ID_MAP.get(champ_slug)
-                    if not cid: continue
-
-                    # 1. Official Rank: Usually in q:key="0" or nearby the name
-                    # Look for plain numbers inside a div or near q:key="0"
-                    rank_label = "N/A"
-                    # Try targeting q:key="0" (Rank index) or just a free standing number at the start of the block
-                    rank_match = re.search(r'q:key="0".*?>\s*([0-9]+)\s*<', content, re.DOTALL)
-                    if not rank_match:
-                        rank_match = re.search(r'>\s*([0-9]+)\s*<', content[:500], re.DOTALL)
+                try:
+                    state = json.loads(json_match.group(1))
+                    objs = state.get("objs", [])
+                    decoder = QwikDecoder(objs)
                     
-                    if rank_match:
-                        rank_label = rank_match.group(1)
-
-                    # 2. Win Rate: q:key="5"
-                    # Format: 53.42+1.16 or just 53.42
-                    wr = 50.0
-                    wr_match = re.search(r'q:key="5".*?>\s*([456][0-9]\.[0-9]+)', content, re.DOTALL)
-                    if wr_match:
-                        wr = float(wr_match.group(1))
-
-                    # 3. Tier: q:key="3"
-                    tier_match = re.search(r'q:key="3".*?>\s*([SABCD\+\-]+|N/A)\s*<', content, re.DOTALL)
-                    tier = tier_match.group(1) if tier_match else "N/A"
-
-                    # 4. Games: q:key="9"
-                    games_match = re.search(r'q:key="9".*?>\s*([0-9,]+)\s*<', content, re.DOTALL)
-                    games = int(games_match.group(1).replace(",", "")) if games_match else 0
-
-                    if wr > 0 and games > 0:
-                        lane_key = lane if lane else "all"
-                        entry_key = f"{cid}:{lane_key}"
+                    found_count = 0
+                    for raw_obj in objs:
+                        if not isinstance(raw_obj, dict): continue
                         
-                        # Deduplication: Keep the one with more games (Main Tierlist vs Counters)
-                        if entry_key in results["champions"]:
-                            existing = results["champions"][entry_key]
-                            # Only overwrite if the new one has more games or the existing one has no rank
-                            if games > existing["games"] or (existing["rank_label"] == "N/A" and rank_label != "N/A"):
-                                pass # Proceed to overwrite
-                            else:
-                                continue # Keep existing and skip this one
+                        # Champion row objects usually have 'wr', 'games', and 'cid' or 'name'
+                        # but we resolve indices first to see real values
+                        obj = decoder.resolve_obj(raw_obj)
+                        
+                        # Look for properties that identify a tierlist row
+                        # These keys vary but 'wr', 'games', 'rank' are common
+                        if "wr" in obj and "games" in obj and ("cid" in obj or "name" in obj):
+                            # Resolve name/slug
+                            raw_name = obj.get("name") or obj.get("cid")
+                            if not isinstance(raw_name, str): continue
+                            
+                            champ_slug = raw_name.lower().replace("-", "").replace(" ", "").replace("'", "")
+                            cid = _CHAMP_ID_MAP.get(champ_slug)
+                            if not cid: continue
+                            
+                            # Resolve Rank: often in 'rank' or 'rank_label' or just index 0
+                            rank_label = str(obj.get("rank") or obj.get("rank_label") or "N/A")
+                            
+                            # Resolve Win Rate & Games
+                            # Win rate can be "53.42+1.16", we just want the float
+                            try:
+                                wr_str = str(obj["wr"])
+                                wr_val = float(re.search(r'([0-9\.]+)', wr_str).group(1))
+                                
+                                games_str = str(obj["games"]).replace(",", "")
+                                games_val = int(re.search(r'([0-9]+)', games_str).group(1))
+                                
+                                tier = str(obj.get("tier") or "N/A")
+                                
+                                if wr_val > 0 and games_val > 0:
+                                    lane_key = lane if lane else "all"
+                                    entry_key = f"{cid}:{lane_key}"
+                                    
+                                    # Deduplication: Keep best record for this rank/lane
+                                    if entry_key in results["champions"]:
+                                        existing = results["champions"][entry_key]
+                                        if games_val > existing["games"] or (existing["rank_label"] == "N/A" and rank_label != "N/A"):
+                                            pass 
+                                        else:
+                                            continue
 
-                        results["champions"][entry_key] = {
-                            "cid": str(cid),
-                            "name": champ_slug,
-                            "wr": wr,
-                            "tier": tier,
-                            "games": games,
-                            "lane": lane_key,
-                            "rank_label": rank_label,
-                            "delta": round(wr - results["tier_avg"], 2),
-                            "matchups": {},
-                            "last_checked": 0
-                        }
+                                    results["champions"][entry_key] = {
+                                        "cid": str(cid),
+                                        "name": champ_slug,
+                                        "wr": wr_val,
+                                        "tier": tier,
+                                        "games": games_val,
+                                        "lane": lane_key,
+                                        "rank_label": rank_label,
+                                        "delta": round(wr_val - results["tier_avg"], 2),
+                                        "matchups": {},
+                                        "last_checked": 0
+                                    }
+                                    found_count += 1
+                            except:
+                                continue
+                    
+                    logger.info("  -> Extracted %d champions from Qwik state.", found_count)
+                
+                except Exception as je:
+                    logger.error("Failed to parse Qwik JSON: %s", je)
+
                 # Minimal sleep between lanes
                 await asyncio.sleep(0.1)
 
