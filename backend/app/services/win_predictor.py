@@ -239,15 +239,16 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
     meta = get_meta_data()
     rank_key = _RANK_TO_META.get(lobby_rank.lower(), "emerald")
     
-    rank_meta = meta.get("data", {}).get(rank_key, {})
-    
+    rank_data = meta.get("data", {}).get(rank_key, {})
+    champ_dict = rank_data.get("champions", {})  # champions are nested under "champions" key
+
     # Try lane-specific lookup first, then fall back to 'all'
     role_key = role.lower()
-    if role_key == "utility": role_key = "support" # Normalize Riot positional to scraper
-    
-    champ_meta = rank_meta.get(f"{champ_id_str}:{role_key}")
+    if role_key == "utility": role_key = "support"
+
+    champ_meta = champ_dict.get(f"{champ_id_str}:{role_key}")
     if not champ_meta:
-        champ_meta = rank_meta.get(f"{champ_id_str}:all", rank_meta.get(champ_id_str, {}))
+        champ_meta = champ_dict.get(f"{champ_id_str}:all", champ_dict.get(champ_id_str, {}))
 
     # Lolalytics WR is usually around 50.0. Scale to 0-1.
     meta_wr = champ_meta.get("wr", 50.0) / 100.0
@@ -266,7 +267,7 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
             matchup_adv = (wr / 100.0) * conf + 0.5 * (1.0 - conf)
         elif champ_meta:
             # Fallback: use relative meta WR difference as a proxy for matchup strength
-            opp_meta = rank_meta.get(f"{opp_id_str}:{role_key}", rank_meta.get(f"{opp_id_str}:all", {}))
+            opp_meta = champ_dict.get(f"{opp_id_str}:{role_key}", champ_dict.get(f"{opp_id_str}:all", {}))
             opp_wr = opp_meta.get("wr", 50.0) / 100.0
             matchup_adv = max(0.0, min(1.0, 0.5 + (meta_wr - opp_wr)))
         # else: no champ meta at all (Naafiri bronze top) → stays 0.5 neutral
@@ -363,11 +364,18 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
         diff_val = float(np.dot(blue_vec - red_vec, w))
         prob = 1.0 / (1.0 + np.exp(-diff_val * 25.0))
 
+    _FEAT = ["rank", "season_wr", "form", "recent_wr", "champ_wr", "mastery", "streak", "meta_wr", "matchup"]
+    features = {
+        "blue": {k: round(float(blue_team_mean[i]), 3) for i, k in enumerate(_FEAT)},
+        "red":  {k: round(float(red_team_mean[i]),  3) for i, k in enumerate(_FEAT)},
+    }
+
     blue_pct = max(1, min(99, round(prob * 100)))
     return {
         "bluePct": blue_pct,
         "redPct": 100 - blue_pct,
-        "confidence": round(float(confidence), 2)
+        "confidence": round(float(confidence), 2),
+        "features": features,
     }
 
 
