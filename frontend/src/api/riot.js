@@ -56,6 +56,12 @@ export const syncMeta = () =>
 export const cancelSync = () =>
   api.post("/admin/cancel-sync").then((r) => r.data);
 
+export const toggleSyncPause = () =>
+  api.post("/admin/toggle-sync-pause").then((r) => r.data);
+
+export const cleanupData = () =>
+  api.post("/admin/cleanup").then((r) => r.data);
+
 export const getIngestStatus = () =>
   api.get("/ingest/status").then((r) => r.data);
 

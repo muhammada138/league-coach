@@ -520,7 +520,7 @@ async def ingest_toggle():
 
 @router.get("/admin/data-summary")
 async def admin_data_summary():
-    from ..services.meta_scraper import get_meta_data
+    from ..services.meta_scraper import get_meta_data, _CHAMP_ID_MAP
     from ..services.db import get_ingestion_status
     import sqlite3
     from ..state import DB_PATH
@@ -528,6 +528,10 @@ async def admin_data_summary():
     ingest = await get_ingestion_status()
     meta = get_meta_data()
     
+    # Build a reverse map for the frontend: ID -> Name
+    # We use the Data Dragon map we already have
+    champ_names = {str(v): k.capitalize() for k, v in _CHAMP_ID_MAP.items()}
+
     match_count = 0
     try:
         with sqlite3.connect(DB_PATH) as conn:
@@ -539,7 +543,6 @@ async def admin_data_summary():
     ranks_data = meta.get("data", {})
     total_champs = 0
     if ranks_data:
-        # Sum of unique champions across all ranks (using name/cid)
         all_cids = set()
         for r_data in ranks_data.values():
             all_cids.update(r_data.get("champions", {}).keys())
@@ -547,11 +550,12 @@ async def admin_data_summary():
     
     return {
         "ingestion": ingest,
+        "champ_names": champ_names, # Global resolver
         "meta": {
             "updated_at": meta.get("updated_at"),
             "ranks": list(ranks_data.keys()),
             "champion_count": total_champs,
-            "details": ranks_data # The full data
+            "details": ranks_data
         },
         "training": {
             "match_count": match_count
@@ -572,9 +576,24 @@ async def admin_cancel_sync():
 
 @router.get("/admin/sync-status")
 async def admin_sync_status():
-    from ..services.meta_scraper import is_sync_active
-    return {"active": is_sync_active()}
+    from ..services.meta_scraper import is_sync_active, is_sync_paused
+    return {
+        "active": is_sync_active(),
+        "paused": is_sync_paused()
+    }
 
+@router.post("/admin/toggle-sync-pause")
+async def admin_toggle_sync_pause():
+    from ..services.meta_scraper import toggle_pause
+    new_state = toggle_pause()
+    return {"ok": True, "paused": new_state}
+
+
+@router.post("/admin/cleanup")
+async def admin_cleanup():
+    from ..services.db import cleanup_stale_data
+    counts = cleanup_stale_data()
+    return {"ok": True, "counts": counts}
 
 @router.post("/ask")
 async def ask_coach(body: AskRequest):
