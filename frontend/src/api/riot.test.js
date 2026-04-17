@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getLiveEnrich, getSummoner, getProfile } from './riot';
+import { getLiveEnrich, getSummoner, getProfile, analyzeSummoner } from './riot';
 
 const { mockGet, mockPost } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -23,6 +23,43 @@ vi.mock('axios', () => {
 describe('Riot API Wrappers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('analyzeSummoner', () => {
+    it('should call api.get with default parameters (count=10, region="na1")', async () => {
+      const mockData = { analysis: 'test' };
+      mockGet.mockResolvedValueOnce({ data: mockData });
+
+      const puuid = 'test-puuid';
+      const gameName = 'TestPlayer';
+      const result = await analyzeSummoner(puuid, gameName);
+
+      expect(mockGet).toHaveBeenCalledWith(`/analyze/${puuid}`, {
+        params: { game_name: gameName, count: 10, region: 'na1' }
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should call api.get with explicitly provided parameters', async () => {
+      const mockData = { analysis: 'test2' };
+      mockGet.mockResolvedValueOnce({ data: mockData });
+
+      const puuid = 'test-puuid2';
+      const gameName = 'TestPlayer2';
+      const result = await analyzeSummoner(puuid, gameName, 5, 'euw1');
+
+      expect(mockGet).toHaveBeenCalledWith(`/analyze/${puuid}`, {
+        params: { game_name: gameName, count: 5, region: 'euw1' }
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should handle API errors appropriately', async () => {
+      const mockError = new Error('API Error');
+      mockGet.mockRejectedValueOnce(mockError);
+
+      await expect(analyzeSummoner('error-puuid', 'ErrorPlayer')).rejects.toThrow('API Error');
+    });
   });
 
   describe('getLiveEnrich', () => {
