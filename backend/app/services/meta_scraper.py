@@ -201,18 +201,18 @@ async def sync_meta(mode="full"):
                 if rank not in full_meta:
                     full_meta[rank] = rank_data
                 else:
+                    new_champs = rank_data["champions"]
+                    old_champs = full_meta[rank].get("champions", {})
+                    
+                    # 1. Preserve expensive matchup data for champions that still exist
+                    for cid, cdata in new_champs.items():
+                        if cid in old_champs:
+                            cdata["matchups"] = old_champs[cid].get("matchups", {})
+                            cdata["last_checked"] = old_champs[cid].get("last_checked", 0)
+                    
+                    # 2. Replace the entire collection to auto-purge stale/ghost entries
                     full_meta[rank]["tier_avg"] = rank_data["tier_avg"]
-                    for cid, cdata in rank_data["champions"].items():
-                        if cid not in full_meta[rank]["champions"]:
-                            full_meta[rank]["champions"][cid] = cdata
-                        else:
-                            target = full_meta[rank]["champions"][cid]
-                            target["wr"] = cdata["wr"]
-                            target["tier"] = cdata["tier"]
-                            target["games"] = cdata["games"]
-                            target["lane"] = cdata["lane"]
-                            target["delta"] = cdata["delta"]
-                            target["rank_label"] = cdata.get("rank_label", "N/A")
+                    full_meta[rank]["champions"] = new_champs
 
             # Save Tierlist immediately
             with open(META_FILE_PATH, "w") as f:
