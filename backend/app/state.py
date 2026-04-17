@@ -5,6 +5,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from pathlib import Path
+
+# Paths
+BASE_DIR = Path(__file__).parent.parent
+DATA_DIR = BASE_DIR / "data"
+META_FILE_PATH = DATA_DIR / "champion_meta.json"
+
+# Ensure data dir exists
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# Riot Config
 RIOT_API_KEY = os.getenv("RIOT_API_KEY")
 RIOT_REGION = os.getenv("RIOT_REGION", "na1")
 RIOT_ROUTING = os.getenv("RIOT_ROUTING", "americas")

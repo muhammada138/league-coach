@@ -131,10 +131,29 @@ def _rank_score_from_entry(entry: dict | None) -> tuple[float, float]:
     return rank_score, season_wr
 
 
-def _player_feats(rank_entry: dict | None, form: float = 0.5) -> list[float]:
-    """7-dim feature vector. form should come from previous matches (no leakage)."""
+from .meta_scraper import sync_meta, get_meta_data
+
+# ... (rest of imports) ...
+
+def _player_feats(rank_entry: dict | None, form: float = 0.5, champion_id: int = 0, lobby_rank: str = "emerald", opp_id: int = 0) -> list[float]:
+    """9-dim feature vector. meta stats added from Lolalytics."""
     rank_score, season_wr = _rank_score_from_entry(rank_entry)
-    return [rank_score, season_wr, form, 0.5, 0.5, 0.0, 0.0]
+    
+    meta = get_meta_data()
+    rank_key = lobby_rank.lower()
+    rank_meta = meta.get("data", {}).get(rank_key, {})
+    
+    cid_str = str(champion_id)
+    champ_meta = rank_meta.get(cid_str, {})
+    meta_wr = champ_meta.get("wr", 50.0) / 100.0
+    
+    matchup_adv = 0.5
+    if opp_id:
+        opp_meta = rank_meta.get(str(opp_id), {})
+        opp_wr = opp_meta.get("wr", 50.0) / 100.0
+        matchup_adv = 0.5 + (meta_wr - opp_wr)
+
+    return [rank_score, season_wr, form, 0.5, 0.5, 0.0, 0.0, meta_wr, matchup_adv]
 
 
 def _compute_seed_form(puuid: str, prior_match_data: list[dict]) -> float:
@@ -260,22 +279,39 @@ async def _process_player(
             if len(blue) < 1 or len(red) < 1:
                 continue
 
-            # Seed player form = avg perf in matches[i+1 … i+5] (older = higher index)
-            prior = [match_details[ordered[j]] for j in range(i + 1, min(i + 6, len(ordered)))]
-            seed_form = _compute_seed_form(puuid, prior)
+            # identify roles for meta matchup stats
+            blue_ids = [p.get("championId", 0) for p in blue]
+            red_ids  = [p.get("championId", 0) for p in red]
+            
+            from .role_identifier import assign_team_roles
+            blue_roles = await assign_team_roles(blue_ids)
+            red_roles  = await assign_team_roles(red_ids)
+            
+            blue_role_map = {role: cid for cid, role in blue_roles.items()}
+            red_role_map  = {role: cid for cid, role in red_roles.items()}
 
-            def team_vec(players: list) -> list[float]:
-                feats = [
-                    _player_feats(
+            # Determine lobby rank (for training, we use the tier of the seed player)
+            lobby_rank = (seed_rank_entry.get("tier") if seed_rank_entry else "EMERALD") or "EMERALD"
+
+            def team_vec(players: list, roles, opp_role_map) -> list[float]:
+                feats = []
+                for p in players:
+                    cid = p.get("championId", 0)
+                    role = roles.get(cid, "UNKNOWN")
+                    opp_cid = opp_role_map.get(role, 0)
+                    
+                    f = _player_feats(
                         rank_cache.get(p.get("puuid")),
                         seed_form if p.get("puuid") == puuid else 0.5,
+                        champion_id=cid,
+                        lobby_rank=lobby_rank,
+                        opp_id=opp_cid
                     )
-                    for p in players
-                ]
+                    feats.append(f)
                 return np.mean(feats, axis=0).tolist()
 
-            blue_feats = team_vec(blue)
-            red_feats  = team_vec(red)
+            blue_feats = team_vec(blue, blue_roles, red_role_map)
+            red_feats  = team_vec(red, red_roles, blue_role_map)
             blue_won   = any(p.get("win") for p in blue)
 
             await db.save_training_match(mid, blue_feats, red_feats, blue_won)
@@ -298,9 +334,18 @@ async def ingestion_worker() -> None:
     """
     global _tier_idx, _tier_page
     logger.info("ML ingestion worker started (paused by default)")
+    
+    # Initial meta sync on startup
+    asyncio.create_task(sync_meta())
+    last_meta_sync = _time.time()
 
     while True:
         try:
+            # Sync meta daily
+            if (_time.time() - last_meta_sync) > 86400:
+                asyncio.create_task(sync_meta())
+                last_meta_sync = _time.time()
+
             status = db._get_ingestion_status_sync()
 
             if status["is_paused"]:

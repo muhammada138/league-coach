@@ -40,4 +40,4 @@ app.include_router(api.router)
 
 @app.get("/")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "ok", "app": "Rift IQ Backend"}
