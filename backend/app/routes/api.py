@@ -248,7 +248,7 @@ async def get_live_game(puuid: str, region: str = RIOT_REGION):
                 "inGame": True, "gameId": data.get("gameId"), "gameMode": data.get("gameMode", ""),
                 "gameLength": data.get("gameLength", 0),
                 "queueId": data.get("gameQueueConfigId", 420),
-                "participants": [{"puuid": p.get("puuid", ""), "summonerName": (p.get("riotId") or p.get("summonerName") or "Unknown").split("#")[0], "tagLine": (p.get("riotId") or "").split("#")[1] if "#" in (p.get("riotId") or "") else "", "teamId": p.get("teamId", 0), "championId": p.get("championId", 0)} for p in data.get("participants", [])],
+                "participants": [{"puuid": p.get("puuid", ""), "summonerName": (p.get("riotId") or p.get("summonerName") or "Unknown").split("#")[0], "tagLine": (p.get("riotId") or "").split("#")[1] if "#" in (p.get("riotId") or "") else "", "teamId": p.get("teamId", 0), "championId": p.get("championId", 0), "spell1Id": p.get("spell1Id"), "spell2Id": p.get("spell2Id")} for p in data.get("participants", [])],
             }
         except HTTPException as e:
             if e.status_code in (404, 502, 503): return {"inGame": False}
@@ -287,7 +287,7 @@ async def live_enrich(body: LiveEnrichRequest):
             async with httpx.AsyncClient(timeout=25.0) as client:
                 entries, match_ids = await asyncio.gather(
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                        riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=6&queue={match_queue_filter}"),
+                        riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10"),
                     return_exceptions=True,
                 )
                 
@@ -358,7 +358,7 @@ async def live_enrich(body: LiveEnrichRequest):
                                 break
                         from collections import Counter as _Counter
                         main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
-                        positions = [g.get("position", "UNKNOWN") for g in recent_games if g.get("position") != "UNKNOWN"]
+                        positions = [g.get("position", "UNKNOWN") for g in recent_games if g.get("position") not in (None, "", "UNKNOWN")]
                         most_common_pos = _Counter(positions).most_common(1)[0][0] if positions else "UNKNOWN"
                         base.update({
                             "last5": recent_games[:5],   # newest first (leftmost), fetch 10 for duo detection

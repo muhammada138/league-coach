@@ -584,7 +584,12 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   const rolePriority = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5, UNKNOWN: 6 };
   const getRoleSortScore = (p) => {
     const stats = liveStats?.[p.puuid];
-    return rolePriority[stats?.most_common_position] || 99;
+    // Smite is the absolute indicator for Jungle
+    if (p.spell1Id === 11 || p.spell2Id === 11) return 2;
+    
+    const pos = stats?.most_common_position;
+    if (pos && rolePriority[pos]) return rolePriority[pos];
+    return 99;
   };
 
   const blueTeam = [...liveGame.participants]
@@ -639,6 +644,18 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
         )}
         <div className="relative z-10 flex flex-col min-w-0 flex-1 pointer-events-none">
           <div className="flex items-center gap-1.5 min-w-0">
+            {(() => {
+              const stats = liveStats?.[p.puuid];
+              const isJg = p.spell1Id === 11 || p.spell2Id === 11;
+              const pos = isJg ? "JUNGLE" : (stats?.most_common_position || "UNKNOWN");
+              const m = LANE_META[pos];
+              if (!m) return null;
+              return (
+                <span className={`text-[8px] font-black px-1 rounded flex-shrink-0 border ${m.bg} ${m.border} ${m.color}`}>
+                  {m.abbr}
+                </span>
+              );
+            })()}
             <span className={`text-xs font-semibold truncate
               ${isMe ? "text-[#c89b3c]" : canNav ? "text-slate-700 dark:text-white/70 group-hover:text-[#c89b3c] dark:group-hover:text-[#c89b3c] transition-colors" : "text-slate-700 dark:text-white/70"}`}>
               {isMe && "★ "}{p.summonerName}
