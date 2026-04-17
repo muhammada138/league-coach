@@ -525,7 +525,7 @@ function LaneIcon({ lane }) {
 
 // ── Live Game Banner ────────────────────────────────────────────────────────
 function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, onMatchClick }) {
-  const SPECTATOR_DELAY_SECS = 182;
+  const SPECTATOR_DELAY_SECS = 142;
   const [champMap, setChampMap] = useState(null);
   const [elapsed, setElapsed] = useState(() => {
     return liveGame?.gameLength !== undefined ? liveGame.gameLength + SPECTATOR_DELAY_SECS : 0;
