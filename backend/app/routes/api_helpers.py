@@ -92,8 +92,8 @@ def _aggregate_games_stats(games: List[Dict[str, Any]]) -> Dict[str, Any]:
     lobby_kda = (lobby_avgs_agg["kills"] + lobby_avgs_agg["assists"]) / max(lobby_avgs_agg["deaths"], 1)
     wins = sum(1 for g in games if g["playerStats"]["win"])
     win_rate = round((wins / n) * 100, 1)
-    positions = [g["playerStats"]["teamPosition"] for g in games]
-    most_common_position = Counter(positions).most_common(1)[0][0]
+    positions = [g["playerStats"]["teamPosition"] for g in games if g["playerStats"]["teamPosition"] not in (None, "", "UNKNOWN")]
+    most_common_position = Counter(positions).most_common(1)[0][0] if positions else "UNKNOWN"
     champ_names = [g["playerStats"]["championName"] for g in games]
     most_played_champ = Counter(champ_names).most_common(1)[0][0]
     champ_counter = Counter(champ_names)
