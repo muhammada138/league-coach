@@ -44,10 +44,18 @@ export default function AdminData() {
     setError("");
     try {
       await syncMeta();
-      // Sync started in background, polling will catch updates
     } catch (err) {
       setError("Failed to start sync: " + (err.response?.data?.detail || err.message));
       setSyncing(false);
+    }
+  };
+
+  const handleCancelSync = async () => {
+    try {
+      await cancelSync();
+      setSyncing(false);
+    } catch (err) {
+      setError("Cancel request failed.");
     }
   };
 
@@ -168,21 +176,21 @@ export default function AdminData() {
                   </button>
                 ) : (
                   <button
-                    onClick={handleSyncMeta}
-                    disabled={syncing}
+                    onClick={syncing ? handleCancelSync : handleSyncMeta}
                     className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2 ${
-                      syncing ? 'bg-amber-500/20 text-amber-500' : 'bg-[#c89b3c] text-black hover:bg-[#a67c2e]'
+                      syncing ? 'bg-rose-500/20 text-rose-500 hover:bg-rose-500/30' : 'bg-[#c89b3c] text-black hover:bg-[#a67c2e]'
                     }`}
                   >
                     {syncing ? (
                       <>
-                        <span className="w-3 h-3 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
-                        Syncing...
+                        <span className="w-3 h-3 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin" />
+                        Cancel Sync
                       </>
                     ) : (
                       "Deep Sync All"
                     )}
                   </button>
+
                 )}
               </div>
             </div>

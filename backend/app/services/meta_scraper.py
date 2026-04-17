@@ -132,39 +132,72 @@ async def fetch_rank_meta(rank: str) -> dict:
             logger.error("Error in fetch_rank_meta for %s: %s", rank, e)
             return {}
 
+# ---------------------------------------------------------------------------
+# Global sync control
+# ---------------------------------------------------------------------------
+_sync_active = False
+_cancel_requested = False
+
 async def sync_meta():
     """Daily sync: Scrapes all ranks, all lanes, and all matchups."""
-    logger.info("Starting Role-Aware Meta Sync...")
-    full_meta = {}
+    global _sync_active, _cancel_requested
+    if _sync_active: return False
     
-    for rank in RANKS:
-        logger.info("Rank: %s", rank)
-        rank_data = await fetch_rank_meta(rank)
-        if not rank_data: continue
-        full_meta[rank] = rank_data
+    _sync_active = True
+    _cancel_requested = False
+    logger.info("Starting Role-Aware Meta Sync...")
+    
+    try:
+        full_meta = {}
         
-        # Incremental save
-        with open(META_FILE_PATH, "w") as f:
-            json.dump({"updated_at": time.time(), "data": full_meta}, f, indent=2)
+        for rank in RANKS:
+            if _cancel_requested: break
+            logger.info("Rank: %s", rank)
+            rank_data = await fetch_rank_meta(rank)
+            if not rank_data: continue
+            full_meta[rank] = rank_data
             
-        # 2. Deep Matchup Sync for each champ in their detected lane
-        champs = rank_data.get("champions", {})
-        for cid_str, cdata in champs.items():
-            name, lane = cdata["name"], cdata["lane"]
-            logger.info("  -> Matchups: %s (%s)", name, lane)
-            
-            matchups = await fetch_champion_matchups(rank, name, lane)
-            if matchups:
-                full_meta[rank]["champions"][cid_str]["matchups"] = matchups
-                # Save every 5 champs to be safe
-                if int(cid_str) % 5 == 0:
-                    with open(META_FILE_PATH, "w") as f:
-                        json.dump({"updated_at": time.time(), "data": full_meta}, f, indent=2)
-            
-            await asyncio.sleep(1.2) # Throttling
+            # Incremental save
+            with open(META_FILE_PATH, "w") as f:
+                json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
+                
+            # 2. Deep Matchup Sync for each champ in their detected lane
+            champs = rank_data.get("champions", {})
+            for cid_str, cdata in champs.items():
+                if _cancel_requested: break
+                name, lane = cdata["name"], cdata["lane"]
+                logger.info("  -> Matchups: %s (%s)", name, lane)
+                
+                matchups = await fetch_champion_matchups(rank, name, lane)
+                if matchups:
+                    full_meta[rank]["champions"][cid_str]["matchups"] = matchups
+                    if int(cid_str) % 5 == 0:
+                        with open(META_FILE_PATH, "w") as f:
+                            json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
+                
+                await asyncio.sleep(1.2) # Throttling
 
-    logger.info("Role-Aware Sync Complete.")
+        if not _cancel_requested:
+            with open(META_FILE_PATH, "w") as f:
+                json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": False}, f, indent=2)
+            logger.info("Role-Aware Sync Complete.")
+        else:
+            logger.info("Role-Aware Sync CANCELLED by user.")
+            
+    finally:
+        _sync_active = False
+        _cancel_requested = False
     return True
+
+def cancel_sync():
+    global _cancel_requested
+    if _sync_active:
+        _cancel_requested = True
+        return True
+    return False
+
+def is_sync_active():
+    return _sync_active
 
 def get_meta_data() -> dict:
     if not META_FILE_PATH.exists(): return {}

@@ -53,6 +53,9 @@ export const getAdminDataSummary = () =>
 export const syncMeta = () =>
   api.post("/admin/sync-meta").then((r) => r.data);
 
+export const cancelSync = () =>
+  api.post("/admin/cancel-sync").then((r) => r.data);
+
 export const getIngestStatus = () =>
   api.get("/ingest/status").then((r) => r.data);
 

@@ -564,6 +564,17 @@ async def admin_sync_meta():
     asyncio.create_task(sync_meta())
     return {"ok": True, "message": "Meta sync started in background"}
 
+@router.post("/admin/cancel-sync")
+async def admin_cancel_sync():
+    from ..services.meta_scraper import cancel_sync
+    success = cancel_sync()
+    return {"ok": success, "message": "Cancel requested" if success else "No active sync"}
+
+@router.get("/admin/sync-status")
+async def admin_sync_status():
+    from ..services.meta_scraper import is_sync_active
+    return {"active": is_sync_active()}
+
 
 @router.post("/ask")
 async def ask_coach(body: AskRequest):
