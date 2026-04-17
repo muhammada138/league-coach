@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { render, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Dashboard from './Dashboard';
@@ -44,9 +44,14 @@ describe('Dashboard Component', () => {
       },
       deltas: {},
     });
-    // Mock getLpHistory to reject
-    const mockError = new Error('Failed to fetch LP history');
-    getLpHistory.mockRejectedValue(mockError);
+    // Create a controlled promise to test the rejection deterministically
+    let rejectPromise;
+    const lpHistoryPromise = new Promise((resolve, reject) => {
+        rejectPromise = reject;
+    });
+
+    // Mock getLpHistory to return an unresolved promise that we'll reject later
+    getLpHistory.mockReturnValue(lpHistoryPromise);
 
     // Mock global fetch since some components like getRunesMap/getChampIdMap use it
     globalThis.fetch = vi.fn().mockResolvedValue({
@@ -65,6 +70,13 @@ describe('Dashboard Component', () => {
 
     await waitFor(() => {
       expect(getLpHistory).toHaveBeenCalledWith(mockPuuid, 'RANKED_SOLO_5x5', 'na1');
+    });
+
+    // Now explicitly reject the promise
+    await act(async () => {
+      rejectPromise(new Error('Failed to fetch LP history'));
+      // Wait a tick to let the promise rejection handler run
+      await new Promise(resolve => setTimeout(resolve, 0));
     });
 
     // Test that the component rendered completely despite the error
