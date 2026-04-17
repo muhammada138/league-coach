@@ -581,6 +581,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   const mins = Math.floor(elapsed / 60);
   const secs = String(elapsed % 60).padStart(2, "0");
   const queueLabel = QUEUE_LABELS[liveGame.queueId] ?? liveGame.gameMode ?? "Live Game";
+  console.log("LiveGame participants:", liveGame.participants);
   
   const rolePriority = { 
     TOP: 1, 

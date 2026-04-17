@@ -273,7 +273,7 @@ async def live_enrich(body: LiveEnrichRequest):
         region = getattr(body, 'region', RIOT_REGION)
         routing = get_routing(region)
         
-        cache_key = f"v3:{puuid}:{body.queue_id}:{region}"
+        cache_key = f"v4:{puuid}:{body.queue_id}:{region}"
         cached = enriched_cache.get(cache_key)
         if cached: return cached
 
