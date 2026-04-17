@@ -669,7 +669,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
             {(() => {
               const stats = liveStats?.[p.puuid];
               // Map ID to Name for guess lookup
-              const realChampName = champIdMap[p.championId] || p.championName;
+              const realChampName = champMap ? (champMap[String(p.championId)] || p.championName) : p.championName;
               
               // Smite detection (Smites are 11) - use relaxed equality for string/number mixing
               const isJg = p.spell1Id == 11 || p.spell2Id == 11 || stats?.most_common_position === "JUNGLE";
