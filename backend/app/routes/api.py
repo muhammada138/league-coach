@@ -535,12 +535,16 @@ async def admin_data_summary():
     except Exception:
         pass
 
+    # Pick any available rank for the count
+    ranks_data = meta.get("data", {})
+    first_rank = next(iter(ranks_data.values())) if ranks_data else {}
+    
     return {
         "ingestion": ingest,
         "meta": {
             "updated_at": meta.get("updated_at"),
-            "ranks": list(meta.get("data", {}).keys()),
-            "champion_count": len(meta.get("data", {}).get("emerald", {}))
+            "ranks": list(ranks_data.keys()),
+            "champion_count": len(first_rank)
         },
         "training": {
             "match_count": match_count
