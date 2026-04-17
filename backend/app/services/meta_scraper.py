@@ -90,43 +90,51 @@ async def fetch_rank_meta(rank: str) -> dict:
                     avg_match = re.search(r'Average .*? Win Rate:.*?([0-9\.]+)', html, re.DOTALL | re.IGNORECASE)
                     if avg_match: results["tier_avg"] = float(avg_match.group(1))
 
-                # Isolate the data rows using a more robust pattern
-                rows = re.split(r'href="/lol/([^/"]+)/build/\??[^"]*"', html)
+                # Robust extraction: split on champion build links which are present for all champions in the state
+                # even if virtualized in the DOM.
+                blocks = re.split(r'href="/lol/([^/"]+)/build/', html)
+                
+                # Each champion entry starts at indices 1, 3, 5... (index 0 is header stuff)
+                for i in range(1, len(blocks), 2):
+                    champ_slug = blocks[i].lower().replace("-", "")
+                    content = blocks[i+1][:3000] # Increased context window
 
-                for i in range(1, len(rows), 2):
-                    clean_name = rows[i].lower().replace("-", "")
-                    row_content = rows[i+1][:2000]
-
-                    cid = _CHAMP_ID_MAP.get(clean_name)
+                    cid = _CHAMP_ID_MAP.get(champ_slug)
                     if not cid: continue
 
-                    # Target Rank (q:key="1")
-                    rank_match = re.search(r'q:key="1".*?>(#[0-9]+)<', row_content, re.DOTALL)
-                    rank_label = rank_match.group(1) if rank_match else "N/A"
+                    # 1. Official Rank: Usually in q:key="0" or nearby the name
+                    # Look for plain numbers inside a div or near q:key="0"
+                    rank_label = "N/A"
+                    # Try targeting q:key="0" (Rank index) or just a free standing number at the start of the block
+                    rank_match = re.search(r'q:key="0".*?>\s*([0-9]+)\s*<', content, re.DOTALL)
+                    if not rank_match:
+                        rank_match = re.search(r'>\s*([0-9]+)\s*<', content[:500], re.DOTALL)
+                    
+                    if rank_match:
+                        rank_label = rank_match.group(1)
 
-                    # Target Global Win Rate column (q:key="5")
-                    wr_match = re.search(r'q:key="5".*?>([456][0-9]\.[0-9]+)<', row_content, re.DOTALL)
-                    if not wr_match:
-                        wr_match = re.search(r'q:key="5".*?([456][0-9]\.[0-9]+)', row_content, re.DOTALL)
-
+                    # 2. Win Rate: q:key="5"
+                    # Format: 53.42+1.16 or just 53.42
+                    wr = 50.0
+                    wr_match = re.search(r'q:key="5".*?>\s*([456][0-9]\.[0-9]+)', content, re.DOTALL)
                     if wr_match:
                         wr = float(wr_match.group(1))
-                        
-                        # Target Tier (q:key="3") and Games (q:key="9")
-                        tier_match = re.search(r'q:key="3".*?>\s*([SABCD\+\-]+|N/A)\s*<', row_content, re.DOTALL)
-                        games_match = re.search(r'q:key="9".*?>\s*([0-9,]+)\s*<', row_content, re.DOTALL)
 
-                        tier = tier_match.group(1) if tier_match else "N/A"
-                        games_str = games_match.group(1).replace(",", "") if games_match else "0"
-                        games = int(games_str)
+                    # 3. Tier: q:key="3"
+                    tier_match = re.search(r'q:key="3".*?>\s*([SABCD\+\-]+|N/A)\s*<', content, re.DOTALL)
+                    tier = tier_match.group(1) if tier_match else "N/A"
 
-                        # Store with composite key cid:lane (or cid:all)
+                    # 4. Games: q:key="9"
+                    games_match = re.search(r'q:key="9".*?>\s*([0-9,]+)\s*<', content, re.DOTALL)
+                    games = int(games_match.group(1).replace(",", "")) if games_match else 0
+
+                    if wr > 0:
                         lane_key = lane if lane else "all"
                         entry_key = f"{cid}:{lane_key}"
                         
                         results["champions"][entry_key] = {
                             "cid": str(cid),
-                            "name": clean_name,
+                            "name": champ_slug,
                             "wr": wr,
                             "tier": tier,
                             "games": games,

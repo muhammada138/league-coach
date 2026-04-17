@@ -19,7 +19,7 @@ export default function AdminData() {
   const [selectedRole, setSelectedRole] = useState("all");
   const [search, setSearch] = useState("");
   const [selectedChamp, setSelectedChamp] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ key: 'tier_val', direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState({ key: 'rank_num', direction: 'asc' });
 
   const fetchData = async () => {
     try {
@@ -106,7 +106,7 @@ export default function AdminData() {
         ...info,
         name: info.name || data?.champ_names?.[info.cid] || "Unknown",
         tier_val: TIER_ORDER[info.tier] ?? 15,
-        rank_num: info.rank_label || "N/A"
+        rank_num: info.rank_label && info.rank_label !== "N/A" ? parseInt(info.rank_label) : 999
       }));
   }, [rankData, data, selectedRole]);
 
@@ -335,7 +335,7 @@ export default function AdminData() {
                 {(selectedChamp ? matchupData : processedChamps).map((c, i) => (
                   <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
                     <td className="px-8 py-4 tabular-nums text-white/20 font-black text-xs">
-                      #{c.rank_num || i + 1}
+                      #{c.rank_num === 999 ? "N/A" : c.rank_num}
                     </td>
                     <td className="px-4 py-4">
                       <img 
