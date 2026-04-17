@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getLiveEnrich, getSummoner, getProfile, askCoach } from './riot';
+import { getLiveEnrich, getSummoner, getProfile, analyzeSummoner } from './riot';
 
 const { mockGet, mockPost } = vi.hoisted(() => ({
   mockGet: vi.fn(),
@@ -23,6 +23,43 @@ vi.mock('axios', () => {
 describe('Riot API Wrappers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('analyzeSummoner', () => {
+    it('should call api.get with default parameters (count=10, region="na1")', async () => {
+      const mockData = { analysis: 'test' };
+      mockGet.mockResolvedValueOnce({ data: mockData });
+
+      const puuid = 'test-puuid';
+      const gameName = 'TestPlayer';
+      const result = await analyzeSummoner(puuid, gameName);
+
+      expect(mockGet).toHaveBeenCalledWith(`/analyze/${puuid}`, {
+        params: { game_name: gameName, count: 10, region: 'na1' }
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should call api.get with explicitly provided parameters', async () => {
+      const mockData = { analysis: 'test2' };
+      mockGet.mockResolvedValueOnce({ data: mockData });
+
+      const puuid = 'test-puuid2';
+      const gameName = 'TestPlayer2';
+      const result = await analyzeSummoner(puuid, gameName, 5, 'euw1');
+
+      expect(mockGet).toHaveBeenCalledWith(`/analyze/${puuid}`, {
+        params: { game_name: gameName, count: 5, region: 'euw1' }
+      });
+      expect(result).toEqual(mockData);
+    });
+
+    it('should handle API errors appropriately', async () => {
+      const mockError = new Error('API Error');
+      mockGet.mockRejectedValueOnce(mockError);
+
+      await expect(analyzeSummoner('error-puuid', 'ErrorPlayer')).rejects.toThrow('API Error');
+    });
   });
 
   describe('getLiveEnrich', () => {
@@ -142,37 +179,6 @@ describe('Riot API Wrappers', () => {
       mockGet.mockRejectedValueOnce(mockError);
 
       await expect(getProfile('error-puuid')).rejects.toThrow('API Error');
-    });
-  });
-
-  describe('askCoach', () => {
-    it('should call api.post with correct endpoint and parameters, and return data', async () => {
-      const mockData = { answer: 'Buy control wards' };
-      mockPost.mockResolvedValueOnce({ data: mockData });
-
-      const question = 'How to win?';
-      const context = 'Playing Jungle';
-      const history = ['Hello', 'Hi'];
-
-      const result = await askCoach(question, context, history);
-
-      expect(mockPost).toHaveBeenCalledWith('/ask', {
-        question,
-        context,
-        history,
-      });
-      expect(result).toEqual(mockData);
-    });
-
-    it('should handle API errors correctly', async () => {
-      const mockError = new Error('API Timeout');
-      mockPost.mockRejectedValueOnce(mockError);
-
-      const question = 'How to win?';
-      const context = 'Playing Jungle';
-      const history = ['Hello', 'Hi'];
-
-      await expect(askCoach(question, context, history)).rejects.toThrow('API Timeout');
     });
   });
 });
