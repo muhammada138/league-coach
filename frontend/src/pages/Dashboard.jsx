@@ -534,6 +534,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   });
   const [liveStats, setLiveStats] = useState(null);
   const [predictor, setPredictor] = useState(null);
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   useEffect(() => { getChampIdMap(ddVersion).then(setChampMap); }, [ddVersion]);
   // Riot's spectator API has a ~3-minute broadcast delay; compensate so our
@@ -753,11 +754,68 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
                 </div>
                 <span className="text-xs font-black text-red-400 w-8 tabular-nums">{predictor.redPct}%</span>
               </div>
-              <div className="flex justify-between px-10">
+              <div className="flex justify-between items-center px-10 mb-1">
                 <span className="text-[9px] text-blue-300 dark:text-blue-400/60 font-semibold">Blue</span>
-                <span className="text-[9px] text-slate-400 dark:text-white/20">rank · form · recent WR · champ WR · streak</span>
+                <button
+                  onClick={() => setShowBreakdown(v => !v)}
+                  className="text-[9px] text-slate-400 dark:text-white/20 hover:text-white/50 transition-colors"
+                >
+                  {showBreakdown ? "▲ hide breakdown" : "▼ show breakdown"}
+                </button>
                 <span className="text-[9px] text-red-300 dark:text-red-400/60 font-semibold">Red</span>
               </div>
+              {showBreakdown && predictor.features && (() => {
+                const LABELS = {
+                  rank: "Rank Score", season_wr: "Season WR", form: "Form (avg score)",
+                  recent_wr: "Recent WR (last 10)", champ_wr: "Champ WR", mastery: "Mastery",
+                  streak: "Streak", meta_wr: "Meta WR (Lolalytics)", matchup: "Matchup Adv",
+                };
+                const WEIGHTS = {
+                  rank: 0.30, season_wr: 0.10, form: 0.25, recent_wr: 0.20,
+                  champ_wr: 0.08, mastery: 0.04, streak: 0.03, meta_wr: 0.15, matchup: 0.10,
+                };
+                return (
+                  <div className="mt-2 rounded-lg overflow-hidden border border-white/[0.06]">
+                    <table className="w-full text-[10px]">
+                      <thead>
+                        <tr className="bg-white/[0.04]">
+                          <th className="text-left px-2 py-1 text-white/30 font-semibold">Feature</th>
+                          <th className="text-center px-2 py-1 text-blue-400/70 font-semibold">Blue</th>
+                          <th className="text-center px-2 py-1 text-red-400/70 font-semibold">Red</th>
+                          <th className="text-center px-2 py-1 text-white/20 font-semibold">Wt</th>
+                          <th className="text-center px-2 py-1 text-white/20 font-semibold">Edge</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.keys(LABELS).map(key => {
+                          const b = predictor.features.blue[key] ?? 0;
+                          const r = predictor.features.red[key] ?? 0;
+                          const diff = b - r;
+                          const isStreak = key === "streak";
+                          const fmt = v => isStreak
+                            ? (v > 0 ? `+${(v * 5).toFixed(0)}` : (v * 5).toFixed(0))
+                            : `${(v * 100).toFixed(1)}%`;
+                          const edgeColor = Math.abs(diff) < 0.005
+                            ? "text-white/20"
+                            : diff > 0 ? "text-blue-400" : "text-red-400";
+                          const edgeText = Math.abs(diff) < 0.005
+                            ? "—"
+                            : diff > 0 ? "▲ Blue" : "▼ Red";
+                          return (
+                            <tr key={key} className="border-t border-white/[0.04] hover:bg-white/[0.02]">
+                              <td className="px-2 py-1 text-white/40">{LABELS[key]}</td>
+                              <td className={`px-2 py-1 text-center font-mono tabular-nums ${diff > 0.005 ? "text-blue-400" : "text-white/50"}`}>{fmt(b)}</td>
+                              <td className={`px-2 py-1 text-center font-mono tabular-nums ${diff < -0.005 ? "text-red-400" : "text-white/50"}`}>{fmt(r)}</td>
+                              <td className="px-2 py-1 text-center text-white/20">{(WEIGHTS[key] * 100).toFixed(0)}%</td>
+                              <td className={`px-2 py-1 text-center font-semibold ${edgeColor}`}>{edgeText}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             </>
           ) : (
             <div className="h-2.5 rounded-full bg-slate-200 dark:bg-white/10 animate-pulse" />

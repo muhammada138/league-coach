@@ -363,11 +363,18 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
         diff_val = float(np.dot(blue_vec - red_vec, w))
         prob = 1.0 / (1.0 + np.exp(-diff_val * 25.0))
 
+    _FEAT = ["rank", "season_wr", "form", "recent_wr", "champ_wr", "mastery", "streak", "meta_wr", "matchup"]
+    features = {
+        "blue": {k: round(float(blue_team_mean[i]), 3) for i, k in enumerate(_FEAT)},
+        "red":  {k: round(float(red_team_mean[i]),  3) for i, k in enumerate(_FEAT)},
+    }
+
     blue_pct = max(1, min(99, round(prob * 100)))
     return {
         "bluePct": blue_pct,
         "redPct": 100 - blue_pct,
-        "confidence": round(float(confidence), 2)
+        "confidence": round(float(confidence), 2),
+        "features": features,
     }
 
 
