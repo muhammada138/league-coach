@@ -96,7 +96,7 @@ export default function AdminData() {
 
   const champions = useMemo(() => {
     return Object.entries(rankData.champions)
-      .filter(([key, info]) => {
+      .filter(([, info]) => {
         const lane = info.lane || "all";
         return selectedRole === "all" ? lane === "all" : lane === selectedRole;
       })
@@ -149,13 +149,25 @@ export default function AdminData() {
 
   const matchupData = useMemo(() => {
     if (!selectedChampData || !selectedChampData.matchups) return [];
-    
-    return Object.entries(selectedChampData.matchups).map(([opp_cid, wr]) => {
+
+    let list = Object.entries(selectedChampData.matchups).map(([opp_cid, raw]) => {
+      const wr = typeof raw === "object" ? raw.wr : raw;
+      const games = typeof raw === "object" ? raw.games : null;
       const opp_name = data?.champ_names?.[opp_cid] || "Unknown";
-      const delta = wr - 50.0;
-      return { id: opp_cid, name: opp_name, wr, delta };
-    }).sort((a, b) => b.wr - a.wr);
-  }, [selectedChampData, data]);
+      return { id: opp_cid, name: opp_name, wr, games, delta: wr - 50.0 };
+    });
+
+    return list.sort((a, b) => {
+      const key = ['wr', 'name', 'games'].includes(sortConfig.key) ? sortConfig.key : 'wr';
+      let aVal = a[key] ?? 0;
+      let bVal = b[key] ?? 0;
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [selectedChampData, data, sortConfig]);
 
   if (!data && !error) return (
     <div className="min-h-screen flex items-center justify-center bg-[#05080f]">
@@ -323,7 +335,7 @@ export default function AdminData() {
                     Lane {sortConfig.key === 'lane' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                   </th>
                   <th className="px-8 py-5 cursor-pointer hover:text-white" onClick={() => requestSort('wr')}>
-                    Win Rate {sortConfig.key === 'wr' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    {selectedChamp ? `${selectedChampName}'s WR vs` : "Win Rate"} {sortConfig.key === 'wr' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                   </th>
                   <th className="px-8 py-5 cursor-pointer hover:text-white" onClick={() => requestSort('games')}>
                     Games {sortConfig.key === 'games' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
@@ -335,7 +347,7 @@ export default function AdminData() {
                 {(selectedChamp ? matchupData : processedChamps).map((c, i) => (
                   <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
                     <td className="px-8 py-4 tabular-nums text-white/20 font-black text-xs">
-                      #{c.rank_num === 999 ? "N/A" : c.rank_num}
+                      {selectedChamp ? "—" : `#${c.rank_num === 999 ? "N/A" : c.rank_num}`}
                     </td>
                     <td className="px-4 py-4">
                       <img 
@@ -349,14 +361,18 @@ export default function AdminData() {
                       <span className="text-sm font-bold capitalize group-hover:text-[#c89b3c] transition-colors">{c.name}</span>
                     </td>
                     <td className="px-8 py-4">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-black border ${
-                        c.tier?.startsWith('S') ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' :
-                        c.tier?.startsWith('A') ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
-                        c.tier?.startsWith('B') ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' :
-                        'bg-white/5 border-white/10 text-white/30'
-                      }`}>
-                        {c.tier || 'N/A'}
-                      </span>
+                      {selectedChamp ? (
+                        <span className="text-white/20 text-xs">—</span>
+                      ) : (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-black border ${
+                          c.tier?.startsWith('S') ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' :
+                          c.tier?.startsWith('A') ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
+                          c.tier?.startsWith('B') ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' :
+                          'bg-white/5 border-white/10 text-white/30'
+                        }`}>
+                          {c.tier || 'N/A'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-8 py-4">
                       <span className="text-[10px] font-black uppercase text-white/30">{c.lane || (selectedChamp ? 'Matchup' : 'unknown')}</span>
@@ -367,7 +383,7 @@ export default function AdminData() {
                       </span>
                     </td>
                     <td className="px-8 py-4 tabular-nums text-xs text-white/20">
-                      {fmt(c.games)}
+                      {selectedChamp ? (c.games != null ? fmt(c.games) : "—") : fmt(c.games)}
                     </td>
                     <td className="px-8 py-4 text-right">
                        {!selectedChamp ? (
