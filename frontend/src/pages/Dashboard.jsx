@@ -583,24 +583,10 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   const secs = String(elapsed % 60).padStart(2, "0");
   const queueLabel = QUEUE_LABELS[liveGame.queueId] ?? liveGame.gameMode ?? "Live Game";
 
-  const ROLE_SORT_ORDER = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5, UNKNOWN: 6 };
-
-  const detectRole = (p, stats) => {
-    if (p.spell1Id == 11 || p.spell2Id == 11) return "JUNGLE";
-    const hist = stats?.most_common_position;
-    if (hist && hist !== "UNKNOWN" && hist !== "") {
-      if (hist === "ADC") return "BOTTOM";
-      if (hist === "MID") return "MIDDLE";
-      if (hist === "SUP" || hist === "SUPPORT") return "UTILITY";
-      if (hist === "JGL") return "JUNGLE";
-      return hist;
-    }
-    return "UNKNOWN";
-  };
-
+  const rolePriority = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5, UNKNOWN: 6 };
   const getRoleSortScore = (p) => {
     const stats = liveStats?.[p.puuid];
-    return ROLE_SORT_ORDER[detectRole(p, stats)] ?? 99;
+    return rolePriority[stats?.most_common_position] || 99;
   };
 
   const blueTeam = [...liveGame.participants]
@@ -655,16 +641,6 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
         )}
         <div className="relative z-10 flex flex-col min-w-0 flex-1 pointer-events-none">
           <div className="flex items-center gap-1.5 min-w-0">
-            {(() => {
-              const stats = liveStats?.[p.puuid];
-              const pos = detectRole(p, stats);
-              const m = LANE_META[pos] ?? LANE_META["UNKNOWN"];
-              return (
-                <span title={`Pos: ${pos} | S1: ${p.spell1Id} | S2: ${p.spell2Id}`} className={`text-[9px] font-black px-1.5 py-0.5 rounded flex-shrink-0 border uppercase tracking-tighter ${m.bg} ${m.border} ${m.color}`}>
-                  {m.abbr}
-                </span>
-              );
-            })()}
             <span className={`text-xs font-semibold truncate
               ${isMe ? "text-[#c89b3c]" : canNav ? "text-slate-700 dark:text-white/70 group-hover:text-[#c89b3c] dark:group-hover:text-[#c89b3c] transition-colors" : "text-slate-700 dark:text-white/70"}`}>
               {isMe && "★ "}{p.summonerName}
