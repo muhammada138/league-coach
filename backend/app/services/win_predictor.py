@@ -58,6 +58,15 @@ MAX_RANK  = 11.0  # Challenger I + max LP bonus
 # Approximates a ~53–56% win rate on your main vs 50% on an off-pick.
 _MASTERY_SCORES = [0.06, 0.04, 0.02]  # index 0 = most-played champ
 
+# Riot tiers → meta data key. Iron/unranked use bronze; Grandmaster/Challenger use master.
+_RANK_TO_META = {
+    "iron": "bronze", "bronze": "bronze", "silver": "silver",
+    "gold": "gold", "platinum": "platinum", "emerald": "emerald",
+    "diamond": "diamond", "master": "master",
+    "grandmaster": "master", "challenger": "master",
+    "unranked": "bronze",
+}
+
 MODEL_PATH = Path(__file__).parent.parent.parent / "model" / "win_predictor_v4.pkl"
 
 # ---------------------------------------------------------------------------
@@ -228,8 +237,7 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
 
     # 8. Meta WR (Lolalytics) — how good is the champ in this rank?
     meta = get_meta_data()
-    rank_key = lobby_rank.lower()
-    if rank_key == "unranked": rank_key = "emerald"
+    rank_key = _RANK_TO_META.get(lobby_rank.lower(), "emerald")
     
     rank_meta = meta.get("data", {}).get(rank_key, {})
     
@@ -248,20 +256,20 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
     matchup_adv = 0.5
     if opponent_champion_id:
         opp_id_str = str(opponent_champion_id)
-        # Check if we have a specific matchup winrate (e.g. Jax vs Camille)
         matchups = champ_meta.get("matchups", {})
         if opp_id_str in matchups:
-            # Matchup WR is e.g. 52.5 or {'wr': 52.5, 'games': 368}. Scale to 0-1.
             raw = matchups[opp_id_str]
             wr = raw["wr"] if isinstance(raw, dict) else raw
-            matchup_adv = wr / 100.0
-        else:
-            # Fallback to global winrate delta as proxy for lane counter
-            # Use 'all' role for opponent meta if specific not found
+            # Confidence-weight toward neutral when games count is low (<100 games)
+            games = raw.get("games", 100) if isinstance(raw, dict) else 100
+            conf = min(games / 100.0, 1.0)
+            matchup_adv = (wr / 100.0) * conf + 0.5 * (1.0 - conf)
+        elif champ_meta:
+            # Fallback: use relative meta WR difference as a proxy for matchup strength
             opp_meta = rank_meta.get(f"{opp_id_str}:{role_key}", rank_meta.get(f"{opp_id_str}:all", {}))
             opp_wr = opp_meta.get("wr", 50.0) / 100.0
-            # Advantage is the difference between my meta WR and theirs
-            matchup_adv = 0.5 + (meta_wr - opp_wr)
+            matchup_adv = max(0.0, min(1.0, 0.5 + (meta_wr - opp_wr)))
+        # else: no champ meta at all (Naafiri bronze top) → stays 0.5 neutral
 
     return np.array([
         rank_score, season_wr, form_score, recent_wr, champ_wr, 

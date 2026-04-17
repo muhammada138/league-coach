@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routes import api
@@ -8,9 +10,44 @@ from .state import ALLOWED_ORIGINS
 from .services import win_predictor
 from .services.db import init_db
 from .services import ingestion
+from .services import meta_scraper
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+async def _meta_scheduler():
+    """Tierlist refresh every 4 h; full deep sync daily at 5:30 AM server time."""
+    await asyncio.sleep(30)  # let uvicorn finish startup
+
+    # If meta data is missing or stale, do an immediate tierlist sync
+    meta = meta_scraper.get_meta_data()
+    last_tierlist_ts = meta.get("updated_at", 0)
+    if time.time() - last_tierlist_ts > 4 * 3600:
+        logger.info("Scheduler: stale meta on startup — triggering tierlist sync")
+        asyncio.create_task(meta_scraper.sync_meta(mode="tierlist"))
+        last_tierlist_ts = time.time()
+
+    last_full_date = None
+
+    while True:
+        await asyncio.sleep(60)
+        now = datetime.now()
+        now_ts = time.time()
+        today = now.date()
+
+        # Full sync (tierlist + all matchups) at 5:30 AM daily
+        if now.hour == 5 and now.minute == 30 and last_full_date != today:
+            if not meta_scraper.is_sync_active():
+                last_full_date = today
+                logger.info("Scheduler: starting daily full sync (5:30 AM)")
+                asyncio.create_task(meta_scraper.sync_meta(mode="full"))
+
+        # Tierlist-only refresh every 4 hours (skip if any sync is running)
+        elif now_ts - last_tierlist_ts >= 4 * 3600 and not meta_scraper.is_sync_active():
+            last_tierlist_ts = now_ts
+            logger.info("Scheduler: starting 4-hour tierlist refresh")
+            asyncio.create_task(meta_scraper.sync_meta(mode="tierlist"))
 
 
 @asynccontextmanager
@@ -18,12 +55,15 @@ async def lifespan(app: FastAPI):
     init_db()
     win_predictor.load_or_train_model()
     worker_task = asyncio.create_task(ingestion.ingestion_worker())
+    scheduler_task = asyncio.create_task(_meta_scheduler())
     yield
     worker_task.cancel()
-    try:
-        await worker_task
-    except asyncio.CancelledError:
-        pass
+    scheduler_task.cancel()
+    for t in (worker_task, scheduler_task):
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="League Coach API", lifespan=lifespan)
