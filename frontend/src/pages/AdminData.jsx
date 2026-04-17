@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getAdminDataSummary, syncMeta, cancelSync, toggleSyncPause, cleanupData } from "../api/riot";
 
 function fmt(n) {
@@ -15,10 +16,20 @@ export default function AdminData() {
   const [paused, setPaused] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [error, setError] = useState("");
-  const [selectedRank, setSelectedRank] = useState("emerald");
-  const [selectedRole, setSelectedRole] = useState("all");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedRank, setSelectedRank] = useState(searchParams.get("rank") || "emerald");
+  const [selectedRole, setSelectedRole] = useState(searchParams.get("role") || "all");
   const [search, setSearch] = useState("");
-  const [selectedChamp, setSelectedChamp] = useState(null);
+  const [selectedChamp, setSelectedChamp] = useState(searchParams.get("champ") || null);
+
+  // Keep URL in sync with filter state
+  useEffect(() => {
+    const params = {};
+    if (selectedRank !== "emerald") params.rank = selectedRank;
+    if (selectedRole !== "all") params.role = selectedRole;
+    if (selectedChamp) params.champ = selectedChamp;
+    setSearchParams(params, { replace: true });
+  }, [selectedRank, selectedRole, selectedChamp]);
   const [sortConfig, setSortConfig] = useState({ key: 'rank_num', direction: 'asc' });
 
   const fetchData = async () => {
@@ -256,7 +267,8 @@ export default function AdminData() {
         {/* Explorer */}
         <div className="bg-white/[0.03] border border-white/[0.07] rounded-3xl overflow-hidden shadow-2xl backdrop-blur-sm">
           <div className="p-8 border-b border-white/[0.05]">
-            <div className="flex flex-col gap-8">
+            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4">
                 <div className="flex gap-4 items-center">
                   {selectedChamp && (
                     <button 
@@ -490,6 +502,7 @@ export default function AdminData() {
             )}
           </div>
       </div>
+    </div>
     </div>
   );
 }
