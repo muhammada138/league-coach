@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 # Lolalytics Rank Mappings
 RANKS = [
-    "iron", "bronze", "silver", "gold", "platinum", 
-    "emerald", "diamond", "master", "grandmaster", "challenger"
+    "bronze", "silver", "gold", "platinum", "emerald", 
+    "diamond", "master", "grandmaster", "challenger"
 ]
 
 # We use the user-provided URL pattern
