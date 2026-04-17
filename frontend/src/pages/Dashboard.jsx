@@ -506,18 +506,6 @@ function StarButton({ gameName, tagLine, puuid, profileIconId, region, tier, div
   );
 }
 
-const CHAMP_ROLE_GUESS = {
-  // Common Top
-  "Aatrox": "TOP", "Camille": "TOP", "Darius": "TOP", "Fiora": "TOP", "Garen": "TOP", "Jax": "TOP", "Malphite": "TOP", "Nasus": "TOP", "Ornn": "TOP", "Riven": "TOP", "Sett": "TOP", "Teemo": "TOP",
-  // Common Jungle
-  "LeeSin": "JUNGLE", "JarvanIV": "JUNGLE", "KhaZix": "JUNGLE", "MasterYi": "JUNGLE", "Nidalee": "JUNGLE", "Rengar": "JUNGLE", "Vi": "JUNGLE", "Warwick": "JUNGLE", "Shaco": "JUNGLE", "Graves": "JUNGLE",
-  // Common Mid
-  "Ahri": "MIDDLE", "Akali": "MIDDLE", "Anivia": "MIDDLE", "Azir": "MIDDLE", "Katarina": "MIDDLE", "Lux": "MIDDLE", "Orianna": "MIDDLE", "Sylas": "MIDDLE", "Yasuo": "MIDDLE", "Yone": "MIDDLE", "Zed": "MIDDLE",
-  // Common Bot
-  "Ashe": "BOTTOM", "Caitlyn": "BOTTOM", "Ezreal": "BOTTOM", "Jhin": "BOTTOM", "KaiSa": "BOTTOM", "Lucian": "BOTTOM", "MissFortune": "BOTTOM", "Vayne": "BOTTOM", "Xayah": "BOTTOM",
-  // Common Supp
-  "Braum": "UTILITY", "Leona": "UTILITY", "Lulu": "UTILITY", "Morgana": "UTILITY", "Nami": "UTILITY", "Pyke": "UTILITY", "Senna": "UTILITY", "Thresh": "UTILITY", "Yuumi": "UTILITY", "Janna": "UTILITY",
-};
 
 const LANE_META = {
   TOP: { abbr: "TOP", color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/25" },
@@ -607,8 +595,6 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
       if (hist === "JGL") return "JUNGLE";
       return hist;
     }
-    const champName = champMap ? (champMap[String(p.championId)] ?? null) : null;
-    if (champName && CHAMP_ROLE_GUESS[champName]) return CHAMP_ROLE_GUESS[champName];
     return "UNKNOWN";
   };
 
