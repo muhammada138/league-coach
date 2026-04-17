@@ -29,19 +29,27 @@ REGION_TO_ROUTING = {
     "ru": "europe",
 }
 
+
 def get_routing(region: str) -> str:
-    """Returns the routing cluster (americas, europe, asia, sea) for a given platform region."""
+    """Returns the routing cluster (americas, europe, asia, sea)
+    for a given platform region."""
     return REGION_TO_ROUTING.get(region.lower(), "americas")
 
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")]
+ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+]
 
 RIOT_HEADERS = {"X-Riot-Token": RIOT_API_KEY}
 
-# Global semaphore to limit concurrent requests to the Riot API (prevents 429 Too Many Requests)
+# Global semaphore to limit concurrent requests to the Riot API
+# (prevents 429 Too Many Requests)
 api_semaphore = asyncio.Semaphore(3)
 
 CACHE_VERSION = "v2"
+
 
 class TTLCache:
     def __init__(self, ttl_seconds: int):
@@ -71,6 +79,7 @@ class TTLCache:
 
     def __setitem__(self, key, value):
         self.set(key, value)
+
 
 # Global caches for rank lookups and match timelines
 rank_cache = TTLCache(ttl_seconds=3600)  # 1 hour
