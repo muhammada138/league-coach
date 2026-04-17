@@ -280,12 +280,12 @@ async def _process_player(
                 continue
 
             # identify roles for meta matchup stats
-            blue_ids = [p.get("championId", 0) for p in blue]
-            red_ids  = [p.get("championId", 0) for p in red]
+            blue_p = [{"championId": p.get("championId", 0), "spells": [p.get("summoner1Id"), p.get("summoner2Id")]} for p in blue]
+            red_p  = [{"championId": p.get("championId", 0), "spells": [p.get("summoner1Id"), p.get("summoner2Id")]} for p in red]
             
             from .role_identifier import assign_team_roles
-            blue_roles = await assign_team_roles(blue_ids)
-            red_roles  = await assign_team_roles(red_ids)
+            blue_roles = await assign_team_roles(blue_p)
+            red_roles  = await assign_team_roles(red_p)
             
             blue_role_map = {role: cid for cid, role in blue_roles.items()}
             red_role_map  = {role: cid for cid, role in red_roles.items()}
