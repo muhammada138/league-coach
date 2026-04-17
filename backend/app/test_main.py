@@ -25,7 +25,7 @@ async def test_get_summoner(mocker):
 @pytest.mark.asyncio
 async def test_analyze(mocker):
     # Mock network calls
-    mock_riot_get = mocker.patch("app.routes.api.riot_get")
+    mock_riot_get = mocker.patch("app.routes.api_helpers.riot_get")
     # For analyze, it does multiple riot_gets: one for match ids, then for each match.
     # We can just use side_effect or a mock
     async def mock_riot_get_impl(client_obj, url):
@@ -61,6 +61,8 @@ async def test_analyze(mocker):
     
     mock_coaching = mocker.patch("app.routes.api.get_coaching_feedback")
     mock_coaching.return_value = "1. Play better.\n2. Farm more."
+
+    mocker.patch("app.routes.api_helpers.get_coaching_feedback", return_value="1. Play better.\n2. Farm more.")
 
     response = client.get("/analyze/fake-puuid?game_name=Faker&count=5")
     assert response.status_code == 200
