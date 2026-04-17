@@ -584,10 +584,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   const queueLabel = QUEUE_LABELS[liveGame.queueId] ?? liveGame.gameMode ?? "Live Game";
 
   const rolePriority = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5, UNKNOWN: 6 };
-  const getRoleSortScore = (p) => {
-    const stats = liveStats?.[p.puuid];
-    return rolePriority[stats?.most_common_position] || 99;
-  };
+  const getRoleSortScore = (p) => rolePriority[p.assignedPosition] || 99;
 
   const blueTeam = [...liveGame.participants]
     .filter((p) => p.teamId === 100)
@@ -651,6 +648,9 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
                 }`}>
                 Duo
               </span>
+            )}
+            {p.assignedPosition && p.assignedPosition !== "UNKNOWN" && (
+              <LaneIcon lane={p.assignedPosition} />
             )}
           </div>
           {!p.puuid ? (

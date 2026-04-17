@@ -17,10 +17,10 @@ Feature vector per player (7-dim):
 
 Rate limiting
 -------------
-Semaphore(1) + 1.25s sleep between every Riot API call.
-Throughput: ~9 matches/min cold start → ~43 matches/min once rank cache warms up.
-Cache holds ~50k PUUIDs (≈15 MB) with 1hr TTL — most participants seen in the same
-rank tier repeat frequently, so hit rate climbs quickly after the first few pages.
+Shared proactive sliding-window limiter (services/rate_limiter.py) — auto-detected
+from Riot response headers. Dev key: 20 req/1s, 100 req/120s. Bursts are allowed
+up to the per-second limit; the limiter sleeps only when a window is full.
+All routes + ingestion share the same limiter so they can't collectively exceed quota.
 """
 
 import asyncio
@@ -34,15 +34,9 @@ from ..state import RIOT_REGION, RIOT_ROUTING, RIOT_HEADERS
 from ..services.riot import _compute_perf_score
 from ..services.win_predictor import TIER_SCORE, DIV_BONUS, MAX_RANK
 from ..services import db
+from ..services.rate_limiter import acquire as _rl_acquire, update_from_response as _rl_update
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-_sem = asyncio.Semaphore(1)
-_CALL_DELAY = 1.25
 
 _SEED_TIERS = [
     # Bronze — lower-elo representation
@@ -104,12 +98,14 @@ def _rank_cache_set(puuid: str, entry: dict | None) -> None:
 # ---------------------------------------------------------------------------
 
 async def _riot_get(client: httpx.AsyncClient, url: str):
-    """Minimal Riot GET with 429 back-off. Raises on non-200."""
+    """Riot GET using the shared proactive rate limiter. Raises on non-200."""
     for attempt in range(3):
+        await _rl_acquire()
         response = await client.get(url, headers=RIOT_HEADERS)
+        _rl_update(response)
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 10))
-            logger.warning("Ingest 429 – sleeping %ds (attempt %d)", retry_after + 2, attempt + 1)
+            logger.warning("Ingest 429 despite limiter – sleeping %ds (attempt %d)", retry_after + 2, attempt + 1)
             await asyncio.sleep(retry_after + 2)
             continue
         if response.status_code != 200:
@@ -179,17 +175,15 @@ async def _process_player(
         return 0
 
     # Step 1: Fetch match IDs
-    async with _sem:
-        try:
-            match_ids = await _riot_get(
-                client,
-                f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids"
-                f"?count=10&queue=420",
-            )
-        except Exception as exc:
-            logger.debug("Match IDs failed for %.12s: %s", puuid, exc)
-            return 0
-    await asyncio.sleep(_CALL_DELAY)
+    try:
+        match_ids = await _riot_get(
+            client,
+            f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids"
+            f"?count=10&queue=420",
+        )
+    except Exception as exc:
+        logger.debug("Match IDs failed for %.12s: %s", puuid, exc)
+        return 0
 
     # Step 2: Fetch match details for all new matches
     match_details: dict[str, dict] = {}
@@ -199,15 +193,13 @@ async def _process_player(
             break
         if await db.has_training_match(mid):
             continue
-        async with _sem:
-            try:
-                match_details[mid] = await _riot_get(
-                    client,
-                    f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}",
-                )
-            except Exception as exc:
-                logger.debug("Match fetch failed %s: %s", mid, exc)
-        await asyncio.sleep(_CALL_DELAY)
+        try:
+            match_details[mid] = await _riot_get(
+                client,
+                f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}",
+            )
+        except Exception as exc:
+            logger.debug("Match fetch failed %s: %s", mid, exc)
 
     if not match_details:
         return 0
@@ -236,15 +228,13 @@ async def _process_player(
         if status["is_paused"]:
             return 0
 
-        async with _sem:
-            try:
-                entries = await _riot_get(
-                    client,
-                    f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{other_puuid}",
-                )
-            except Exception:
-                entries = []
-        await asyncio.sleep(_CALL_DELAY)
+        try:
+            entries = await _riot_get(
+                client,
+                f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{other_puuid}",
+            )
+        except Exception:
+            entries = []
 
         entry = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
         _rank_cache_set(other_puuid, entry)
@@ -328,27 +318,25 @@ async def ingestion_worker() -> None:
             tier, division = _SEED_TIERS[_tier_idx % len(_SEED_TIERS)]
 
             async with httpx.AsyncClient(timeout=15.0) as client:
-                async with _sem:
-                    try:
-                        if division is None:
-                            data = await _riot_get(
-                                client,
-                                f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4"
-                                f"/masterleagues/by-queue/RANKED_SOLO_5x5",
-                            )
-                            entries = data.get("entries", [])
-                            for e in entries:
-                                e.setdefault("tier", "MASTER")
-                        else:
-                            entries = await _riot_get(
-                                client,
-                                f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/"
-                                f"RANKED_SOLO_5x5/{tier}/{division}?page={_tier_page}",
-                            )
-                    except Exception as exc:
-                        logger.warning("Ladder fetch failed (%s %s p%d): %s", tier, division, _tier_page, exc)
-                        entries = []
-                await asyncio.sleep(_CALL_DELAY)
+                try:
+                    if division is None:
+                        data = await _riot_get(
+                            client,
+                            f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4"
+                            f"/masterleagues/by-queue/RANKED_SOLO_5x5",
+                        )
+                        entries = data.get("entries", [])
+                        for e in entries:
+                            e.setdefault("tier", "MASTER")
+                    else:
+                        entries = await _riot_get(
+                            client,
+                            f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/"
+                            f"RANKED_SOLO_5x5/{tier}/{division}?page={_tier_page}",
+                        )
+                except Exception as exc:
+                    logger.warning("Ladder fetch failed (%s %s p%d): %s", tier, division, _tier_page, exc)
+                    entries = []
 
                 if not entries:
                     _tier_idx += 1

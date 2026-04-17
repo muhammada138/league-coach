@@ -44,9 +44,6 @@ ALLOWED_ORIGINS = [
 
 RIOT_HEADERS = {"X-Riot-Token": RIOT_API_KEY}
 
-# Global semaphore to limit concurrent requests to the Riot API
-# (prevents 429 Too Many Requests)
-api_semaphore = asyncio.Semaphore(3)
 
 CACHE_VERSION = "v2"
 
