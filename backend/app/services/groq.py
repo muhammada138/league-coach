@@ -1,13 +1,11 @@
-import asyncio
-from groq import Groq
+from groq import AsyncGroq
 from ..state import GROQ_API_KEY
 
 async def get_coaching_feedback(system_prompt: str, user_prompt: str) -> str:
     if not GROQ_API_KEY:
-        raise ValueError("GROQ_API_KEY is not set or empty")
-    groq_client = Groq(api_key=GROQ_API_KEY)
-    completion = await asyncio.to_thread(
-        groq_client.chat.completions.create,
+        return "No API key configured."
+    groq_client = AsyncGroq(api_key=GROQ_API_KEY)
+    completion = await groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": system_prompt},
@@ -18,15 +16,14 @@ async def get_coaching_feedback(system_prompt: str, user_prompt: str) -> str:
 
 async def ask_coach_question(system_prompt: str, history: list, question: str) -> str:
     if not GROQ_API_KEY:
-        raise ValueError("GROQ_API_KEY is not set or empty")
-    groq_client = Groq(api_key=GROQ_API_KEY)
+        return "No API key configured."
+    groq_client = AsyncGroq(api_key=GROQ_API_KEY)
     messages = [
         {"role": "system", "content": system_prompt},
         *history,
         {"role": "user", "content": question},
     ]
-    completion = await asyncio.to_thread(
-        groq_client.chat.completions.create,
+    completion = await groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=messages,
         max_tokens=300,
