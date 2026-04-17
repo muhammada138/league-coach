@@ -15,47 +15,42 @@ RANKS = [
     "diamond", "master", "grandmaster", "challenger"
 ]
 
-# We use the user-provided URL pattern
-BASE_URL = "https://lolalytics.com/lol/tierlist/?tier={rank}&patch=16.8"
+# Lanes to scrape
+LANES = ["top", "jungle", "middle", "bottom", "support"]
 
-# Champion Name -> ID mapping (will be populated from Data Dragon)
+# Champion Name -> ID mapping
 _CHAMP_ID_MAP = {}
+# Champion ID -> Primary Lane (best guess)
+_CHAMP_LANE_MAP = {}
 
 async def _ensure_champ_ids():
-    """Fetch champion name -> id mapping from the latest Data Dragon."""
     global _CHAMP_ID_MAP
-    if _CHAMP_ID_MAP:
-        return
+    if _CHAMP_ID_MAP: return
     
     async with httpx.AsyncClient() as client:
         try:
-            # 1. Get latest version
             v_resp = await client.get("https://ddragon.leagueoflegends.com/api/versions.json")
             version = v_resp.json()[0]
-            
-            # 2. Get champion data
             url = f"https://ddragon.leagueoflegends.com/cdn/{version}/data/en_US/champion.json"
             resp = await client.get(url)
             data = resp.json()
             for key, val in data.get("data", {}).items():
                 name = val["name"].lower()
-                # Remove spaces, dots, and apostrophes for matching
                 clean_name = name.replace(" ", "").replace("'", "").replace(".", "")
                 _CHAMP_ID_MAP[clean_name] = int(val["key"])
-                # Also store the key itself (internal ID name)
                 _CHAMP_ID_MAP[key.lower()] = int(val["key"])
                 
-                # Special cases for Lolalytics URL names
                 if name == "wukong": _CHAMP_ID_MAP["monkeyking"] = int(val["key"])
                 if name == "nunu & willump": _CHAMP_ID_MAP["nunu"] = int(val["key"])
                 if name == "renata glasc": _CHAMP_ID_MAP["renata"] = int(val["key"])
-            logger.info("Loaded %d champion mappings from Data Dragon v%s", len(_CHAMP_ID_MAP), version)
+            logger.info("Loaded %d champion mappings", len(_CHAMP_ID_MAP))
         except Exception as e:
             logger.error("Failed to load Data Dragon: %s", e)
 
-async def fetch_champion_matchups(rank: str, champ_name: str) -> dict:
-    """Scrape HTML counter page for a specific champion and rank to get ALL matchup deltas."""
-    url = f"https://lolalytics.com/lol/{champ_name.lower()}/counters/?tier={rank}&patch=16.8"
+async def fetch_champion_matchups(rank: str, champ_name: str, lane: str) -> dict:
+    """Scrape HTML counter page for a specific champion, rank, AND lane."""
+    # Example: https://lolalytics.com/lol/aatrox/counters/?lane=top&tier=emerald&patch=16.8
+    url = f"https://lolalytics.com/lol/{champ_name.lower()}/counters/?lane={lane}&tier={rank}&patch=16.8"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://lolalytics.com/"
@@ -64,19 +59,18 @@ async def fetch_champion_matchups(rank: str, champ_name: str) -> dict:
     async with httpx.AsyncClient(timeout=20.0) as client:
         try:
             resp = await client.get(url, headers=headers)
-            if resp.status_code != 200:
-                return {}
+            if resp.status_code != 200: return {}
             
             html = resp.text
             matchups = {}
             
-            # Exhaustive sweep for all other champions
+            # Pattern: Opponent Name followed by winrate
+            # The HTML has a VS block for each counter
             for opp_name, opp_cid in _CHAMP_ID_MAP.items():
-                if opp_name == champ_name.lower(): continue
+                if opp_name == champ_name.lower() or len(opp_name) < 3: continue
                 
-                # Search for the opponent name and then the winrate percentage
-                # Pattern: >Camille< ... 52.66
-                pattern = re.compile(rf'>{opp_name.capitalize()}<.*?([34567][0-9]\.[0-9]+)', re.IGNORECASE | re.DOTALL)
+                # We look for the opponent name capitalized then a VS winrate decimal
+                pattern = re.compile(rf'>{opp_name.capitalize()}<.*?([34567][0-9]\.[0-9]+)<!---->%<div class="text-cyan-200">VS</div>', re.IGNORECASE | re.DOTALL)
                 match = pattern.search(html)
                 
                 if match:
@@ -85,112 +79,83 @@ async def fetch_champion_matchups(rank: str, champ_name: str) -> dict:
                     
             return matchups
         except Exception as e:
-            logger.error("Error scraping matchups for %s in %s: %s", champ_name, rank, e)
+            logger.error("Error scraping %s matchups for %s: %s", lane, champ_name, e)
             return {}
 
 async def fetch_rank_meta(rank: str) -> dict:
-    """Scrape HTML tierlist for a specific rank."""
+    """Scrape tierlists to identify which champions play which lanes."""
     await _ensure_champ_ids()
+    results = {"tier_avg": 50.0, "champions": {}}
     
+    # We scrape the main tierlist for the rank to get initial WRs and lane associations
     url = f"https://lolalytics.com/lol/tierlist/?tier={rank}&patch=16.8"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://lolalytics.com/"
-    }
+    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://lolalytics.com/"}
     
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
             resp = await client.get(url, headers=headers)
-            if resp.status_code != 200:
-                logger.warning("Lolalytics fetch failed for %s: %d", rank, resp.status_code)
-                return {}
-            
+            if resp.status_code != 200: return {}
             html = resp.text
             
-            # Find the tier average winrate
             avg_wr = 50.0
             avg_match = re.search(r'Average .*? Win Rate:.*?([0-9\.]+)', html, re.DOTALL | re.IGNORECASE)
-            if avg_match:
-                avg_wr = float(avg_match.group(1))
+            if avg_match: avg_wr = float(avg_match.group(1))
+            results["tier_avg"] = avg_wr
 
-            results = {"tier_avg": avg_wr, "champions": {}}
-            
-            # Exhaustive sweep for all champions we know about
+            # 1. Find which lane each champ is listed in on the main tierlist
+            # Example: sona ... alt="support lane"
             for name, cid in _CHAMP_ID_MAP.items():
-                pattern = re.compile(rf'{name}.*?([456][0-9]\.[0-9]+)', re.IGNORECASE | re.DOTALL)
+                if len(name) < 3: continue
+                pattern = re.compile(rf'{name}.*?alt="(\w+) lane".*?([456][0-9]\.[0-9]+)', re.IGNORECASE | re.DOTALL)
                 match = pattern.search(html)
-                
                 if match:
-                    wr = float(match.group(1))
+                    lane = match.group(1).lower()
+                    wr = float(match.group(2))
                     results["champions"][str(cid)] = {
-                        "name": name,
-                        "wr": wr,
-                        "delta": round(wr - avg_wr, 2),
-                        "matchups": {} # Will be populated by the deep sync
+                        "name": name, "wr": wr, "lane": lane,
+                        "delta": round(wr - avg_wr, 2), "matchups": {}
                     }
-            
-            logger.info("Exhaustively scraped %d champions for rank %s", len(results["champions"]), rank)
             return results
         except Exception as e:
-            logger.error("Error scraping Lolalytics %s: %s", rank, e)
+            logger.error("Error in fetch_rank_meta for %s: %s", rank, e)
             return {}
 
 async def sync_meta():
-    """Cycles through all ranks and updates the local meta file. Includes deep matchup scraping."""
-    logger.info("Starting champion meta sync (Exhaustive HTML Scraper)...")
+    """Daily sync: Scrapes all ranks, all lanes, and all matchups."""
+    logger.info("Starting Role-Aware Meta Sync...")
     full_meta = {}
     
-    # 1. Scrape Tierlists (Fast)
     for rank in RANKS:
-        logger.info("Syncing tierlist meta for rank: %s", rank)
+        logger.info("Rank: %s", rank)
         rank_data = await fetch_rank_meta(rank)
-        if rank_data and rank_data.get("champions"):
-            full_meta[rank] = rank_data
-        await asyncio.sleep(2.0)
+        if not rank_data: continue
+        full_meta[rank] = rank_data
         
-    # Save intermediate tierlist data so the UI has *something* while matchups scrape
-    if full_meta:
-        META_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        # Incremental save
         with open(META_FILE_PATH, "w") as f:
             json.dump({"updated_at": time.time(), "data": full_meta}, f, indent=2)
             
-    # 2. Scrape Deep Matchups (Slow - ~1400 requests)
-    logger.info("Starting deep matchup sync for all champions and ranks...")
-    
-    # We only want to map standard names, not aliases
-    standard_names = {cid: name for name, cid in _CHAMP_ID_MAP.items() if len(name) > 2}
-    
-    for rank in RANKS:
-        if rank not in full_meta: continue
-        
-        # To avoid IP bans, we might just sample a few ranks or do it slowly.
-        # But user explicitly requested ALL champions for ALL ranks.
-        logger.info("Scraping deep matchups for rank: %s", rank)
-        champs_in_rank = full_meta[rank].get("champions", {})
-        
-        for cid_str, champ_data in champs_in_rank.items():
-            name = champ_data["name"]
-            logger.info("  -> Scraping matchups for %s in %s", name, rank)
+        # 2. Deep Matchup Sync for each champ in their detected lane
+        champs = rank_data.get("champions", {})
+        for cid_str, cdata in champs.items():
+            name, lane = cdata["name"], cdata["lane"]
+            logger.info("  -> Matchups: %s (%s)", name, lane)
             
-            matchups = await fetch_champion_matchups(rank, name)
+            matchups = await fetch_champion_matchups(rank, name, lane)
             if matchups:
                 full_meta[rank]["champions"][cid_str]["matchups"] = matchups
+                # Save every 5 champs to be safe
+                if int(cid_str) % 5 == 0:
+                    with open(META_FILE_PATH, "w") as f:
+                        json.dump({"updated_at": time.time(), "data": full_meta}, f, indent=2)
             
-            # Save incrementally every champion to avoid losing data on crash
-            with open(META_FILE_PATH, "w") as f:
-                json.dump({"updated_at": time.time(), "data": full_meta}, f, indent=2)
-                
-            await asyncio.sleep(1.0) # Be nice to the server
+            await asyncio.sleep(1.2) # Throttling
 
-    logger.info("Champion deep meta sync complete. Saved to %s", META_FILE_PATH)
+    logger.info("Role-Aware Sync Complete.")
     return True
 
 def get_meta_data() -> dict:
-    """Load the current meta data from disk."""
-    if not META_FILE_PATH.exists():
-        return {}
+    if not META_FILE_PATH.exists(): return {}
     try:
-        with open(META_FILE_PATH, "r") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+        with open(META_FILE_PATH, "r") as f: return json.load(f)
+    except: return {}
