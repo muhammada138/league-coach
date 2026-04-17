@@ -75,8 +75,34 @@ def init_db() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Write
+# Cleanup
 # ---------------------------------------------------------------------------
+
+def cleanup_stale_data() -> dict:
+    """Delete data older than retention limits to keep DB size manageable."""
+    now = int(time.time())
+    lp_cutoff = now - (30 * 86400)      # 30 days
+    training_cutoff = now - (90 * 86400) # 90 days
+    
+    counts = {"lp_history": 0, "training_matches": 0}
+    
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            # 1. Cleanup LP History
+            res = conn.execute("DELETE FROM lp_history WHERE timestamp < ?", (lp_cutoff,))
+            counts["lp_history"] = res.rowcount
+            
+            # 2. Cleanup Training matches
+            res = conn.execute("DELETE FROM training_matches WHERE timestamp < ?", (training_cutoff,))
+            counts["training_matches"] = res.rowcount
+            
+            conn.commit()
+            logger.info("Cleanup complete: removed %d LP entries and %d matches", 
+                        counts["lp_history"], counts["training_matches"])
+    except Exception as e:
+        logger.error("Cleanup failed: %s", e)
+        
+    return counts
 
 def _record_sync(puuid: str, tier: str, division: str, lp: int, wins: int, losses: int, queue: str = 'RANKED_SOLO_5x5', timestamp: int = None) -> None:
     if tier == "UNRANKED":
