@@ -10,6 +10,7 @@ export default function AdminData() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState("");
   const [selectedRank, setSelectedRank] = useState("emerald");
+  const [selectedRole, setSelectedRole] = useState("all");
   const [search, setSearch] = useState("");
   const [selectedChamp, setSelectedChamp] = useState(null);
 
@@ -62,12 +63,16 @@ export default function AdminData() {
   }, [rankData]);
 
   const filteredChamps = useMemo(() => {
-    if (!search) return [...champions].sort((a, b) => b.wr - a.wr);
-    const s = search.toLowerCase();
-    return champions
-      .filter(c => c.name.toLowerCase().includes(s))
-      .sort((a, b) => b.wr - a.wr);
-  }, [champions, search]);
+    let list = [...champions];
+    if (selectedRole !== "all") {
+      list = list.filter(c => c.lane?.toLowerCase() === selectedRole);
+    }
+    if (search) {
+      const s = search.toLowerCase();
+      list = list.filter(c => c.name.toLowerCase().includes(s));
+    }
+    return list.sort((a, b) => b.wr - a.wr);
+  }, [champions, search, selectedRole]);
 
   const selectedChampData = selectedChamp ? rankData.champions[selectedChamp] : null;
   
@@ -183,20 +188,38 @@ export default function AdminData() {
             </div>
 
             {/* Rank Selector */}
-            <div className="flex flex-wrap gap-2 mt-8 px-0 mb-0">
-              {data?.meta?.ranks.map(rank => (
-                <button
-                  key={rank}
-                  onClick={() => { setSelectedRank(rank); setSelectedChamp(null); }}
-                  className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all border ${
-                    selectedRank === rank 
-                      ? "bg-white/10 border-white/20 text-white shadow-lg shadow-white/5" 
-                      : "bg-transparent border-transparent text-white/30 hover:text-white/60"
-                  }`}
-                >
-                  {rank}
-                </button>
-              ))}
+            <div className="flex flex-col md:flex-row gap-4 mt-8">
+              <div className="flex flex-wrap gap-2">
+                {data?.meta?.ranks.map(rank => (
+                  <button
+                    key={rank}
+                    onClick={() => { setSelectedRank(rank); setSelectedChamp(null); }}
+                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all border ${
+                      selectedRank === rank 
+                        ? "bg-white/10 border-white/20 text-white shadow-lg shadow-white/5" 
+                        : "bg-transparent border-transparent text-white/30 hover:text-white/60"
+                    }`}
+                  >
+                    {rank}
+                  </button>
+                ))}
+              </div>
+              <div className="w-px h-6 bg-white/5 hidden md:block" />
+              <div className="flex flex-wrap gap-2">
+                {["all", "top", "jungle", "middle", "bottom", "support"].map(role => (
+                  <button
+                    key={role}
+                    onClick={() => setSelectedRole(role)}
+                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all border ${
+                      selectedRole === role 
+                        ? "bg-blue-500/20 border-blue-500/30 text-blue-400" 
+                        : "bg-transparent border-transparent text-white/30 hover:text-white/60"
+                    }`}
+                  >
+                    {role}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

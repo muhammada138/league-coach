@@ -337,14 +337,21 @@ async def ingestion_worker() -> None:
     
     # Initial meta sync on startup
     asyncio.create_task(sync_meta())
+    db.cleanup_stale_data()
     last_meta_sync = _time.time()
+    last_cleanup = _time.time()
 
     while True:
         try:
-            # Sync meta daily
-            if (_time.time() - last_meta_sync) > 86400:
+            # Sync meta and cleanup daily
+            now = _time.time()
+            if (now - last_meta_sync) > 86400:
                 asyncio.create_task(sync_meta())
-                last_meta_sync = _time.time()
+                last_meta_sync = now
+            
+            if (now - last_cleanup) > 86400:
+                db.cleanup_stale_data()
+                last_cleanup = now
 
             status = db._get_ingestion_status_sync()
 
