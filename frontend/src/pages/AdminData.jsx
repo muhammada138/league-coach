@@ -195,38 +195,45 @@ export default function AdminData() {
               </div>
             </div>
 
-            {/* Rank Selector */}
-            <div className="flex flex-col md:flex-row gap-4 mt-8">
-              <div className="flex flex-wrap gap-2">
-                {data?.meta?.ranks.map(rank => (
-                  <button
-                    key={rank}
-                    onClick={() => { setSelectedRank(rank); setSelectedChamp(null); }}
-                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all border ${
-                      selectedRank === rank 
-                        ? "bg-white/10 border-white/20 text-white shadow-lg shadow-white/5" 
-                        : "bg-transparent border-transparent text-white/30 hover:text-white/60"
-                    }`}
-                  >
-                    {rank}
-                  </button>
-                ))}
+            <div className="flex flex-col gap-6 mt-8">
+              {/* Primary: Role Selection */}
+              <div className="flex items-center gap-4">
+                <span className="text-[9px] font-black uppercase tracking-widest text-white/20">Lane</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {["all", "top", "jungle", "middle", "bottom", "support"].map(role => (
+                    <button
+                      key={role}
+                      onClick={() => { setSelectedRole(role); setSelectedChamp(null); }}
+                      className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                        selectedRole === role 
+                          ? "bg-blue-500 text-white border-blue-500 shadow-lg shadow-blue-500/20" 
+                          : "bg-white/[0.03] border-white/5 text-white/30 hover:text-white/60 hover:bg-white/[0.05]"
+                      }`}
+                    >
+                      {role}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="w-px h-6 bg-white/5 hidden md:block" />
-              <div className="flex flex-wrap gap-2">
-                {["all", "top", "jungle", "middle", "bottom", "support"].map(role => (
-                  <button
-                    key={role}
-                    onClick={() => setSelectedRole(role)}
-                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tighter transition-all border ${
-                      selectedRole === role 
-                        ? "bg-blue-500/20 border-blue-500/30 text-blue-400" 
-                        : "bg-transparent border-transparent text-white/30 hover:text-white/60"
-                    }`}
-                  >
-                    {role}
-                  </button>
-                ))}
+
+              {/* Secondary: Rank Selection (Sub-tab) */}
+              <div className="flex items-center gap-4">
+                <span className="text-[9px] font-black uppercase tracking-widest text-white/20">Tier</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {data?.meta?.ranks.map(rank => (
+                    <button
+                      key={rank}
+                      onClick={() => { setSelectedRank(rank); setSelectedChamp(null); }}
+                      className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
+                        selectedRank === rank 
+                          ? "bg-white/10 border-white/20 text-white" 
+                          : "bg-transparent border-transparent text-white/20 hover:text-white/40"
+                      }`}
+                    >
+                      {rank}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

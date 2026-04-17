@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 # Lolalytics Rank Mappings
 RANKS = [
-    "bronze", "silver", "gold", "platinum", "emerald", 
+    "iron", "bronze", "silver", "gold", "platinum", "emerald", 
     "diamond", "master", "grandmaster", "challenger"
 ]
 
@@ -139,50 +139,74 @@ _sync_active = False
 _cancel_requested = False
 
 async def sync_meta():
-    """Daily sync: Scrapes all ranks, all lanes, and all matchups."""
+    """Daily sync: Performs incremental updates to meta data, only scraping missing matchups."""
     global _sync_active, _cancel_requested
     if _sync_active: return False
     
     _sync_active = True
     _cancel_requested = False
-    logger.info("Starting Role-Aware Meta Sync...")
+    logger.info("Starting Incremental Meta Sync...")
     
     try:
-        full_meta = {}
+        # Load existing data first
+        existing = get_meta_data()
+        full_meta = existing.get("data", {})
         
+        # 1. Update Tierlist Global Stats (Always fast, ensures we see new champs)
         for rank in RANKS:
             if _cancel_requested: break
-            logger.info("Rank: %s", rank)
+            logger.info("Updating global stats for rank: %s", rank)
             rank_data = await fetch_rank_meta(rank)
-            if not rank_data: continue
-            full_meta[rank] = rank_data
             
-            # Incremental save
-            with open(META_FILE_PATH, "w") as f:
-                json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
-                
-            # 2. Deep Matchup Sync for each champ in their detected lane
-            champs = rank_data.get("champions", {})
+            if rank_data and rank_data.get("champions"):
+                if rank not in full_meta:
+                    full_meta[rank] = rank_data
+                else:
+                    # Merge: keep existing matchups, update current stats
+                    full_meta[rank]["tier_avg"] = rank_data["tier_avg"]
+                    for cid, cdata in rank_data["champions"].items():
+                        if cid not in full_meta[rank]["champions"]:
+                            full_meta[rank]["champions"][cid] = cdata
+                        else:
+                            # Update WR/Delta but keep existing matchups
+                            full_meta[rank]["champions"][cid]["wr"] = cdata["wr"]
+                            full_meta[rank]["champions"][cid]["delta"] = cdata["delta"]
+                            full_meta[rank]["champions"][cid]["lane"] = cdata["lane"]
+
+        # 2. Fill Missing Matchups (The slow part)
+        import random
+        for rank in RANKS:
+            if _cancel_requested: break
+            if rank not in full_meta: continue
+            
+            champs = full_meta[rank].get("champions", {})
             for cid_str, cdata in champs.items():
                 if _cancel_requested: break
-                name, lane = cdata["name"], cdata["lane"]
-                logger.info("  -> Matchups: %s (%s)", name, lane)
                 
-                matchups = await fetch_champion_matchups(rank, name, lane)
-                if matchups:
-                    full_meta[rank]["champions"][cid_str]["matchups"] = matchups
-                    if int(cid_str) % 5 == 0:
+                # ONLY scrape if matchups are missing or empty
+                if not cdata.get("matchups"):
+                    name, lane = cdata["name"], cdata["lane"]
+                    logger.info("  -> Filling missing matchups: %s (%s) in %s", name, lane, rank)
+                    
+                    matchups = await fetch_champion_matchups(rank, name, lane)
+                    if matchups:
+                        full_meta[rank]["champions"][cid_str]["matchups"] = matchups
+                        # Incremental save
                         with open(META_FILE_PATH, "w") as f:
                             json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
-                
-                await asyncio.sleep(1.2) # Throttling
+                    
+                    # Slower scraping with jitter
+                    await asyncio.sleep(random.uniform(4.0, 8.0))
+                else:
+                    # Skip already scraped champion
+                    continue
 
         if not _cancel_requested:
             with open(META_FILE_PATH, "w") as f:
                 json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": False}, f, indent=2)
-            logger.info("Role-Aware Sync Complete.")
+            logger.info("Incremental Sync Complete.")
         else:
-            logger.info("Role-Aware Sync CANCELLED by user.")
+            logger.info("Incremental Sync HALTED by user.")
             
     finally:
         _sync_active = False
