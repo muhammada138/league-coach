@@ -512,6 +512,7 @@ const LANE_META = {
   MIDDLE: { abbr: "MID", color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/25" },
   BOTTOM: { abbr: "BOT", color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/25" },
   UTILITY: { abbr: "SUP", color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/25" },
+  UNKNOWN: { abbr: "???", color: "text-slate-400", bg: "bg-slate-100/10", border: "border-slate-200/20" },
 };
 
 function LaneIcon({ lane }) {
@@ -581,7 +582,14 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   const secs = String(elapsed % 60).padStart(2, "0");
   const queueLabel = QUEUE_LABELS[liveGame.queueId] ?? liveGame.gameMode ?? "Live Game";
   
-  const rolePriority = { TOP: 1, JUNGLE: 2, MIDDLE: 3, BOTTOM: 4, UTILITY: 5, UNKNOWN: 6 };
+  const rolePriority = { 
+    TOP: 1, 
+    JUNGLE: 2, JGL: 2,
+    MIDDLE: 3, MID: 3, 
+    BOTTOM: 4, BOT: 4, ADC: 4,
+    UTILITY: 5, SUP: 5, SUPPORT: 5,
+    UNKNOWN: 6 
+  };
   const getRoleSortScore = (p) => {
     const stats = liveStats?.[p.puuid];
     // Smite is the absolute indicator for Jungle
@@ -646,12 +654,19 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
           <div className="flex items-center gap-1.5 min-w-0">
             {(() => {
               const stats = liveStats?.[p.puuid];
+              // Support Smite detection (ID 11)
               const isJg = p.spell1Id === 11 || p.spell2Id === 11;
-              const pos = isJg ? "JUNGLE" : (stats?.most_common_position || "UNKNOWN");
-              const m = LANE_META[pos];
-              if (!m) return null;
+              let pos = isJg ? "JUNGLE" : (stats?.most_common_position || "UNKNOWN");
+              
+              // Normalize common string variants
+              if (pos === "ADC") pos = "BOTTOM";
+              if (pos === "MID") pos = "MIDDLE";
+              if (pos === "SUP" || pos === "SUPPORT") pos = "UTILITY";
+              if (pos === "JGL") pos = "JUNGLE";
+
+              const m = LANE_META[pos] || LANE_META["UNKNOWN"];
               return (
-                <span className={`text-[8px] font-black px-1 rounded flex-shrink-0 border ${m.bg} ${m.border} ${m.color}`}>
+                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded flex-shrink-0 border uppercase tracking-tighter ${m.bg} ${m.border} ${m.color}`}>
                   {m.abbr}
                 </span>
               );
