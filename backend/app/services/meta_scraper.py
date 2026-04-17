@@ -18,6 +18,14 @@ RANKS = [
 # --- CONFIG ---
 LANES = ["", "top", "jungle", "middle", "bottom", "support"]
 
+_TIER_LABELS = {
+    1: "S+", 2: "S", 3: "S-",
+    4: "A+", 5: "A", 6: "A-",
+    7: "B+", 8: "B", 9: "B-",
+    10: "C+", 11: "C", 12: "C-",
+    13: "D+", 14: "D", 15: "D-",
+}
+
 # Champion Name -> ID mapping
 _CHAMP_ID_MAP = {}
 _ID_CHAMP_MAP = {} # CID string -> {id, name, slug}
@@ -184,7 +192,11 @@ async def fetch_rank_meta(rank: str) -> dict:
                             # 3. Resolve each stat value one level from the stats object
                             wr_val = _res(stats_raw["wr"])
                             games_val = _res(stats_raw["games"])
-                            tier = str(_res(stats_raw.get("tier", "")) or "N/A")
+                            tier_raw = _res(stats_raw.get("tier", ""))
+                            try:
+                                tier = _TIER_LABELS.get(int(tier_raw), "N/A")
+                            except (ValueError, TypeError):
+                                tier = str(tier_raw) if tier_raw else "N/A"
                             rank_label = str(_res(stats_raw.get("rank", "")) or "N/A")
 
                             wr_float = float(wr_val)
