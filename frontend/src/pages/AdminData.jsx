@@ -23,7 +23,6 @@ export default function AdminData() {
       setData(summary);
       setError("");
       
-      // Update sync state from backend
       setSyncing(summary?.meta?.active || false);
       setPaused(summary?.meta?.paused || false);
       
@@ -60,7 +59,6 @@ export default function AdminData() {
     try {
       const res = await cancelSync();
       if (!res.ok) throw new Error(res.message);
-      // Wait for poller
     } catch (err) {
       setError("Cancel failed: " + err.message);
     }
@@ -130,6 +128,19 @@ export default function AdminData() {
     });
   }, [champions, search, selectedRole, sortConfig]);
 
+  const selectedChampData = selectedChamp ? rankData.champions[selectedChamp] : null;
+  const selectedChampName = selectedChampData?.name || data?.champ_names?.[selectedChamp] || "Champion";
+
+  const matchupData = useMemo(() => {
+    if (!selectedChampData || !selectedChampData.matchups) return [];
+    
+    return Object.entries(selectedChampData.matchups).map(([opp_cid, wr]) => {
+      const opp_name = data?.champ_names?.[opp_cid] || "Unknown";
+      const delta = wr - 50.0;
+      return { id: opp_cid, name: opp_name, wr, delta };
+    }).sort((a, b) => b.wr - a.wr);
+  }, [selectedChampData, data]);
+
   if (!data && !error) return (
     <div className="min-h-screen flex items-center justify-center bg-[#05080f]">
       <span className="w-12 h-12 border-4 border-[#c89b3c]/30 border-t-[#c89b3c] rounded-full animate-spin" />
@@ -194,7 +205,7 @@ export default function AdminData() {
               <div className="flex justify-between items-end">
                 <div>
                   <h2 className="text-2xl font-black uppercase italic tracking-tighter">
-                    {selectedChamp ? data?.champ_names?.[selectedChamp] : "Meta Explorer"}
+                    {selectedChamp ? selectedChampName : "Meta Explorer"}
                   </h2>
                   <p className="text-white/20 text-xs font-bold uppercase tracking-widest mt-1">
                     {selectedChamp ? "Specific Lane Matchups" : "Global performance across tiers"}
@@ -219,7 +230,7 @@ export default function AdminData() {
                   {["all", "top", "jungle", "middle", "bottom", "support"].map(role => (
                     <button
                       key={role}
-                      onClick={() => setSelectedRole(role)}
+                      onClick={() => { setSelectedRole(role); setSelectedChamp(null); }}
                       className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
                         selectedRole === role ? "bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-600/20" : "bg-white/5 border-white/5 text-white/30 hover:text-white/60"
                       }`}
@@ -237,7 +248,7 @@ export default function AdminData() {
                   {data?.meta?.ranks.map(rank => (
                     <button
                       key={rank}
-                      onClick={() => setSelectedRank(rank)}
+                      onClick={() => { setSelectedRank(rank); setSelectedChamp(null); }}
                       className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
                         selectedRank === rank ? "bg-white/10 border-white/20 text-white" : "bg-transparent border-transparent text-white/20 hover:text-white/40"
                       }`}
@@ -251,54 +262,137 @@ export default function AdminData() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="text-[10px] font-black uppercase tracking-widest text-white/20 border-b border-white/[0.05] bg-white/[0.01]">
-                  <th className="px-8 py-5 cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('name')}>
-                    Champion {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </th>
-                  <th className="px-8 py-5 cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('wr')}>
-                    Win Rate {sortConfig.key === 'wr' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </th>
-                  <th className="px-8 py-5 text-center cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('delta')}>
-                    Delta {sortConfig.key === 'delta' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </th>
-                  <th className="px-8 py-5">Context</th>
-                  <th className="px-8 py-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.02]">
-                {filteredChamps.map((c, i) => (
-                  <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
-                    <td className="px-8 py-4 flex items-center gap-4">
-                      <img 
-                        src={`https://cdn.communitydragon.org/latest/champion/${c.name.toLowerCase().replace(/[^a-z]/g, '')}/square`} 
-                        className="w-8 h-8 rounded-lg border border-white/10"
-                        alt=""
-                        onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
-                      />
-                      <span className="text-sm font-bold capitalize group-hover:text-[#c89b3c] transition-colors">{c.name}</span>
-                    </td>
-                    <td className="px-8 py-4 tabular-nums">
-                      <span className={`text-sm font-black ${c.wr >= 52 ? 'text-emerald-400' : c.wr <= 48 ? 'text-rose-400' : 'text-white'}`}>
-                        {c.wr.toFixed(2)}%
-                      </span>
-                    </td>
-                    <td className="px-8 py-4 text-center tabular-nums">
-                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${c.delta > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                        {c.delta > 0 ? '+' : ''}{c.delta.toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="px-8 py-4">
-                       <span className="text-[10px] font-black uppercase text-white/10 tabular-nums">Avg {rankData.tier_avg}%</span>
-                    </td>
-                    <td className="px-8 py-4 text-right">
-                       <button onClick={() => setSelectedChamp(c.id)} className="text-[10px] font-black uppercase tracking-widest text-[#c89b3c]/40 hover:text-[#c89b3c] transition-all">Matchups</button>
-                    </td>
+            {selectedChamp ? (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-[10px] font-black uppercase tracking-widest text-white/20 border-b border-white/[0.05] bg-white/[0.01]">
+                    <th className="px-8 py-5 cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('name')}>
+                      Opponent {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th className="px-8 py-5 cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('wr')}>
+                      Matchup Winrate {sortConfig.key === 'wr' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th className="px-8 py-5 text-center cursor-pointer hover:text-white transition-colors" onClick={() => requestSort('delta')}>
+                      Advantage (Delta) {sortConfig.key === 'delta' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-white/[0.02]">
+                  {matchupData.map((m, i) => (
+                    <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
+                      <td className="px-8 py-4 flex items-center gap-4">
+                        <img 
+                          src={`https://cdn.communitydragon.org/latest/champion/${m.name.toLowerCase().replace(/[^a-z]/g, '')}/square`} 
+                          className="w-8 h-8 rounded-lg border border-white/10"
+                          alt=""
+                          onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
+                        />
+                        <span className="text-sm font-bold capitalize group-hover:text-[#c89b3c] transition-colors">{m.name}</span>
+                      </td>
+                      <td className="px-8 py-4 tabular-nums">
+                        <span className={`text-sm font-black ${m.wr >= 52 ? 'text-emerald-400' : m.wr <= 48 ? 'text-rose-400' : 'text-white'}`}>
+                          {m.wr.toFixed(2)}%
+                        </span>
+                      </td>
+                      <td className="px-8 py-4 text-center tabular-nums">
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${m.delta > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                          {m.delta > 0 ? '+' : ''}{m.delta.toFixed(2)}%
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {matchupData.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="px-8 py-24 text-center bg-white/[0.01]">
+                        <p className="text-white/40 text-sm font-bold italic mb-3">No specific matchup data for this champion yet.</p>
+                        <button 
+                          onClick={handleSyncMeta}
+                          className="text-[#c89b3c] text-[10px] uppercase font-black tracking-widest border border-[#c89b3c]/20 px-4 py-2 rounded-xl hover:bg-[#c89b3c]/10 transition-all"
+                        >
+                          Run Deep Sync to Populate
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-[10px] font-black uppercase tracking-widest text-white/20 border-b border-white/[0.05] bg-white/[0.01]">
+                    <th className="px-8 py-5 w-16">Rank</th>
+                    <th className="px-8 py-5 cursor-pointer hover:text-white transition-colors group/header" onClick={() => requestSort('name')}>
+                      <div className="flex items-center gap-2">
+                        Champion
+                        <span className={`transition-all ${sortConfig.key === 'name' ? 'text-[#c89b3c]' : 'text-white/10 opacity-0 group-hover/header:opacity-100'}`}>
+                          {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                        </span>
+                      </div>
+                    </th>
+                    <th className="px-8 py-5 w-24">Role</th>
+                    <th className="px-8 py-5 cursor-pointer hover:text-white transition-colors group/header" onClick={() => requestSort('wr')}>
+                      <div className="flex items-center gap-2">
+                        Win Rate
+                        <span className={`transition-all ${sortConfig.key === 'wr' ? 'text-[#c89b3c]' : 'text-white/10 opacity-0 group-hover/header:opacity-100'}`}>
+                          {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                        </span>
+                      </div>
+                    </th>
+                    <th className="px-8 py-5 text-center cursor-pointer hover:text-white transition-colors group/header" onClick={() => requestSort('delta')}>
+                      <div className="flex items-center justify-center gap-2">
+                        Delta
+                        <span className={`transition-all ${sortConfig.key === 'delta' ? 'text-[#c89b3c]' : 'text-white/10 opacity-0 group-hover/header:opacity-100'}`}>
+                          {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                        </span>
+                      </div>
+                    </th>
+                    <th className="px-8 py-5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.02]">
+                  {filteredChamps.map((c, i) => (
+                    <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
+                      <td className="px-8 py-4 tabular-nums text-white/20 font-black text-xs">
+                        #{i + 1}
+                      </td>
+                      <td className="px-8 py-4 flex items-center gap-4">
+                        <img 
+                          src={`https://cdn.communitydragon.org/latest/champion/${c.name.toLowerCase().replace(/[^a-z]/g, '')}/square`} 
+                          className="w-8 h-8 rounded-lg border border-white/10"
+                          alt=""
+                          onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
+                        />
+                        <span className="text-sm font-bold capitalize group-hover:text-[#c89b3c] transition-colors">{c.name}</span>
+                      </td>
+                      <td className="px-8 py-4">
+                        <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-black uppercase text-white/30">
+                          {c.lane || 'unknown'}
+                        </span>
+                      </td>
+                      <td className="px-8 py-4 tabular-nums">
+                        <span className={`text-sm font-black ${c.wr >= 52 ? 'text-emerald-400' : c.wr <= 48 ? 'text-rose-400' : 'text-white'}`}>
+                          {c.wr.toFixed(2)}%
+                        </span>
+                      </td>
+                      <td className="px-8 py-4 text-center tabular-nums">
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${c.delta > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                          {c.delta > 0 ? '+' : ''}{c.delta.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-8 py-4 text-right">
+                         <button onClick={() => setSelectedChamp(c.id)} className="text-[10px] font-black uppercase tracking-widest text-[#c89b3c]/40 hover:text-[#c89b3c] transition-all">Matchups</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {filteredChamps.length === 0 && !selectedChamp && (
+              <div className="py-32 text-center bg-white/[0.01]">
+                <p className="text-white/10 text-sm font-black uppercase tracking-widest mb-3">No champions match "{search}" in this role</p>
+                <button onClick={() => { setSearch(""); setSelectedRole("all"); }} className="text-[#c89b3c] text-xs font-bold uppercase underline decoration-2 underline-offset-8">Reset All Filters</button>
+              </div>
+            )}
           </div>
         </div>
       </div>
