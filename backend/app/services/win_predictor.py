@@ -245,6 +245,9 @@ def predict(participants: list[dict], live_stats: dict) -> dict:
     -------
     dict with ``bluePct`` and ``redPct`` integers that sum to 100.
     """
+    if not participants:
+        return {"error": "No participants provided."}
+
     blue_raw = [p for p in participants if p.get("teamId") == 100]
     red_raw  = [p for p in participants if p.get("teamId") == 200]
 
