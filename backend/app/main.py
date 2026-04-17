@@ -40,8 +40,8 @@ async def _meta_scheduler():
         if now.hour == 5 and now.minute == 30 and last_full_date != today:
             if not meta_scraper.is_sync_active():
                 last_full_date = today
-                logger.info("Scheduler: starting daily full sync (5:30 AM)")
-                asyncio.create_task(meta_scraper.sync_meta(mode="full"))
+                logger.info("Scheduler: starting daily matchup sync (5:30 AM)")
+                asyncio.create_task(meta_scraper.sync_meta(mode="matchups"))
 
         # Tierlist-only refresh every 4 hours (skip if any sync is running)
         elif now_ts - last_tierlist_ts >= 4 * 3600 and not meta_scraper.is_sync_active():
