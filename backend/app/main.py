@@ -54,6 +54,7 @@ async def _meta_scheduler():
 async def lifespan(app: FastAPI):
     init_db()
     win_predictor.load_or_train_model()
+    await meta_scraper._ensure_champ_ids()
     worker_task = asyncio.create_task(ingestion.ingestion_worker())
     scheduler_task = asyncio.create_task(_meta_scheduler())
     yield
