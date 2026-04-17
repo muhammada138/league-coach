@@ -4,6 +4,9 @@ import json
 import logging
 import time
 import re
+from pathlib import Path
+from ..state import META_FILE_PATH, sync_state
+
 logger = logging.getLogger(__name__)
 
 # Lolalytics Rank Mappings - Aligned with seed tiers in ingestion.py
@@ -12,57 +15,39 @@ RANKS = [
     "diamond", "master"
 ]
 
-# --- QWIK STATE DECODER ---
-class QwikDecoder:
-    """Decodes Lolalytics' Qwik framework JSON state."""
-    def __init__(self, pool):
-        self.pool = pool
-    
-    def resolve(self, val):
-        if not isinstance(val, str) or not val: return val
-        try:
-            # Qwik uses base-36 indices to refer to the 'objs' pool
-            idx = int(val, 36)
-            if 0 <= idx < len(self.pool):
-                return self.pool[idx]
-        except ValueError:
-            pass
-        return val
-
-    def resolve_obj(self, obj):
-        if not isinstance(obj, dict): return obj
-        return {k: self.resolve(v) for k, v in obj.items()}
-
 # --- CONFIG ---
 LANES = ["", "top", "jungle", "middle", "bottom", "support"]
 
 # Champion Name -> ID mapping
 _CHAMP_ID_MAP = {}
+_ID_CHAMP_MAP = {} # CID string -> {id, name, slug}
 
 async def _ensure_champ_ids():
     """Fetch champion name -> id mapping from the latest Data Dragon."""
-    global _CHAMP_ID_MAP
+    global _CHAMP_ID_MAP, _ID_CHAMP_MAP
     if _CHAMP_ID_MAP:
         return
     
     async with httpx.AsyncClient() as client:
         try:
             v_resp = await client.get("https://ddragon.leagueoflegends.com/api/versions.json")
+            if v_resp.status_code != 200: return
             version = v_resp.json()[0]
             url = f"https://ddragon.leagueoflegends.com/cdn/{version}/data/en_US/champion.json"
             resp = await client.get(url)
+            if resp.status_code != 200: return
             data = resp.json()
             for key, val in data.get("data", {}).items():
-                name = val["name"].lower()
-                clean_name = name.replace(" ", "").replace("'", "").replace(".", "")
-                _CHAMP_ID_MAP[clean_name] = int(val["key"])
-                _CHAMP_ID_MAP[key.lower()] = int(val["key"])
-                if name == "wukong": _CHAMP_ID_MAP["monkeyking"] = int(val["key"])
-                if name == "nunu & willump": _CHAMP_ID_MAP["nunu"] = int(val["key"])
-                if name == "renata glasc": _CHAMP_ID_MAP["renata"] = int(val["key"])
-            logger.info("Loaded %d champion mappings from Data Dragon v%s", len(_CHAMP_ID_MAP), version)
+                cid = val["key"]
+                name = val["name"]
+                slug = key.lower().replace(" ", "").replace("'", "")
+                
+                _CHAMP_ID_MAP[slug] = int(cid)
+                _ID_CHAMP_MAP[str(cid)] = {"id": int(cid), "name": name, "slug": slug}
+                
+            logger.info("Champion ID maps initialized: %d champions", len(_CHAMP_ID_MAP))
         except Exception as e:
-            logger.error("Failed to load Data Dragon: %s", e)
+            logger.error("Failed to fetch champion IDs: %s", e)
 
 async def fetch_champion_matchups(rank: str, champ_name: str, lane: str) -> dict:
     url = f"https://lolalytics.com/lol/{champ_name.lower()}/counters/?lane={lane}&tier={rank}&patch=16.8"
@@ -119,71 +104,85 @@ async def fetch_rank_meta(rank: str) -> dict:
                 try:
                     state = json.loads(json_match.group(1))
                     objs = state.get("objs", [])
-                    decoder = QwikDecoder(objs)
-                    
-                    found_count = 0
-                    for raw_obj in objs:
-                        if not isinstance(raw_obj, dict): continue
-                        
-                        # Champion row objects usually have 'wr', 'games', and 'cid' or 'name'
-                        # but we resolve indices first to see real values
-                        obj = decoder.resolve_obj(raw_obj)
-                        
-                        # Look for properties that identify a tierlist row
-                        # These keys vary but 'wr', 'games', 'rank' are common
-                        if "wr" in obj and "games" in obj and ("cid" in obj or "name" in obj):
-                            # Resolve name/slug
-                            raw_name = obj.get("name") or obj.get("cid")
-                            if not isinstance(raw_name, str): continue
-                            
-                            champ_slug = raw_name.lower().replace("-", "").replace(" ", "").replace("'", "")
-                            cid = _CHAMP_ID_MAP.get(champ_slug)
-                            if not cid: continue
-                            
-                            # Resolve Rank: often in 'rank' or 'rank_label' or just index 0
-                            rank_label = str(obj.get("rank") or obj.get("rank_label") or "N/A")
-                            
-                            # Resolve Win Rate & Games
-                            # Win rate can be "53.42+1.16", we just want the float
-                            try:
-                                wr_str = str(obj["wr"])
-                                wr_val = float(re.search(r'([0-9\.]+)', wr_str).group(1))
-                                
-                                games_str = str(obj["games"]).replace(",", "")
-                                games_val = int(re.search(r'([0-9]+)', games_str).group(1))
-                                
-                                tier = str(obj.get("tier") or "N/A")
-                                
-                                if wr_val > 0 and games_val > 0:
-                                    lane_key = lane if lane else "all"
-                                    entry_key = f"{cid}:{lane_key}"
-                                    
-                                    # Deduplication: Keep best record for this rank/lane
-                                    if entry_key in results["champions"]:
-                                        existing = results["champions"][entry_key]
-                                        if games_val > existing["games"] or (existing["rank_label"] == "N/A" and rank_label != "N/A"):
-                                            pass 
-                                        else:
-                                            continue
+                    n = len(objs)
 
-                                    results["champions"][entry_key] = {
-                                        "cid": str(cid),
-                                        "name": champ_slug,
-                                        "wr": wr_val,
-                                        "tier": tier,
-                                        "games": games_val,
-                                        "lane": lane_key,
-                                        "rank_label": rank_label,
-                                        "delta": round(wr_val - results["tier_avg"], 2),
-                                        "matchups": {},
-                                        "last_checked": 0
-                                    }
-                                    found_count += 1
-                            except:
+                    def _res(val):
+                        """Resolve a base-36 reference string to its pool value."""
+                        if not isinstance(val, str):
+                            return val
+                        try:
+                            idx = int(val, 36)
+                            if 0 <= idx < n:
+                                return objs[idx]
+                        except (ValueError, TypeError):
+                            pass
+                        return val
+
+                    found_count = 0
+                    for raw in objs:
+                        # Component objects link a champion (cid) to a stats row (row)
+                        if not isinstance(raw, dict) or "row" not in raw or "cid" not in raw:
+                            continue
+                        try:
+                            # 1. Resolve champion ID (cid is a base-36 ref → numeric ID)
+                            cid_val = _res(raw["cid"])
+                            try:
+                                cid_str = str(int(cid_val))
+                            except (ValueError, TypeError):
                                 continue
-                    
+                            champ_info = _ID_CHAMP_MAP.get(cid_str)
+                            if not champ_info:
+                                continue
+
+                            cid = champ_info["id"]
+                            champ_slug = champ_info["slug"]
+
+                            # 2. Resolve stats object (row is a base-36 index into objs)
+                            row_idx = int(raw["row"], 36)
+                            if row_idx >= n:
+                                continue
+                            stats_raw = objs[row_idx]
+                            if not isinstance(stats_raw, dict) or "wr" not in stats_raw:
+                                continue
+
+                            # 3. Resolve each stat value one level from the stats object
+                            wr_val = _res(stats_raw["wr"])
+                            games_val = _res(stats_raw["games"])
+                            tier = str(_res(stats_raw.get("tier", "")) or "N/A")
+                            rank_label = str(_res(stats_raw.get("rank", "")) or "N/A")
+
+                            wr_float = float(wr_val)
+                            games_int = int(str(games_val).replace(",", ""))
+
+                            if wr_float > 0 and games_int > 0:
+                                lane_key = lane if lane else "all"
+                                entry_key = f"{cid}:{lane_key}"
+
+                                # Deduplication: keep entry with more games or a real rank
+                                if entry_key in results["champions"]:
+                                    existing = results["champions"][entry_key]
+                                    if not (games_int > existing["games"] or
+                                            (existing["rank_label"] == "N/A" and rank_label != "N/A")):
+                                        continue
+
+                                results["champions"][entry_key] = {
+                                    "cid": str(cid),
+                                    "name": champ_slug,
+                                    "wr": wr_float,
+                                    "tier": tier,
+                                    "games": games_int,
+                                    "lane": lane_key,
+                                    "rank_label": rank_label,
+                                    "delta": round(wr_float - results["tier_avg"], 2),
+                                    "matchups": {},
+                                    "last_checked": 0
+                                }
+                                found_count += 1
+                        except Exception:
+                            continue
+
                     logger.info("  -> Extracted %d champions from Qwik state.", found_count)
-                
+
                 except Exception as je:
                     logger.error("Failed to parse Qwik JSON: %s", je)
 
