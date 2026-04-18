@@ -273,7 +273,7 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
         champ_meta = champ_dict.get(f"{champ_id_str}:all", champ_dict.get(champ_id_str, {}))
 
     # Lolalytics WR is usually around 50.0. Scale to 0-1.
-    meta_wr_val = champ_meta.get("wr", 50.0)
+    meta_wr_val = champ_meta.get("wr", 50.0) if champ_meta else 50.0
     meta_wr = meta_wr_val / 100.0
 
     # 9. Matchup Advantage — Specific counter winrate from Lolalytics
@@ -284,7 +284,7 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
     is_proxy = False
     if opponent_champion_id:
         opp_id_str = str(opponent_champion_id)
-        matchups = champ_meta.get("matchups", {})
+        matchups = champ_meta.get("matchups", {}) if champ_meta else {}
         if opp_id_str in matchups:
             raw = matchups[opp_id_str]
             vs_wr = raw["wr"] if isinstance(raw, dict) else raw
@@ -292,14 +292,17 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
             matchup_games = raw.get("games", 100) if isinstance(raw, dict) else 100
             matchup_conf = min(matchup_games / 100.0, 1.0)
             matchup_adv = (vs_wr / 100.0) * matchup_conf + 0.5 * (1.0 - matchup_conf)
-        elif champ_meta:
+        else:
             # Fallback: use relative meta WR difference as a proxy for matchup strength
-            opp_meta = champ_dict.get(f"{opp_id_str}:{role_key}", champ_dict.get(f"{opp_id_str}:all", {}))
-            opp_wr = opp_meta.get("wr", 50.0)
+            # Try to find opponent meta data
+            opp_meta = champ_dict.get(f"{opp_id_str}:{role_key}")
+            if not opp_meta:
+                opp_meta = champ_dict.get(f"{opp_id_str}:all", champ_dict.get(opp_id_str, {}))
+            
+            opp_wr = opp_meta.get("wr", 50.0) if opp_meta else 50.0
             vs_wr = 50.0 + (meta_wr_val - opp_wr)
             matchup_adv = max(0.0, min(1.0, 0.5 + (meta_wr - (opp_wr / 100.0))))
             is_proxy = True
-        # else: no champ meta at all (Naafiri bronze top) → stays 0.5 neutral
 
     details = {
         "is_hidden": False,
