@@ -271,7 +271,7 @@ async def fetch_rank_meta(rank: str) -> dict:
                     logger.error("Failed to parse Qwik JSON: %s", je)
 
                 # Brief delay between lane requests
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(0.05)
 
             except Exception as e:
                 logger.error("Error in fetch_rank_meta lane %s for %s: %s", lane, rank, e)
@@ -339,7 +339,7 @@ async def sync_meta(mode="full"):
         # --- PHASE 2: MATCHUPS (DEEP) ---
         if mode in ("full", "matchups") and not sync_state["cancel_requested"]:
             import random
-            sem = asyncio.Semaphore(3)
+            sem = asyncio.Semaphore(15)
             now_ts = int(time.time())
 
             async def crawl_one(rank, cid_str, cdata):
@@ -358,7 +358,7 @@ async def sync_meta(mode="full"):
                         if matchups:
                             full_meta[rank]["champions"][cid_str]["matchups"] = matchups
                         
-                        await asyncio.sleep(random.uniform(1.5, 3.5))
+                        await asyncio.sleep(0.1)
                         
                         if random.random() < 0.15: # 15% chance to save
                             with open(META_FILE_PATH, "w") as f:
