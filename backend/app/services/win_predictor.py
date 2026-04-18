@@ -419,17 +419,38 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
         for i, d in enumerate(details):
             if d.get("is_hidden", False):
                 # Update feature vector (indices 0-7: Rank, WR, Form, Recent, Champ, Mastery, Streak, Meta)
+                # We now explicitly include Index 6 (Streak) for fairness
                 feats[i][:8] = team_mean[:8]
                 
                 # Update details for the "Math" UI to be transparent
                 d["rank"]["score"] = round(float(feats[i][0]), 3)
                 d["rank"]["tier"] = "Hidden (Estimated)"
+                
+                # Season WR
                 d["season_wr"]["wr"] = round(float(feats[i][1]), 3)
+                d["season_wr"]["label"] = f"{int(feats[i][1]*100)}% (Estimated)"
+                
                 d["form"]["avg_score"] = int(feats[i][2] * 100)
                 d["form"]["label"] = "Estimated"
-                d["recent_wr"]["wr"] = round(float(feats[i][3]), 3)
+                
+                # Recent WR & Last 5 Visualization
+                recent_wr = round(float(feats[i][3]), 3)
+                d["recent_wr"]["wr"] = recent_wr
+                d["recent_wr"]["label"] = "(Estimated)"
+                # Generate a representative [True, True, False, ...] list based on WR
+                wins_to_show = int(recent_wr * 5)
+                d["recent_wr"]["last5"] = [True] * wins_to_show + [False] * (5 - wins_to_show)
+                
+                # Champ WR
                 d["champ_wr"]["wr"] = round(float(feats[i][4]), 3)
+                d["champ_wr"]["label"] = "(Estimated)"
+                
+                # Streak
+                d["streak"]["value"] = round(float(feats[i][6] * 5), 1)
+                d["streak"]["label"] = "(Estimated)"
+                
                 d["meta_wr"]["wr"] = round(float(feats[i][7]), 3)
+                d["meta_wr"]["label"] = "(Estimated)"
 
     impute_team(blue_feats, blue_details)
     impute_team(red_feats, red_details)
