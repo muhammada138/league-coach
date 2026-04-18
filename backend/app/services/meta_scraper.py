@@ -52,6 +52,9 @@ RANKS = [
 
 # --- CONFIG ---
 LANES = ["", "top", "jungle", "middle", "bottom", "support"]
+# Pin matchup data to a specific patch (new patches often have bad sample sizes).
+# Set to None to always use the current live patch.
+MATCHUP_PATCH_OVERRIDE = "16.7"
 
 _TIER_LABELS = {
     1: "S+", 2: "S", 3: "S-",
@@ -93,7 +96,7 @@ async def _ensure_champ_ids():
 
 async def fetch_champion_matchups(rank: str, champ_name: str, lane: str) -> dict:
     """Returns {opp_cid_str: {'wr': float, 'games': int}} via Qwik state extraction."""
-    patch = await get_current_patch()
+    patch = MATCHUP_PATCH_OVERRIDE or await get_current_patch()
     url = f"https://lolalytics.com/lol/{champ_name.lower()}/counters/?lane={lane}&tier={rank}&patch={patch}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
