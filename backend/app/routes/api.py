@@ -606,7 +606,7 @@ async def get_player_build(match_id: str, puuid: str, region: str = RIOT_REGION)
         return cached
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        data = await riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/timelines/{match_id}")
+        data = await riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline")
 
     participants = data.get("metadata", {}).get("participants", [])
     participant_id = next((i + 1 for i, p in enumerate(participants) if p == puuid), None)

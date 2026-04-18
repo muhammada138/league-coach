@@ -1494,53 +1494,100 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
 }
 
 // ── Build View ─────────────────────────────────────────────────────────────
-function BuildView({ puuid, ddVersion, runesMap, scoreboard, scoreboardLoading }) {
+function BuildView({ matchId, puuid, region, ddVersion, runesMap, scoreboard }) {
+  const [build, setBuild] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!matchId || !puuid) return;
+    setLoading(true);
+    getMatchTimeline(matchId, puuid, region)
+      .then(setBuild)
+      .catch(() => setBuild(null))
+      .finally(() => setLoading(false));
+  }, [matchId, puuid, region]);
+
   const playerEntry = useMemo(
     () => scoreboard?.participants?.find(p => p.puuid === puuid),
     [scoreboard, puuid]
   );
 
-  if (scoreboardLoading) return (
+  if (loading) return (
     <div className="p-6 flex items-center justify-center gap-3">
       <div className="w-4 h-4 rounded-full border-2 border-t-[#c89b3c] border-[#c89b3c]/20 animate-spin" />
       <span className="text-sm text-slate-400 dark:text-white/30">Loading build…</span>
     </div>
   );
-  if (!playerEntry) return <div className="p-6 text-center text-sm text-slate-400 dark:text-white/30">Build data unavailable</div>;
+  if (!build) return <div className="p-6 text-center text-sm text-slate-400 dark:text-white/30">Build data unavailable</div>;
 
-  const items = (playerEntry.items || []).filter(Boolean);
-  const mainItems = items.slice(0, 6);
-  const trinket = items[6] ?? null;
-  const primaryPerk = playerEntry.primaryPerk;
-  const subStyle = playerEntry.subStyle;
+  const { items = [], skillOrder = [] } = build;
+
+  // Group items into rows of ~10
+  const ITEMS_PER_ROW = 10;
+  const itemRows = [];
+  for (let i = 0; i < items.length; i += ITEMS_PER_ROW) itemRows.push(items.slice(i, i + ITEMS_PER_ROW));
+
+  // Skill order grid (18 levels)
+  const SKILL_KEYS = ["Q", "W", "E", "R"];
+  const skillGrid = SKILL_KEYS.map(key =>
+    Array.from({ length: 18 }, (_, lvl) => skillOrder[lvl] === key ? lvl + 1 : null)
+  );
+
+  const primaryPerk = playerEntry?.primaryPerk;
+  const subStyle = playerEntry?.subStyle;
 
   return (
     <div className="p-4 space-y-5 animate-fadeIn">
-      {/* Final Items */}
-      {mainItems.length > 0 && (
+      {/* Items with timestamps */}
+      {itemRows.length > 0 && (
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mb-2">Final Build</div>
-          <div className="flex flex-wrap gap-1.5 items-center">
-            {mainItems.map((itemId, i) => (
-              <img
-                key={i}
-                src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${itemId}.png`}
-                className="w-10 h-10 rounded border border-slate-200 dark:border-white/10"
-                onError={e => { e.target.style.display = 'none'; }}
-                alt=""
-              />
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mb-2">Items</div>
+          <div className="space-y-2">
+            {itemRows.map((row, ri) => (
+              <div key={ri} className="flex flex-wrap gap-1 items-end">
+                {row.map((item, i) => (
+                  <div key={i} className="flex flex-col items-center gap-0.5">
+                    <img
+                      src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${item.itemId}.png`}
+                      className="w-9 h-9 rounded border border-slate-200 dark:border-white/10"
+                      onError={e => { e.target.style.display = 'none'; }}
+                      alt=""
+                    />
+                    <span className="text-[8px] text-slate-400 dark:text-white/20 tabular-nums">{item.ts}m</span>
+                  </div>
+                ))}
+              </div>
             ))}
-            {trinket && (
-              <>
-                <div className="w-px h-8 bg-slate-200 dark:bg-white/10 mx-0.5" />
-                <img
-                  src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${trinket}.png`}
-                  className="w-8 h-8 rounded-full border border-slate-200 dark:border-white/10"
-                  onError={e => { e.target.style.display = 'none'; }}
-                  alt=""
-                />
-              </>
-            )}
+          </div>
+        </div>
+      )}
+
+      {/* Skill Order */}
+      {skillOrder.length > 0 && (
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mb-2">Skill Order</div>
+          <div className="overflow-x-auto">
+            <table className="border-collapse text-[10px]">
+              <tbody>
+                {SKILL_KEYS.map((key, ki) => (
+                  <tr key={key}>
+                    <td className="pr-2 py-0.5 font-bold text-slate-500 dark:text-white/40 w-4">{key}</td>
+                    {skillGrid[ki].map((lvl, ci) => (
+                      <td key={ci} className="w-5 h-5 text-center">
+                        {lvl !== null ? (
+                          <div className={`w-5 h-5 rounded-sm flex items-center justify-center font-bold text-[9px]
+                            ${key === 'R' ? 'bg-purple-500/80 text-white' : 'bg-[#c89b3c]/80 text-white'}`}>
+                            {lvl}
+                          </div>
+                        ) : (
+                          <div className="w-5 h-5 rounded-sm bg-slate-100 dark:bg-white/5" />
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -1738,11 +1785,12 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
           )}
           {gameTab === 'build' && puuid ? (
             <BuildView
+              matchId={game.matchId}
               puuid={puuid}
+              region={region}
               ddVersion={ddVersion}
               runesMap={runesMap}
               scoreboard={scoreboard}
-              scoreboardLoading={scoreboardLoading}
             />
           ) : (
             <ExpandedScoreboard
