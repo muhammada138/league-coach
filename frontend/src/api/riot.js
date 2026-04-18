@@ -67,3 +67,9 @@ export const getIngestStatus = () =>
 
 export const toggleIngest = () =>
   api.post("/ingest/toggle").then((r) => r.data);
+
+export const getMatchTimeline = (matchId, puuid, region = "na1") =>
+  api.get(`/match/${matchId}/timeline/${puuid}`, { params: { region } }).then((r) => r.data);
+
+export const getChampionMastery = (puuid, region = "na1") =>
+  api.get(`/mastery/${puuid}`, { params: { region } }).then((r) => r.data);

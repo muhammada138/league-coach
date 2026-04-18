@@ -258,16 +258,18 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
     else:
         tier_val = TIER_SCORE.get(tier, 3.5)
         is_apex  = tier in ["MASTER", "GRANDMASTER", "CHALLENGER"]
-        div_val  = 0.0 if is_apex else DIV_BONUS.get(division, 0.0)
 
-        # In apex tiers, LP is the primary differentiator. We give it more weight.
         if is_apex:
-            # 100 LP in Master ≈ 0.4 rank points (vs 0.25 normally)
-            lp_bonus = (lp_val / 100.0) * 0.4
+            # LP is the only differentiator in apex. Tier offsets reflect the
+            # higher skill floor required to reach GM/Challenger vs Master.
+            # Challenger LP can reach 3000-4000+; scale the full range to 0.70-1.00.
+            _APEX_LP_OFFSET = {"MASTER": 0, "GRANDMASTER": 800, "CHALLENGER": 1600}
+            effective_lp = lp_val + _APEX_LP_OFFSET.get(tier, 0)
+            rank_score = 0.70 + min(effective_lp / 4000.0, 0.30)
         else:
+            div_val  = DIV_BONUS.get(division, 0.0)
             lp_bonus = (lp_val / 100.0) * 0.25
-
-        rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.2) / 1.2 # Allow some headroom
+            rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.2) / 1.2
 
     # 2. Season WR — confidence-weighted toward 0.5 (full trust at 100 games)
     total     = wins + losses

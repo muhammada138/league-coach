@@ -161,7 +161,7 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10, regi
         "mostDiffedLane": most_diffed_lane, "playerAverages": {stat: round(stats["player_avgs"][stat], 2) for stat in NUMERIC_STATS} | {"cspm": round(stats["player_cspm"], 2), "kda": round(stats["player_kda"], 2)},
         "lobbyAverages": {stat: round(stats["lobby_avgs_agg"][stat], 2) for stat in NUMERIC_STATS} | {"cspm": round(stats["lobby_cspm"], 2), "kda": round(stats["lobby_kda"], 2)},
         "deltas": {stat: round(stats["player_avgs"][stat] - stats["lobby_avgs_agg"][stat], 2) for stat in NUMERIC_STATS} | {"cspm": round(stats["player_cspm"] - stats["lobby_cspm"], 2), "kda": round(stats["player_kda"] - stats["lobby_kda"], 2)},
-        "coaching": coaching, "games": game_summaries,
+        "coaching": coaching, "games": game_summaries, "champStats": stats.get("champ_stats", {}),
     }
     route_cache.set(cache_key, result)
     return result
@@ -597,9 +597,69 @@ async def admin_cleanup():
     counts = cleanup_stale_data()
     return {"ok": True, "counts": counts}
 
+@router.get("/match/{match_id}/timeline/{puuid}")
+async def get_player_build(match_id: str, puuid: str, region: str = RIOT_REGION):
+    routing = get_routing(region)
+    cache_key = f"build:{routing}:{match_id}:{puuid}"
+    cached = route_cache.get(cache_key)
+    if cached:
+        return cached
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        data = await riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/timelines/{match_id}")
+
+    participants = data.get("metadata", {}).get("participants", [])
+    participant_id = next((i + 1 for i, p in enumerate(participants) if p == puuid), None)
+    if participant_id is None:
+        raise HTTPException(status_code=404, detail="Player not found in timeline")
+
+    frames = data.get("info", {}).get("frames", [])
+    items_purchased = []
+    skill_order = []
+
+    for frame in frames:
+        ts_min = round(frame.get("timestamp", 0) / 60000, 1)
+        for event in frame.get("events", []):
+            if event.get("participantId") != participant_id:
+                continue
+            etype = event.get("type")
+            if etype == "ITEM_PURCHASED":
+                items_purchased.append({"itemId": event["itemId"], "ts": ts_min})
+            elif etype == "ITEM_UNDO":
+                undo_id = event.get("beforeId") or event.get("itemId")
+                for i in range(len(items_purchased) - 1, -1, -1):
+                    if items_purchased[i]["itemId"] == undo_id:
+                        items_purchased.pop(i)
+                        break
+            elif etype == "SKILL_LEVEL_UP":
+                slot = event.get("skillSlot")
+                skill_order.append({1: "Q", 2: "W", 3: "E", 4: "R"}.get(slot, "?"))
+
+    result = {"items": items_purchased, "skillOrder": skill_order}
+    route_cache.set(cache_key, result)
+    return result
+
+
+@router.get("/mastery/{puuid}")
+async def get_champion_mastery(puuid: str, region: str = RIOT_REGION):
+    cache_key = f"mastery:{region}:{puuid}"
+    cached = route_cache.get(cache_key)
+    if cached:
+        return cached
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        data = await riot_get(client, f"https://{region}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/{puuid}/top?count=20")
+    route_cache.set(cache_key, data)
+    return data
+
+
 @router.post("/ask")
 async def ask_coach(body: AskRequest):
-    system_prompt = f"You are a League of Legends coach. Be casual, direct, human. Bold stats. 2-3 sentences max.\n\nPlayer context:\n{body.context}"
+    system_prompt = (
+        f"You are a League of Legends coach. Be casual, direct, human. Bold stats. 2-3 sentences max.\n"
+        f"Always reference champion abilities by key (Q, W, E, R, Passive) — never use the ability's actual name. "
+        f"Make tips specific to the champion's actual kit and how it enables their win conditions.\n\n"
+        f"Player context:\n{body.context}"
+    )
     history = [{"role": m.role, "content": m.content} for m in body.history]
     answer = await ask_coach_question(system_prompt, history, body.question)
     return {"answer": answer}
