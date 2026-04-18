@@ -131,6 +131,7 @@ export default function SearchInput({
         <div className="flex-1 flex items-center min-w-0">
           <input
             type="text"
+            aria-label="Riot ID Name"
             placeholder={placeholder.split('#')[0]}
             value={gameName}
             onChange={(e) => {
@@ -156,6 +157,7 @@ export default function SearchInput({
           <span className="text-slate-300 dark:text-white/10 font-bold px-1 select-none">#</span>
           <input
             type="text"
+            aria-label="Riot ID Tag"
             placeholder={placeholder.split('#')[1] || "TAG"}
             value={tagLine}
             onChange={(e) => setTagLine(e.target.value.toUpperCase())}
@@ -170,6 +172,7 @@ export default function SearchInput({
 
         <button
           type="submit"
+          aria-label="Search"
           disabled={loading}
           className={`flex items-center justify-center transition-all
             ${navbar ? "w-10 text-slate-400 hover:text-[#c89b3c]" : "px-6 text-[#c89b3c] hover:bg-[#c89b3c]/5"}
@@ -284,6 +287,7 @@ export default function SearchInput({
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
                     <button
                       type="button"
+                      aria-label={s.isSaved ? "Remove Favorite" : "Favorite Profile"}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -301,6 +305,7 @@ export default function SearchInput({
                     </button>
                     <button
                       type="button"
+                      aria-label={s.type === 'saved' ? "Remove Favorite" : "Remove from Recent"}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={(e) => {
                         e.stopPropagation();

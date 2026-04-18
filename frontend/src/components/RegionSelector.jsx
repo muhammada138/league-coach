@@ -29,6 +29,7 @@ export default function RegionSelector({ value, onChange, compact = false, pill 
       {pill ? (
         <button
           type="button"
+          aria-label="Select Region"
           onClick={toggleDropdown}
           className={`flex items-center gap-1.5 pl-3.5 pr-2.5 h-full transition-all rounded-l-xl
             border-r border-slate-200 dark:border-white/10
@@ -51,6 +52,7 @@ export default function RegionSelector({ value, onChange, compact = false, pill 
       ) : (
         <button
           type="button"
+          aria-label="Select Region"
           onClick={toggleDropdown}
           className={`flex items-center gap-2 group transition-all duration-200 outline-none
             ${compact 
