@@ -8,7 +8,7 @@ from ..services.riot import (
     _compute_perf_score, _compute_diffed_lane, get_match_details
 )
 from ..services.groq import get_coaching_feedback, ask_coach_question
-from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, CACHE_VERSION, get_routing
+from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, CACHE_VERSION, get_routing, MATCH_FETCH_SEM
 from ..models.requests import LiveEnrichRequest, AskRequest, WinPredictRequest
 from ..services import win_predictor
 from ..services import db
@@ -291,9 +291,8 @@ async def live_enrich(body: LiveEnrichRequest):
     is_ranked_queue = body.queue_id in _RANKED_RANK_TYPE
     match_queue_filter = body.queue_id
 
-    # Single semaphore shared across all concurrent players — caps total simultaneous
-    # match-detail fetches so we stay within the dev key 100 req/2 min limit.
-    _match_sem = asyncio.Semaphore(4)
+    # Global semaphore imported from state.py caps total simultaneous
+    # match-detail fetches across ALL server requests.
 
     async def enrich_one(puuid: str):
         # We need region here from body, but LiveEnrichRequest would need updating
@@ -316,7 +315,7 @@ async def live_enrich(body: LiveEnrichRequest):
             async with httpx.AsyncClient(timeout=25.0) as client:
                 entries, match_ids = await asyncio.gather(
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=20&queue={match_queue_filter}"),
+                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=8&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
 
@@ -338,7 +337,7 @@ async def live_enrich(body: LiveEnrichRequest):
                 if not isinstance(match_ids, Exception) and match_ids:
                     # Rate-limited match detail fetches — each call acquires the shared semaphore
                     async def _fetch(mid):
-                        async with _match_sem:
+                        async with MATCH_FETCH_SEM:
                             return await get_match_details(client, mid, routing)
 
                     match_datas = await asyncio.gather(*[_fetch(mid) for mid in match_ids], return_exceptions=True)

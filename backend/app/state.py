@@ -103,3 +103,7 @@ sync_state = {
     "paused": False,
     "cancel_requested": False
 }
+
+# Global Rate Limiting Semaphore for Match Details
+# Caps total concurrent match-detail fetches across all requests/users.
+MATCH_FETCH_SEM = asyncio.Semaphore(5)
