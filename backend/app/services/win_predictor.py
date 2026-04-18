@@ -262,14 +262,18 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
         if is_apex:
             # LP is the only differentiator in apex. Tier offsets reflect the
             # higher skill floor required to reach GM/Challenger vs Master.
-            # Challenger LP can reach 3000-4000+; scale the full range to 0.70-1.00.
+            # We scale up to a theoretical 4000 LP (5600 total with Challenger offset).
             _APEX_LP_OFFSET = {"MASTER": 0, "GRANDMASTER": 800, "CHALLENGER": 1600}
-            effective_lp = lp_val + _APEX_LP_OFFSET.get(tier, 0)
-            rank_score = 0.70 + min(effective_lp / 4000.0, 0.30)
+            effective_lp = max(0, lp_val + _APEX_LP_OFFSET.get(tier, 0))
+            
+            # 0.70 is the floor (Master 0 LP). 0.30 is the remaining dynamic range.
+            # Divisor 5600 = 1600 (Challenger start) + 4000 (Peak LP).
+            rank_score = 0.70 + (effective_lp / 5600.0) * 0.30
+            rank_score = min(rank_score, 1.0) # Absolute ceiling at 4k LP Challenger
         else:
             div_val  = DIV_BONUS.get(division, 0.0)
             lp_bonus = (lp_val / 100.0) * 0.25
-            rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.2) / 1.2
+            rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 0.70)
 
     # 2. Season WR — confidence-weighted toward 0.5 (full trust at 100 games)
     total     = wins + losses
