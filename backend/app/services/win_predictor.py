@@ -293,16 +293,25 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
             matchup_conf = min(matchup_games / 100.0, 1.0)
             matchup_adv = (vs_wr / 100.0) * matchup_conf + 0.5 * (1.0 - matchup_conf)
         else:
-            # Fallback: use relative meta WR difference as a proxy for matchup strength
-            # Try to find opponent meta data
+            # Try reverse lookup: check if opponent has data for us and flip the WR
             opp_meta = champ_dict.get(f"{opp_id_str}:{role_key}")
             if not opp_meta:
                 opp_meta = champ_dict.get(f"{opp_id_str}:all", champ_dict.get(opp_id_str, {}))
-            
-            opp_wr = opp_meta.get("wr", 50.0) if opp_meta else 50.0
-            vs_wr = 50.0 + (meta_wr_val - opp_wr)
-            matchup_adv = max(0.0, min(1.0, 0.5 + (meta_wr - (opp_wr / 100.0))))
-            is_proxy = True
+            reverse_matchups = opp_meta.get("matchups", {}) if opp_meta else {}
+            cid_str = str(champion_id)
+            if cid_str in reverse_matchups:
+                raw = reverse_matchups[cid_str]
+                opp_vs_us_wr = raw["wr"] if isinstance(raw, dict) else raw
+                vs_wr = round(100.0 - opp_vs_us_wr, 1)
+                matchup_games = raw.get("games", 100) if isinstance(raw, dict) else 100
+                matchup_conf = min(matchup_games / 100.0, 1.0)
+                matchup_adv = (vs_wr / 100.0) * matchup_conf + 0.5 * (1.0 - matchup_conf)
+            else:
+                # Last resort: relative meta WR difference as proxy
+                opp_wr = opp_meta.get("wr", 50.0) if opp_meta else 50.0
+                vs_wr = 50.0 + (meta_wr_val - opp_wr)
+                matchup_adv = max(0.0, min(1.0, 0.5 + (meta_wr - (opp_wr / 100.0))))
+                is_proxy = True
 
     details = {
         "is_hidden": False,
