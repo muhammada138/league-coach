@@ -192,6 +192,8 @@ function SavedDropdown() {
                     className="relative z-10 flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center
                       text-red-400/40 hover:text-red-500 hover:bg-red-500/10
                       opacity-0 group-hover:opacity-100 transition-all"
+                    aria-label="Remove saved profile"
+                    title="Remove saved profile"
                   >
                     <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <path d="M12 4L4 12M4 4l8 8" strokeLinecap="round" />
