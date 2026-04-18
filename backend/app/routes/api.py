@@ -635,8 +635,14 @@ async def get_player_build(match_id: str, puuid: str, region: str = RIOT_REGION)
             elif etype == "ITEM_UNDO":
                 undo_id = event.get("beforeId") or event.get("itemId")
                 for i in range(len(items_purchased) - 1, -1, -1):
-                    if items_purchased[i]["itemId"] == undo_id:
+                    if items_purchased[i]["itemId"] == undo_id and not items_purchased[i].get("sold"):
                         items_purchased.pop(i)
+                        break
+            elif etype == "ITEM_SOLD":
+                sold_id = event.get("itemId")
+                for i in range(len(items_purchased) - 1, -1, -1):
+                    if items_purchased[i]["itemId"] == sold_id and not items_purchased[i].get("sold"):
+                        items_purchased[i]["sold"] = True
                         break
             elif etype == "SKILL_LEVEL_UP":
                 slot = event.get("skillSlot")

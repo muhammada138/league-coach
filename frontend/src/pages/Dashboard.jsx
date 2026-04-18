@@ -47,11 +47,13 @@ function timeAgo(ms) {
 
 let _runesMap = null;
 let _runesTreeNames = {};
+let _runesData = null;
 async function getRunesMap(ddVersion) {
   if (_runesMap) return _runesMap;
   try {
     const res = await fetch(`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/data/en_US/runesReforged.json`);
     const data = await res.json();
+    _runesData = data;
     _runesMap = {};
     data.forEach(tree => {
       _runesMap[tree.id] = tree.icon;
@@ -60,6 +62,33 @@ async function getRunesMap(ddVersion) {
     });
   } catch { _runesMap = {}; }
   return _runesMap;
+}
+
+const SHARD_ROWS = [
+  [5008, 5005, 5007],
+  [5008, 5002, 5003],
+  [5001, 5002, 5003],
+];
+const SHARD_ICONS = {
+  5008: 'perk-images/StatMods/StatModsAdaptiveForceIcon.png',
+  5005: 'perk-images/StatMods/StatModsAttackSpeedIcon.png',
+  5007: 'perk-images/StatMods/StatModsCDRScalingIcon.png',
+  5002: 'perk-images/StatMods/StatModsArmorIcon.png',
+  5003: 'perk-images/StatMods/StatModsMagicResIcon.MagicResist.png',
+  5001: 'perk-images/StatMods/StatModsHealthScalingIcon.png',
+  5011: 'perk-images/StatMods/StatModsHealthPlusIcon.png',
+};
+
+function getSkillMaxOrder(skillOrder) {
+  const levels = { Q: 0, W: 0, E: 0 };
+  const order = [];
+  for (const key of skillOrder) {
+    if (!['Q', 'W', 'E'].includes(key)) continue;
+    levels[key]++;
+    if (levels[key] === 5 && !order.includes(key)) order.push(key);
+  }
+  ['Q', 'W', 'E'].forEach(k => { if (!order.includes(k)) order.push(k); });
+  return order;
 }
 
 function computePerformanceScore(player, allPlayers) {
@@ -1524,65 +1553,99 @@ function BuildView({ matchId, puuid, region, ddVersion, runesMap, scoreboard }) 
 
   const { items = [], skillOrder = [] } = build;
 
-  // Group items into rows of ~10
-  const ITEMS_PER_ROW = 10;
-  const itemRows = [];
-  for (let i = 0; i < items.length; i += ITEMS_PER_ROW) itemRows.push(items.slice(i, i + ITEMS_PER_ROW));
+  // Group items by timestamp (bought at same minute = same group)
+  const itemGroups = [];
+  items.forEach(item => {
+    const last = itemGroups[itemGroups.length - 1];
+    if (last && last[0].ts === item.ts) last.push(item);
+    else itemGroups.push([item]);
+  });
 
-  // Skill order grid (18 levels)
+  // Skill order max sequence + grid
+  const maxOrder = getSkillMaxOrder(skillOrder);
   const SKILL_KEYS = ["Q", "W", "E", "R"];
   const skillGrid = SKILL_KEYS.map(key =>
     Array.from({ length: 18 }, (_, lvl) => skillOrder[lvl] === key ? lvl + 1 : null)
   );
 
-  const primaryPerk = playerEntry?.primaryPerk;
-  const subStyle = playerEntry?.subStyle;
+  // Rune trees from cached full data
+  const primaryTree = _runesData?.find(t => t.id === playerEntry?.primaryStyle);
+  const subTree = _runesData?.find(t => t.id === playerEntry?.subStyle);
+  const selectedPrimary = new Set(playerEntry?.primarySelections || []);
+  const selectedSub = new Set(playerEntry?.subSelections || []);
+  const statPerks = playerEntry?.statPerks || [];
+
+  const sectionLabel = "text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mb-3";
+  const ddImg = path => `https://ddragon.leagueoflegends.com/cdn/img/${path}`;
 
   return (
-    <div className="p-4 space-y-5 animate-fadeIn">
-      {/* Items with timestamps */}
-      {itemRows.length > 0 && (
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mb-2">Items</div>
-          <div className="space-y-2">
-            {itemRows.map((row, ri) => (
-              <div key={ri} className="flex flex-wrap gap-1 items-end">
-                {row.map((item, i) => (
-                  <div key={i} className="flex flex-col items-center gap-0.5">
-                    <img
-                      src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${item.itemId}.png`}
-                      className="w-9 h-9 rounded border border-slate-200 dark:border-white/10"
-                      onError={e => { e.target.style.display = 'none'; }}
-                      alt=""
-                    />
-                    <span className="text-[8px] text-slate-400 dark:text-white/20 tabular-nums">{item.ts}m</span>
+    <div className="p-5 space-y-6 animate-fadeIn flex flex-col items-center">
+
+      {/* ── Items ── */}
+      {itemGroups.length > 0 && (
+        <div className="w-full">
+          <div className={sectionLabel}>Items</div>
+          <div className="flex flex-wrap items-end gap-y-3 gap-x-0.5">
+            {itemGroups.map((group, gi) => (
+              <React.Fragment key={gi}>
+                {gi > 0 && (
+                  <span className="text-white/20 dark:text-white/15 text-base mx-1 self-center leading-none">›</span>
+                )}
+                <div className="flex flex-col items-center gap-0.5">
+                  <div className="flex gap-0.5">
+                    {group.map((item, i) => (
+                      <div key={i} className="relative">
+                        <img
+                          src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${item.itemId}.png`}
+                          className={`w-9 h-9 rounded border border-white/10 object-cover ${item.sold ? 'opacity-35 grayscale' : ''}`}
+                          onError={e => { e.target.style.display = 'none'; }}
+                          alt=""
+                        />
+                        {item.sold && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span className="text-red-400 font-black text-sm leading-none">✕</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                  <span className="text-[8px] text-white/20 tabular-nums">{group[0].ts}m</span>
+                </div>
+              </React.Fragment>
             ))}
           </div>
         </div>
       )}
 
-      {/* Skill Order */}
+      {/* ── Skill Order ── */}
       {skillOrder.length > 0 && (
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mb-2">Skill Order</div>
+        <div className="w-full">
+          <div className="flex items-center justify-between mb-3">
+            <div className={sectionLabel.replace('mb-3', '')}>Skill Order</div>
+            <div className="flex items-center gap-1">
+              {maxOrder.map((k, i) => (
+                <React.Fragment key={k}>
+                  {i > 0 && <span className="text-white/25 text-xs">›</span>}
+                  <span className={`text-[12px] font-black ${k === 'R' ? 'text-purple-400' : 'text-[#c89b3c]'}`}>{k}</span>
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
           <div className="overflow-x-auto">
-            <table className="border-collapse text-[10px]">
+            <table className="border-collapse text-[10px] mx-auto">
               <tbody>
-                {SKILL_KEYS.map((key, ki) => (
+                {SKILL_KEYS.map((key) => (
                   <tr key={key}>
-                    <td className="pr-2 py-0.5 font-bold text-slate-500 dark:text-white/40 w-4">{key}</td>
-                    {skillGrid[ki].map((lvl, ci) => (
-                      <td key={ci} className="w-5 h-5 text-center">
+                    <td className="pr-2 py-0.5 font-black text-white/40 w-4">{key}</td>
+                    {skillGrid[SKILL_KEYS.indexOf(key)].map((lvl, ci) => (
+                      <td key={ci} className="w-5 h-5 text-center p-px">
                         {lvl !== null ? (
                           <div className={`w-5 h-5 rounded-sm flex items-center justify-center font-bold text-[9px]
                             ${key === 'R' ? 'bg-purple-500/80 text-white' : 'bg-[#c89b3c]/80 text-white'}`}>
                             {lvl}
                           </div>
                         ) : (
-                          <div className="w-5 h-5 rounded-sm bg-slate-100 dark:bg-white/5" />
+                          <div className="w-5 h-5 rounded-sm bg-white/5" />
                         )}
                       </td>
                     ))}
@@ -1594,77 +1657,95 @@ function BuildView({ matchId, puuid, region, ddVersion, runesMap, scoreboard }) 
         </div>
       )}
 
-      {/* Runes */}
-      {runesMap && (primaryPerk || playerEntry?.primaryStyle) && (
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mb-2">Runes</div>
-          <div className="flex gap-6 flex-wrap">
-            {/* Primary tree */}
-            {playerEntry?.primarySelections?.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-1.5">
-                  {playerEntry.primaryStyle && runesMap[playerEntry.primaryStyle] && (
-                    <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[playerEntry.primaryStyle]}`} className="w-4 h-4 object-contain" alt="" />
+      {/* ── Runes ── */}
+      {runesMap && (primaryTree || subTree) && (
+        <div className="w-full">
+          <div className={sectionLabel}>Runes</div>
+          <div className="flex gap-8 justify-center flex-wrap">
+
+            {/* Primary tree — all slots */}
+            {primaryTree && (
+              <div className="flex flex-col items-center gap-0.5">
+                <div className="flex items-center gap-1.5 mb-2">
+                  {runesMap[primaryTree.id] && (
+                    <img src={ddImg(runesMap[primaryTree.id])} className="w-4 h-4 object-contain" alt="" />
                   )}
-                  <span className="text-[10px] font-bold text-white/50">{_runesTreeNames[playerEntry.primaryStyle] || "Primary"}</span>
+                  <span className="text-[10px] font-bold text-white/60">{primaryTree.name}</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  {/* Keystone — larger */}
-                  {playerEntry.primarySelections[0] && runesMap[playerEntry.primarySelections[0]] && (
-                    <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[playerEntry.primarySelections[0]]}`}
-                      title={_runesTreeNames[playerEntry.primarySelections[0]]}
-                      className="w-9 h-9 rounded-full bg-black/60 object-cover border border-[#c89b3c]/40" alt="" />
-                  )}
-                  {/* Slots 1–3 */}
-                  <div className="flex flex-col gap-1">
-                    {playerEntry.primarySelections.slice(1).map((id, i) => (
-                      id && runesMap[id] ? (
-                        <img key={i} src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[id]}`}
-                          title={_runesTreeNames[id]}
-                          className="w-5 h-5 rounded-full bg-black/60 object-cover" alt="" />
-                      ) : <div key={i} className="w-5 h-5 rounded-full bg-white/5" />
-                    ))}
+                {primaryTree.slots.map((slot, si) => (
+                  <div key={si} className={`flex items-center justify-center gap-2 ${si === 0 ? 'mb-2' : 'mb-1'}`}>
+                    {slot.runes.map(rune => {
+                      const sel = selectedPrimary.has(rune.id);
+                      return (
+                        <img key={rune.id}
+                          src={ddImg(runesMap[rune.id] || '')}
+                          title={rune.name}
+                          className={`rounded-full bg-black/60 object-cover transition-all
+                            ${si === 0 ? 'w-11 h-11' : 'w-7 h-7'}
+                            ${sel ? 'opacity-100 ring-1 ring-white/20' : 'opacity-20 grayscale'}`}
+                          onError={e => { e.target.style.display = 'none'; }}
+                          alt=""
+                        />
+                      );
+                    })}
                   </div>
-                </div>
+                ))}
               </div>
             )}
 
-            {/* Secondary tree */}
-            {playerEntry?.subSelections?.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-1.5">
-                  {playerEntry.subStyle && runesMap[playerEntry.subStyle] && (
-                    <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[playerEntry.subStyle]}`} className="w-4 h-4 object-contain" alt="" />
+            {/* Secondary tree — slots 1–3 only (no keystone row) */}
+            {subTree && (
+              <div className="flex flex-col items-center gap-0.5">
+                <div className="flex items-center gap-1.5 mb-2">
+                  {runesMap[subTree.id] && (
+                    <img src={ddImg(runesMap[subTree.id])} className="w-4 h-4 object-contain" alt="" />
                   )}
-                  <span className="text-[10px] font-bold text-white/50">{_runesTreeNames[playerEntry.subStyle] || "Secondary"}</span>
+                  <span className="text-[10px] font-bold text-white/60">{subTree.name}</span>
                 </div>
-                <div className="flex flex-col gap-1">
-                  {playerEntry.subSelections.map((id, i) => (
-                    id && runesMap[id] ? (
-                      <img key={i} src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[id]}`}
-                        title={_runesTreeNames[id]}
-                        className="w-6 h-6 rounded-full bg-black/60 object-cover" alt="" />
-                    ) : <div key={i} className="w-6 h-6 rounded-full bg-white/5" />
-                  ))}
-                </div>
+                {subTree.slots.slice(1).map((slot, si) => (
+                  <div key={si} className="flex items-center justify-center gap-2 mb-1">
+                    {slot.runes.map(rune => {
+                      const sel = selectedSub.has(rune.id);
+                      return (
+                        <img key={rune.id}
+                          src={ddImg(runesMap[rune.id] || '')}
+                          title={rune.name}
+                          className={`w-7 h-7 rounded-full bg-black/60 object-cover transition-all
+                            ${sel ? 'opacity-100 ring-1 ring-white/20' : 'opacity-20 grayscale'}`}
+                          onError={e => { e.target.style.display = 'none'; }}
+                          alt=""
+                        />
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             )}
 
             {/* Stat shards */}
-            {playerEntry?.statPerks?.some(Boolean) && (
-              <div className="flex flex-col gap-2">
-                <span className="text-[10px] font-bold text-white/50">Shards</span>
-                <div className="flex flex-col gap-1">
-                  {(playerEntry.statPerks || []).map((id, i) => (
-                    id && runesMap[id] ? (
-                      <img key={i} src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[id]}`}
-                        title={_runesTreeNames[id]}
-                        className="w-5 h-5 rounded-full bg-black/60 object-cover" alt="" />
-                    ) : <div key={i} className="w-5 h-5 rounded-full bg-white/5" />
-                  ))}
-                </div>
+            <div className="flex flex-col items-center gap-0.5">
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="text-[10px] font-bold text-white/60">Shards</span>
               </div>
-            )}
+              {SHARD_ROWS.map((row, ri) => (
+                <div key={ri} className="flex items-center justify-center gap-2 mb-1">
+                  {row.map((id, ci) => {
+                    const sel = statPerks[ri] === id;
+                    const icon = SHARD_ICONS[id];
+                    return icon ? (
+                      <img key={ci}
+                        src={ddImg(icon)}
+                        className={`w-6 h-6 rounded-full bg-black/60 object-cover transition-all
+                          ${sel ? 'opacity-100 ring-1 ring-white/20' : 'opacity-20 grayscale'}`}
+                        onError={e => { e.target.style.display = 'none'; }}
+                        alt=""
+                      />
+                    ) : <div key={ci} className="w-6 h-6 rounded-full bg-white/5" />;
+                  })}
+                </div>
+              ))}
+            </div>
+
           </div>
         </div>
       )}
