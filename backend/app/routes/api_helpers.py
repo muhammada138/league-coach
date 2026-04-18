@@ -103,6 +103,18 @@ def _aggregate_games_stats(games: List[Dict[str, Any]]) -> Dict[str, Any]:
         for champ, count in champ_counter.most_common()
     )
 
+    champ_stats: dict[str, dict] = {}
+    for g in games:
+        ps = g["playerStats"]
+        name = ps["championName"]
+        if name not in champ_stats:
+            champ_stats[name] = {"wins": 0, "games": 0, "kills": 0, "deaths": 0, "assists": 0}
+        champ_stats[name]["games"] += 1
+        if ps["win"]: champ_stats[name]["wins"] += 1
+        champ_stats[name]["kills"] += ps["kills"]
+        champ_stats[name]["deaths"] += ps["deaths"]
+        champ_stats[name]["assists"] += ps["assists"]
+
     return {
         "n": n,
         "player_avgs": player_avgs,
@@ -115,6 +127,7 @@ def _aggregate_games_stats(games: List[Dict[str, Any]]) -> Dict[str, Any]:
         "most_common_position": most_common_position,
         "most_played_champ": most_played_champ,
         "champ_breakdown": champ_breakdown,
+        "champ_stats": champ_stats,
     }
 
 async def _generate_coaching(game_name: str, stats: Dict[str, Any]) -> str:
@@ -124,9 +137,10 @@ async def _generate_coaching(game_name: str, stats: Dict[str, Any]) -> str:
         "Be blunt and human. No corporate filler. Give 3-4 weaknesses where they are underperforming vs their lobby. "
         "Each tip: 1-2 sentences max. Lead with the problem, end with one concrete fix. "
         "Bold (**) every stat number and every key concept/stat name. "
-        f"The player is mainly playing **{stats['most_played_champ']}** — reference this champion's specific kit, "
-        "abilities, and win conditions in your tips. If they play multiple champions, tailor advice to each "
-        "champion's unique strengths and how to leverage them to improve the weak stats. "
+        "IMPORTANT: Always reference champion abilities by their key (Q, W, E, R, Passive) — never use the ability's actual name. "
+        "Make every tip specific to that champion's actual kit and win conditions — no generic advice. "
+        f"The player is mainly playing **{stats['most_played_champ']}** — tailor every tip to this champion's specific mechanics. "
+        "If they play multiple champions, tailor advice to each champion's kit and how it enables their specific win conditions. "
         "FORMATTING RULES: Start each tip with a number and a period (e.g., '1. ', '2. '). "
         "Each numbered tip must be on its own new line. No intro sentence."
     )

@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory } from "../api/riot";
+import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory, getMatchTimeline, getChampionMastery } from "../api/riot";
 import useSearchHistory from "../hooks/useSearchHistory";
 
 const TIER_COLORS = {
@@ -538,7 +538,7 @@ const RankDetail = ({ data }) => (
 
 const WRDetail = ({ data }) => {
   const wr = data.wr || 0.5;
-  const games = (data.wins + data.losses) || 0;
+  const games = data.total ?? ((data.wins || 0) + (data.losses || 0)) || 0;
   return (
     <div className="flex flex-col items-end leading-none">
       <span className={`text-[11px] font-bold ${wr >= 0.55 ? 'text-emerald-400' : wr >= 0.45 ? 'text-white/70' : 'text-red-400'}`}>
@@ -672,7 +672,7 @@ const PredictorCard = React.memo(({ predictor, ddVersion }) => {
 
   const LABELS = {
     rank: "Rank Score", season_wr: "Season WR", form: "Form (avg score)",
-    recent_wr: "Recent WR (last 10)", champ_wr: "Champ WR", mastery: "Mastery",
+    recent_wr: "Recent WR (last 5)", champ_wr: "Champ WR", mastery: "Mastery",
     streak: "Streak", meta_wr: "Meta WR (Lolalytics)", matchup: "Matchup Adv",
   };
   const WEIGHTS = {
@@ -1493,8 +1493,132 @@ function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion
   );
 }
 
+// ── Build View ─────────────────────────────────────────────────────────────
+function BuildView({ matchId, puuid, region, ddVersion, runesMap, scoreboard, gameName }) {
+  const [build, setBuild] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!matchId || !puuid) return;
+    setLoading(true);
+    getMatchTimeline(matchId, puuid, region)
+      .then(setBuild)
+      .catch(() => setBuild(null))
+      .finally(() => setLoading(false));
+  }, [matchId, puuid, region]);
+
+  const playerEntry = useMemo(
+    () => scoreboard?.participants?.find(p => p.puuid === puuid),
+    [scoreboard, puuid]
+  );
+
+  if (loading) return (
+    <div className="p-6 flex items-center justify-center gap-3">
+      <div className="w-4 h-4 rounded-full border-2 border-t-[#c89b3c] border-[#c89b3c]/20 animate-spin" />
+      <span className="text-sm text-slate-400 dark:text-white/30">Loading build…</span>
+    </div>
+  );
+  if (!build) return <div className="p-6 text-center text-sm text-slate-400 dark:text-white/30">Build data unavailable</div>;
+
+  const { items = [], skillOrder = [] } = build;
+
+  // Group items into rows of ~10
+  const ITEMS_PER_ROW = 10;
+  const itemRows = [];
+  for (let i = 0; i < items.length; i += ITEMS_PER_ROW) itemRows.push(items.slice(i, i + ITEMS_PER_ROW));
+
+  // Build skill order grid (18 levels, Q/W/E/R rows)
+  const SKILL_KEYS = ["Q", "W", "E", "R"];
+  const skillGrid = SKILL_KEYS.map(key =>
+    Array.from({ length: 18 }, (_, lvl) => skillOrder[lvl] === key ? lvl + 1 : null)
+  );
+
+  const primaryPerk = playerEntry?.primaryPerk;
+  const subStyle = playerEntry?.subStyle;
+
+  return (
+    <div className="p-4 space-y-5 animate-fadeIn">
+      {/* Items Timeline */}
+      {itemRows.length > 0 && (
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mb-2">Items</div>
+          <div className="space-y-2">
+            {itemRows.map((row, ri) => (
+              <div key={ri} className="flex flex-wrap gap-1 items-end">
+                {row.map((item, i) => (
+                  <div key={i} className="flex flex-col items-center gap-0.5">
+                    <img
+                      src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/item/${item.itemId}.png`}
+                      className="w-8 h-8 rounded border border-slate-200 dark:border-white/10"
+                      onError={e => { e.target.style.display = 'none'; }}
+                      alt=""
+                    />
+                    <span className="text-[8px] text-slate-400 dark:text-white/20 tabular-nums">{item.ts}m</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Skill Order */}
+      {skillOrder.length > 0 && (
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mb-2">Skill Order</div>
+          <div className="overflow-x-auto">
+            <table className="border-collapse text-[10px]">
+              <tbody>
+                {SKILL_KEYS.map((key, ki) => (
+                  <tr key={key}>
+                    <td className="pr-2 py-0.5 font-bold text-slate-500 dark:text-white/40 w-4">{key}</td>
+                    {skillGrid[ki].map((lvl, ci) => (
+                      <td key={ci} className="w-5 h-5 text-center">
+                        {lvl !== null ? (
+                          <div className={`w-5 h-5 rounded-sm flex items-center justify-center font-bold text-[9px]
+                            ${key === 'R' ? 'bg-purple-500/80 text-white' : 'bg-[#c89b3c]/80 text-white'}`}>
+                            {lvl}
+                          </div>
+                        ) : (
+                          <div className="w-5 h-5 rounded-sm bg-slate-100 dark:bg-white/5" />
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Runes */}
+      {(primaryPerk || subStyle) && runesMap && (
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mb-2">Runes</div>
+          <div className="flex items-center gap-3">
+            {primaryPerk && runesMap[primaryPerk] && (
+              <div className="flex flex-col items-center gap-1">
+                <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[primaryPerk]}`} className="w-8 h-8 rounded-full bg-black/80 object-cover" alt="" />
+                <span className="text-[9px] text-slate-400 dark:text-white/20">Keystone</span>
+              </div>
+            )}
+            {subStyle && runesMap[subStyle] && (
+              <div className="flex flex-col items-center gap-1">
+                <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[subStyle]}`} className="w-6 h-6 rounded-full bg-black/80 object-cover" alt="" />
+                <span className="text-[9px] text-slate-400 dark:text-white/20">Secondary</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Horizontal Game Row ────────────────────────────────────────────────────
-function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, gameName, ddVersion, runesMap, region }) {
+function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, gameName, puuid, ddVersion, runesMap, region }) {
+  const [gameTab, setGameTab] = useState('scoreboard');
   if (!game) return null;
   const isRemake = (game.gameDuration || 0) < 210;
   const mins = Math.floor(game.gameDuration / 60);
@@ -1634,7 +1758,7 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
         </div>
       </div>
 
-      {/* Expanded scoreboard */}
+      {/* Expanded section */}
       {isExpanded && (
         <div className={`border-t ${isRemake
           ? "border-slate-200 dark:border-white/10 bg-slate-50/20 dark:bg-slate-800/10"
@@ -1642,15 +1766,44 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
             ? "border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10"
             : "border-red-200 dark:border-red-500/20 bg-red-50/20 dark:bg-red-950/10"
           }`}>
-          <ExpandedScoreboard
-            scoreboard={scoreboard}
-            loading={scoreboardLoading}
-            gameName={gameName}
-            isRemake={isRemake}
-            ddVersion={ddVersion}
-            runesMap={runesMap}
-            region={region}
-          />
+          {/* Tab bar — only show Build tab if we have a puuid */}
+          {puuid && (
+            <div className="flex border-b border-black/[0.05] dark:border-white/[0.05]">
+              {["scoreboard", "build"].map(t => (
+                <button
+                  key={t}
+                  onClick={() => setGameTab(t)}
+                  className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors
+                    ${gameTab === t
+                      ? "text-[#c89b3c] border-b-2 border-[#c89b3c] -mb-px"
+                      : "text-slate-400 dark:text-white/25 hover:text-slate-600 dark:hover:text-white/50"}`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+          {gameTab === 'build' && puuid ? (
+            <BuildView
+              matchId={game.matchId}
+              puuid={puuid}
+              region={region}
+              ddVersion={ddVersion}
+              runesMap={runesMap}
+              scoreboard={scoreboard}
+              gameName={gameName}
+            />
+          ) : (
+            <ExpandedScoreboard
+              scoreboard={scoreboard}
+              loading={scoreboardLoading}
+              gameName={gameName}
+              isRemake={isRemake}
+              ddVersion={ddVersion}
+              runesMap={runesMap}
+              region={region}
+            />
+          )}
         </div>
       )}
     </div>
@@ -1827,8 +1980,135 @@ function TeammatesContent({ games, region }) {
   );
 }
 
-// ── Right Panel (tabbed: Coaching | Stats | Teams) ──────────────────────────
-function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerContext, games, region }) {
+// ── Champions Content ────────────────────────────────────────────────────────
+function ChampionsContent({ puuid, region, ddVersion, champStats, games }) {
+  const [subTab, setSubTab] = useState("season");
+  const [mastery, setMastery] = useState(null);
+  const [masteryLoading, setMasteryLoading] = useState(false);
+  const [champMap, setChampMap] = useState(null);
+
+  useEffect(() => { getChampIdMap(ddVersion).then(setChampMap); }, [ddVersion]);
+
+  useEffect(() => {
+    if (subTab !== "mastery" || mastery || !puuid) return;
+    setMasteryLoading(true);
+    getChampionMastery(puuid, region)
+      .then(setMastery)
+      .catch(() => setMastery([]))
+      .finally(() => setMasteryLoading(false));
+  }, [subTab, puuid, region, mastery]);
+
+  // Build season stats from champStats (from analyze) + games list
+  const seasonRows = useMemo(() => {
+    const stats = champStats || {};
+    // Also accumulate from games array in case champStats is missing
+    const fromGames = {};
+    (games || []).forEach(g => {
+      const name = g.championName;
+      if (!name) return;
+      if (!fromGames[name]) fromGames[name] = { wins: 0, games: 0, kills: 0, deaths: 0, assists: 0 };
+      fromGames[name].games++;
+      if (g.win) fromGames[name].wins++;
+      fromGames[name].kills += g.kills || 0;
+      fromGames[name].deaths += g.deaths || 0;
+      fromGames[name].assists += g.assists || 0;
+    });
+    const merged = { ...fromGames };
+    Object.entries(stats).forEach(([name, s]) => {
+      if (!merged[name]) merged[name] = s;
+    });
+    return Object.entries(merged)
+      .map(([name, s]) => ({
+        name,
+        wr: s.games > 0 ? Math.round((s.wins / s.games) * 100) : 50,
+        games: s.games,
+        kda: ((s.kills + s.assists) / Math.max(s.deaths, 1)).toFixed(2),
+      }))
+      .sort((a, b) => b.games - a.games);
+  }, [champStats, games]);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex border-b border-slate-100 dark:border-white/[0.06] flex-shrink-0 mx-5 mb-1 mt-3">
+        {[{ id: "season", label: "Season WR" }, { id: "mastery", label: "Mastery" }].map(({ id, label }) => (
+          <button key={id} onClick={() => setSubTab(id)}
+            className={`flex-1 py-2 text-xs font-semibold transition-colors duration-150
+              ${subTab === id
+                ? "text-slate-900 dark:text-white border-b-2 border-[#c89b3c] -mb-px"
+                : "text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/50"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {subTab === "season" ? (
+        <div className="overflow-y-auto flex-1 custom-scrollbar">
+          {seasonRows.length === 0 ? (
+            <p className="text-xs text-slate-400 dark:text-white/25 text-center px-5 py-8">No game data loaded yet.</p>
+          ) : (
+            <div>
+              <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-5 py-1.5">
+                {["Champion", "G", "KDA", "WR"].map((h, i) => (
+                  <span key={h} className={`text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25 ${i > 0 ? "text-right" : ""}`}>{h}</span>
+                ))}
+              </div>
+              {seasonRows.map(row => {
+                const wrColor = row.wr >= 55 ? "text-emerald-500 dark:text-emerald-400" : row.wr >= 45 ? "text-slate-600 dark:text-white/60" : "text-red-400";
+                return (
+                  <div key={row.name} className="grid grid-cols-[1fr_auto_auto_auto] gap-x-3 px-5 py-2 border-b border-slate-50 dark:border-white/[0.03] last:border-0 hover:bg-slate-50 dark:hover:bg-white/[0.02]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <img src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${row.name}.png`} className="w-5 h-5 rounded flex-shrink-0 border border-slate-200 dark:border-white/10" onError={e => { e.target.style.display = 'none'; }} alt="" />
+                      <span className="text-xs font-semibold text-slate-700 dark:text-white/70 truncate">{row.name}</span>
+                    </div>
+                    <span className="text-xs text-slate-500 dark:text-white/40 text-right tabular-nums">{row.games}</span>
+                    <span className="text-xs text-slate-500 dark:text-white/40 text-right tabular-nums">{row.kda}</span>
+                    <span className={`text-xs font-bold text-right tabular-nums ${wrColor}`}>{row.wr}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : masteryLoading ? (
+        <div className="flex-1 flex items-center justify-center gap-3">
+          <div className="w-4 h-4 rounded-full border-2 border-t-[#c89b3c] border-[#c89b3c]/20 animate-spin" />
+          <span className="text-xs text-slate-400 dark:text-white/30">Loading mastery…</span>
+        </div>
+      ) : !mastery || mastery.length === 0 ? (
+        <p className="text-xs text-slate-400 dark:text-white/25 text-center px-5 py-8">No mastery data found.</p>
+      ) : (
+        <div className="overflow-y-auto flex-1 custom-scrollbar">
+          <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-5 py-1.5">
+            {["Champion", "Lvl", "Points"].map((h, i) => (
+              <span key={h} className={`text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25 ${i > 0 ? "text-right" : ""}`}>{h}</span>
+            ))}
+          </div>
+          {mastery.map(m => {
+            const champName = champMap ? (champMap[String(m.championId)] ?? null) : null;
+            const pts = m.championPoints >= 1000000
+              ? `${(m.championPoints / 1000000).toFixed(1)}M`
+              : m.championPoints >= 1000
+                ? `${(m.championPoints / 1000).toFixed(0)}k`
+                : String(m.championPoints);
+            return (
+              <div key={m.championId} className="grid grid-cols-[1fr_auto_auto] gap-x-3 px-5 py-2 border-b border-slate-50 dark:border-white/[0.03] last:border-0 hover:bg-slate-50 dark:hover:bg-white/[0.02]">
+                <div className="flex items-center gap-2 min-w-0">
+                  {champName && <img src={`https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${champName}.png`} className="w-5 h-5 rounded flex-shrink-0 border border-slate-200 dark:border-white/10" onError={e => { e.target.style.display = 'none'; }} alt="" />}
+                  <span className="text-xs font-semibold text-slate-700 dark:text-white/70 truncate">{champName ?? `#${m.championId}`}</span>
+                </div>
+                <span className="text-xs text-slate-500 dark:text-white/40 text-right tabular-nums">{m.championLevel}</span>
+                <span className="text-xs font-bold text-[#c89b3c] text-right tabular-nums">{pts}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Right Panel (tabbed: Coaching | Stats | Teams | Champions) ───────────────
+function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerContext, games, region, puuid, ddVersion, champStats }) {
   const [tab, setTab] = useState("coaching");
   const [chatInput, setChatInput] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
@@ -1876,6 +2156,7 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
           { id: "coaching", label: "AI Coaching", dot: true },
           { id: "stats", label: "Stats", dot: false },
           { id: "teams", label: "Teams", dot: false },
+          { id: "champions", label: "Champions", dot: false },
         ].map(({ id, label, dot }) => (
           <button
             key={id}
@@ -1985,11 +2266,21 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
               deltas={deltas}
             />
           </div>
-        ) : (
+        ) : tab === "teams" ? (
           <div className="lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
             <TeammatesContent
               games={games}
               region={region}
+            />
+          </div>
+        ) : (
+          <div className="lg:flex-1 lg:min-h-0 lg:overflow-hidden lg:flex lg:flex-col">
+            <ChampionsContent
+              puuid={puuid}
+              region={region}
+              ddVersion={ddVersion}
+              champStats={champStats}
+              games={games}
             />
           </div>
         )}
@@ -2395,6 +2686,7 @@ export default function Dashboard() {
                           scoreboard={expandedMatchId === game.matchId ? scoreboard : null}
                           scoreboardLoading={expandedMatchId === game.matchId && scoreboardLoading}
                           gameName={gameName}
+                          puuid={resolvedPuuid}
                           ddVersion={ddVersion}
                           runesMap={runesMap}
                           region={region}
@@ -2439,6 +2731,9 @@ export default function Dashboard() {
                 lobbyAverages={analysis.lobbyAverages}
                 deltas={analysis.deltas}
                 games={[...analysis.games, ...extraGames]}
+                puuid={resolvedPuuid}
+                ddVersion={ddVersion}
+                champStats={analysis.champStats}
                 playerContext={[
                   `Player: ${gameName}`,
                   `Role: ${analysis.mostPlayedPosition}`,
