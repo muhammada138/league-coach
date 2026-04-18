@@ -181,6 +181,57 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
     # Detect hidden profile (streamer mode)
     is_hidden = not stats or (tier == "UNRANKED" and wins == 0 and losses == 0 and not stats.get("last5"))
 
+    # --- Matchup lookup runs for ALL players, including hidden ---
+    champ_id_str = str(champion_id)
+    role_key = role.lower()
+    if role_key == "utility": role_key = "support"
+
+    champ_meta = champ_dict.get(f"{champ_id_str}:{role_key}")
+    if not champ_meta:
+        champ_meta = champ_dict.get(f"{champ_id_str}:all", champ_dict.get(champ_id_str, {}))
+
+    matchup_adv = 0.5
+    vs_wr = 50.0
+    matchup_games = 0
+    matchup_conf = 0.0
+    is_proxy = False
+    if opponent_champion_id:
+        opp_id_str = str(opponent_champion_id)
+        matchups = champ_meta.get("matchups", {}) if champ_meta else {}
+        if opp_id_str in matchups:
+            raw = matchups[opp_id_str]
+            vs_wr = raw["wr"] if isinstance(raw, dict) else raw
+            matchup_games = raw.get("games", 100) if isinstance(raw, dict) else 100
+            matchup_conf = min(matchup_games / 100.0, 1.0)
+            matchup_adv = (vs_wr / 100.0) * matchup_conf + 0.5 * (1.0 - matchup_conf)
+        else:
+            opp_meta = champ_dict.get(f"{opp_id_str}:{role_key}")
+            if not opp_meta:
+                opp_meta = champ_dict.get(f"{opp_id_str}:all", champ_dict.get(opp_id_str, {}))
+            reverse_matchups = opp_meta.get("matchups", {}) if opp_meta else {}
+            if champ_id_str in reverse_matchups:
+                raw = reverse_matchups[champ_id_str]
+                opp_vs_us_wr = raw["wr"] if isinstance(raw, dict) else raw
+                vs_wr = round(100.0 - opp_vs_us_wr, 1)
+                matchup_games = raw.get("games", 100) if isinstance(raw, dict) else 100
+                matchup_conf = min(matchup_games / 100.0, 1.0)
+                matchup_adv = (vs_wr / 100.0) * matchup_conf + 0.5 * (1.0 - matchup_conf)
+            else:
+                proxy_wr = champ_meta.get("wr", 50.0) if champ_meta else 50.0
+                opp_wr = opp_meta.get("wr", 50.0) if opp_meta else 50.0
+                vs_wr = 50.0 + (proxy_wr - opp_wr)
+                matchup_adv = max(0.0, min(1.0, 0.5 + (proxy_wr / 100.0) - (opp_wr / 100.0)))
+                is_proxy = True
+
+    matchup_detail = {
+        "opp_cid": opponent_champion_id,
+        "vs_wr": round(float(vs_wr), 1),
+        "games": matchup_games,
+        "conf": round(float(matchup_conf), 2),
+        "score": round(float(matchup_adv), 3),
+        "is_proxy": is_proxy
+    }
+
     if is_hidden:
         details = {
             "is_hidden": True,
@@ -192,15 +243,11 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
             "mastery": {"is_main": False, "score": 0.0},
             "streak": {"value": 0, "norm": 0.0},
             "meta_wr": {"wr": 0.5},
-            "matchup": {
-                "opp_cid": opponent_champion_id,
-                "vs_wr": 50.0,
-                "games": 0,
-                "conf": 0.0,
-                "score": 0.5
-            }
+            "matchup": matchup_detail
         }
-        return _NEUTRAL.copy(), details
+        feat = _NEUTRAL.copy()
+        feat[8] = matchup_adv
+        return feat, details
 
     # 1. Rank score  (0 → 1)
     division = stats.get("division", "")
@@ -237,7 +284,6 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
     last5 = stats.get("last5", [])
 
     # 5. Champion-specific WR from last 10 games — confidence-weighted (full trust at 3+ games)
-    champ_id_str = str(champion_id)
     champ_wr_map = stats.get("champ_wr_map", {})
     champ_data   = champ_wr_map.get(champ_id_str, [0, 0])
     champ_wins   = champ_data[0]
@@ -263,55 +309,9 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
     streak      = max(-5, min(5, streak_val))
     streak_norm = streak / 5.0
 
-    # 8. Meta WR (Lolalytics) — how good is the champ in this rank?
-    # Try lane-specific lookup first, then fall back to 'all'
-    role_key = role.lower()
-    if role_key == "utility": role_key = "support"
-
-    champ_meta = champ_dict.get(f"{champ_id_str}:{role_key}")
-    if not champ_meta:
-        champ_meta = champ_dict.get(f"{champ_id_str}:all", champ_dict.get(champ_id_str, {}))
-
-    # Lolalytics WR is usually around 50.0. Scale to 0-1.
+    # 8. Meta WR (Lolalytics) — scale to 0-1 (champ_meta already resolved above)
     meta_wr_val = champ_meta.get("wr", 50.0) if champ_meta else 50.0
     meta_wr = meta_wr_val / 100.0
-
-    # 9. Matchup Advantage — Specific counter winrate from Lolalytics
-    matchup_adv = 0.5
-    vs_wr = 50.0
-    matchup_games = 0
-    matchup_conf = 0.0
-    is_proxy = False
-    if opponent_champion_id:
-        opp_id_str = str(opponent_champion_id)
-        matchups = champ_meta.get("matchups", {}) if champ_meta else {}
-        if opp_id_str in matchups:
-            raw = matchups[opp_id_str]
-            vs_wr = raw["wr"] if isinstance(raw, dict) else raw
-            # Confidence-weight toward neutral when games count is low (<100 games)
-            matchup_games = raw.get("games", 100) if isinstance(raw, dict) else 100
-            matchup_conf = min(matchup_games / 100.0, 1.0)
-            matchup_adv = (vs_wr / 100.0) * matchup_conf + 0.5 * (1.0 - matchup_conf)
-        else:
-            # Try reverse lookup: check if opponent has data for us and flip the WR
-            opp_meta = champ_dict.get(f"{opp_id_str}:{role_key}")
-            if not opp_meta:
-                opp_meta = champ_dict.get(f"{opp_id_str}:all", champ_dict.get(opp_id_str, {}))
-            reverse_matchups = opp_meta.get("matchups", {}) if opp_meta else {}
-            cid_str = str(champion_id)
-            if cid_str in reverse_matchups:
-                raw = reverse_matchups[cid_str]
-                opp_vs_us_wr = raw["wr"] if isinstance(raw, dict) else raw
-                vs_wr = round(100.0 - opp_vs_us_wr, 1)
-                matchup_games = raw.get("games", 100) if isinstance(raw, dict) else 100
-                matchup_conf = min(matchup_games / 100.0, 1.0)
-                matchup_adv = (vs_wr / 100.0) * matchup_conf + 0.5 * (1.0 - matchup_conf)
-            else:
-                # Last resort: relative meta WR difference as proxy
-                opp_wr = opp_meta.get("wr", 50.0) if opp_meta else 50.0
-                vs_wr = 50.0 + (meta_wr_val - opp_wr)
-                matchup_adv = max(0.0, min(1.0, 0.5 + (meta_wr - (opp_wr / 100.0))))
-                is_proxy = True
 
     details = {
         "is_hidden": False,
@@ -323,14 +323,7 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
         "mastery": {"is_main": is_main, "score": round(float(mastery_score), 3)},
         "streak": {"value": streak_val, "norm": round(float(streak_norm), 2)},
         "meta_wr": {"wr": round(float(meta_wr), 3)},
-        "matchup": {
-            "opp_cid": opponent_champion_id,
-            "vs_wr": round(float(vs_wr), 1),
-            "games": matchup_games,
-            "conf": round(float(matchup_conf), 2),
-            "score": round(float(matchup_adv), 3),
-            "is_proxy": is_proxy
-        }
+        "matchup": matchup_detail
     }
 
     return np.array([
