@@ -1,0 +1,3 @@
+## 2024-05-24 - Async Worker Thread Blocking
+**Learning:** Synchronous SQLite queries (like `_get_ingestion_status_sync()`) when run directly inside `while` or `for` loops within `async` worker functions (like the ones in `backend/app/services/ingestion.py`) block the async event loop, reducing overall throughput and causing performance bottlenecks.
+**Action:** When repeatedly querying SQLite inside an async worker, always wrap synchronous functions with `asyncio.to_thread` (e.g., using `await db.get_ingestion_status()`) to prevent blocking the event loop and ensure the worker can cleanly yield back to the main application context.
