@@ -46,6 +46,7 @@ function timeAgo(ms) {
 }
 
 let _runesMap = null;
+let _runesTreeNames = {};
 async function getRunesMap(ddVersion) {
   if (_runesMap) return _runesMap;
   try {
@@ -54,7 +55,8 @@ async function getRunesMap(ddVersion) {
     _runesMap = {};
     data.forEach(tree => {
       _runesMap[tree.id] = tree.icon;
-      tree.slots.forEach(slot => { slot.runes.forEach(r => _runesMap[r.id] = r.icon) });
+      _runesTreeNames[tree.id] = tree.name;
+      tree.slots.forEach(slot => { slot.runes.forEach(r => { _runesMap[r.id] = r.icon; _runesTreeNames[r.id] = r.name; }); });
     });
   } catch { _runesMap = {}; }
   return _runesMap;
@@ -1593,20 +1595,74 @@ function BuildView({ matchId, puuid, region, ddVersion, runesMap, scoreboard }) 
       )}
 
       {/* Runes */}
-      {(primaryPerk || subStyle) && runesMap && (
+      {runesMap && (primaryPerk || playerEntry?.primaryStyle) && (
         <div>
           <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/25 mb-2">Runes</div>
-          <div className="flex items-center gap-3">
-            {primaryPerk && runesMap[primaryPerk] && (
-              <div className="flex flex-col items-center gap-1">
-                <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[primaryPerk]}`} className="w-8 h-8 rounded-full bg-black/80 object-cover" alt="" />
-                <span className="text-[9px] text-slate-400 dark:text-white/20">Keystone</span>
+          <div className="flex gap-6 flex-wrap">
+            {/* Primary tree */}
+            {playerEntry?.primarySelections?.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-1.5">
+                  {playerEntry.primaryStyle && runesMap[playerEntry.primaryStyle] && (
+                    <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[playerEntry.primaryStyle]}`} className="w-4 h-4 object-contain" alt="" />
+                  )}
+                  <span className="text-[10px] font-bold text-white/50">{_runesTreeNames[playerEntry.primaryStyle] || "Primary"}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {/* Keystone — larger */}
+                  {playerEntry.primarySelections[0] && runesMap[playerEntry.primarySelections[0]] && (
+                    <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[playerEntry.primarySelections[0]]}`}
+                      title={_runesTreeNames[playerEntry.primarySelections[0]]}
+                      className="w-9 h-9 rounded-full bg-black/60 object-cover border border-[#c89b3c]/40" alt="" />
+                  )}
+                  {/* Slots 1–3 */}
+                  <div className="flex flex-col gap-1">
+                    {playerEntry.primarySelections.slice(1).map((id, i) => (
+                      id && runesMap[id] ? (
+                        <img key={i} src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[id]}`}
+                          title={_runesTreeNames[id]}
+                          className="w-5 h-5 rounded-full bg-black/60 object-cover" alt="" />
+                      ) : <div key={i} className="w-5 h-5 rounded-full bg-white/5" />
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
-            {subStyle && runesMap[subStyle] && (
-              <div className="flex flex-col items-center gap-1">
-                <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[subStyle]}`} className="w-6 h-6 rounded-full bg-black/80 object-cover" alt="" />
-                <span className="text-[9px] text-slate-400 dark:text-white/20">Secondary</span>
+
+            {/* Secondary tree */}
+            {playerEntry?.subSelections?.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-1.5">
+                  {playerEntry.subStyle && runesMap[playerEntry.subStyle] && (
+                    <img src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[playerEntry.subStyle]}`} className="w-4 h-4 object-contain" alt="" />
+                  )}
+                  <span className="text-[10px] font-bold text-white/50">{_runesTreeNames[playerEntry.subStyle] || "Secondary"}</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  {playerEntry.subSelections.map((id, i) => (
+                    id && runesMap[id] ? (
+                      <img key={i} src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[id]}`}
+                        title={_runesTreeNames[id]}
+                        className="w-6 h-6 rounded-full bg-black/60 object-cover" alt="" />
+                    ) : <div key={i} className="w-6 h-6 rounded-full bg-white/5" />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Stat shards */}
+            {playerEntry?.statPerks?.some(Boolean) && (
+              <div className="flex flex-col gap-2">
+                <span className="text-[10px] font-bold text-white/50">Shards</span>
+                <div className="flex flex-col gap-1">
+                  {(playerEntry.statPerks || []).map((id, i) => (
+                    id && runesMap[id] ? (
+                      <img key={i} src={`https://ddragon.leagueoflegends.com/cdn/img/${runesMap[id]}`}
+                        title={_runesTreeNames[id]}
+                        className="w-5 h-5 rounded-full bg-black/60 object-cover" alt="" />
+                    ) : <div key={i} className="w-5 h-5 rounded-full bg-white/5" />
+                  ))}
+                </div>
               </div>
             )}
           </div>
