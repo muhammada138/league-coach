@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory } from "../api/riot";
@@ -525,6 +525,256 @@ function LaneIcon({ lane }) {
   );
 }
 
+const RankDetail = ({ p }) => (
+  <div className="flex flex-col items-end leading-none">
+    <span className={`text-[11px] font-bold ${TIER_COLORS[p.tier] || 'text-slate-400'}`}>
+      {p.tier} {p.division}
+    </span>
+    <span className="text-[9px] text-white/30 mt-0.5">{p.lp} LP · {p.rankScore?.toFixed(0)} pts</span>
+  </div>
+);
+
+const WRDetail = ({ p, keyName }) => {
+  const wr = p[keyName] || 0;
+  const games = p[`${keyName}_games`] || 0;
+  return (
+    <div className="flex flex-col items-end leading-none">
+      <span className={`text-[11px] font-bold ${wr >= 0.55 ? 'text-emerald-400' : wr >= 0.45 ? 'text-white/70' : 'text-red-400'}`}>
+        {(wr * 100).toFixed(1)}%
+      </span>
+      {games > 0 && <span className="text-[9px] text-white/30 mt-0.5">{games} games</span>}
+    </div>
+  );
+};
+
+const RecentWRDetail = ({ p }) => (
+  <div className="flex items-center gap-0.5">
+    {(p.recentHistory || []).slice(0, 5).map((win, i) => (
+      <div key={i} className={`w-1.5 h-3 rounded-sm ${win ? 'bg-emerald-500' : 'bg-red-500/60'}`} />
+    ))}
+    <span className="text-[11px] font-bold text-white/70 ml-1">{(p.recent_wr * 100).toFixed(0)}%</span>
+  </div>
+);
+
+const FormDetail = ({ p }) => (
+  <div className="flex flex-col items-end leading-none">
+    <span className={`text-[11px] font-bold ${p.form >= 70 ? 'text-purple-400' : p.form >= 40 ? 'text-blue-400' : 'text-red-400'}`}>
+      {p.form?.toFixed(1)}
+    </span>
+    <span className="text-[9px] text-white/30 mt-0.5">avg score</span>
+  </div>
+);
+
+const MasteryDetail = ({ p }) => (
+  <div className="flex flex-col items-end leading-none">
+    <div className="flex items-center gap-0.5">
+      {p.isMain && <span className="text-yellow-500 text-[10px]">★</span>}
+      <span className="text-[11px] font-bold text-white/70">Lvl {p.masteryLevel}</span>
+    </div>
+    <span className="text-[9px] text-white/30 mt-0.5">{(p.masteryPoints / 1000).toFixed(0)}k pts</span>
+  </div>
+);
+
+const StreakDetail = ({ p }) => (
+  <div className="flex items-center gap-0.5">
+    {p.streak > 0 ? (
+      <span className="text-[11px] font-bold text-emerald-400">+{p.streak} W</span>
+    ) : p.streak < 0 ? (
+      <span className="text-[11px] font-bold text-red-400">{p.streak} L</span>
+    ) : (
+      <span className="text-[11px] font-bold text-white/30">—</span>
+    )}
+  </div>
+);
+
+const MatchupDetail = ({ p }) => (
+  <div className="flex flex-col items-end leading-none">
+    <span className={`text-[11px] font-bold ${p.matchupAdv > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+      {(p.matchupAdv * 100).toFixed(1)}%
+    </span>
+    <span className="text-[9px] text-white/30 mt-0.5">vs opponent</span>
+  </div>
+);
+
+const PredictorPlayerRow = ({ p, keyName, ddVersion }) => {
+  const champIcon = `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${p.championName}.png`;
+  
+  let content = null;
+  switch (keyName) {
+    case 'rank': content = <RankDetail p={p} />; break;
+    case 'season_wr':
+    case 'champ_wr':
+    case 'meta_wr': content = <WRDetail p={p} keyName={keyName} />; break;
+    case 'recent_wr': content = <RecentWRDetail p={p} />; break;
+    case 'form': content = <FormDetail p={p} />; break;
+    case 'mastery': content = <MasteryDetail p={p} />; break;
+    case 'streak': content = <StreakDetail p={p} />; break;
+    case 'matchup': content = <MatchupDetail p={p} />; break;
+    default: content = null;
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 py-1 border-b border-white/[0.02] last:border-0">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <img src={champIcon} className="w-4 h-4 rounded border border-white/10" alt="" />
+        <span className="text-[10px] text-white/50 truncate">{p.summonerName}</span>
+      </div>
+      {content}
+    </div>
+  );
+};
+
+const PredictorDetail = React.memo(({ keyName, details, ddVersion }) => {
+  if (!details || !details.blue || !details.red) return null;
+
+  return (
+    <div className="grid grid-cols-2 gap-4 animate-fadeIn">
+      <div className="space-y-0.5">
+        <div className="text-[9px] font-bold uppercase tracking-widest text-blue-400/40 mb-1">Blue Team</div>
+        {details.blue.map(p => <PredictorPlayerRow key={p.puuid} p={p} keyName={keyName} ddVersion={ddVersion} />)}
+      </div>
+      <div className="space-y-0.5">
+        <div className="text-[9px] font-bold uppercase tracking-widest text-red-400/40 mb-1">Red Team</div>
+        {details.red.map(p => <PredictorPlayerRow key={p.puuid} p={p} keyName={keyName} ddVersion={ddVersion} />)}
+      </div>
+    </div>
+  );
+});
+
+const PredictorCard = React.memo(({ predictor, ddVersion }) => {
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const [expandedKey, setExpandedKey] = useState(null);
+
+  if (!predictor) {
+    return (
+      <div className="rounded-xl border border-slate-100 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.02] p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/30">Win Predictor</span>
+          <span className="text-[11px] text-slate-300 dark:text-white/20 animate-pulse">Analysing…</span>
+        </div>
+        <div className="h-2.5 rounded-full bg-slate-200 dark:bg-white/10 animate-pulse" />
+      </div>
+    );
+  }
+
+  const LABELS = {
+    rank: "Rank Score", season_wr: "Season WR", form: "Form (avg score)",
+    recent_wr: "Recent WR (last 10)", champ_wr: "Champ WR", mastery: "Mastery",
+    streak: "Streak", meta_wr: "Meta WR (Lolalytics)", matchup: "Matchup Adv",
+  };
+  const WEIGHTS = {
+    rank: 0.30, season_wr: 0.10, form: 0.25, recent_wr: 0.20,
+    champ_wr: 0.08, mastery: 0.04, streak: 0.03, meta_wr: 0.15, matchup: 0.10,
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-100 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.02] p-3 transition-all duration-300">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/30">Win Predictor</span>
+          <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[9px] font-black text-white/20 uppercase tracking-widest">v4</span>
+        </div>
+        {predictor.confidence !== undefined && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-bold text-slate-300 dark:text-white/20 uppercase tracking-tighter">Confidence:</span>
+            <span className="text-[11px] font-black text-[#c89b3c]">{Math.round(predictor.confidence * 100)}%</span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-sm font-black text-blue-400 w-8 text-right tabular-nums">{predictor.bluePct}%</span>
+        <div className="flex-1 h-2.5 rounded-full overflow-hidden bg-slate-200 dark:bg-white/10 flex">
+          <div className="h-full bg-blue-400 transition-all duration-700" style={{ width: `${predictor.bluePct}%` }} />
+          <div className="h-full bg-red-400 flex-1" />
+        </div>
+        <span className="text-sm font-black text-red-400 w-8 tabular-nums">{predictor.redPct}%</span>
+      </div>
+
+      <div className="flex justify-between items-center px-10 mb-1">
+        <span className="text-[10px] text-blue-300 dark:text-blue-400/60 font-semibold">Blue</span>
+        <button
+          onClick={() => setShowBreakdown(v => !v)}
+          aria-expanded={showBreakdown}
+          className="text-[10px] text-slate-400 dark:text-white/20 hover:text-white/50 transition-colors"
+        >
+          {showBreakdown ? "▲ hide breakdown" : "▼ show breakdown"}
+        </button>
+        <span className="text-[10px] text-red-300 dark:text-red-400/60 font-semibold">Red</span>
+      </div>
+
+      {showBreakdown && predictor.features && (
+        <div className="mt-2 rounded-lg overflow-hidden border border-white/[0.06] animate-fadeIn">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="bg-white/[0.04]">
+                <th className="text-left px-2 py-1 text-white/30 font-semibold">Feature</th>
+                <th className="text-center px-2 py-1 text-blue-400/70 font-semibold">Blue</th>
+                <th className="text-center px-2 py-1 text-red-400/70 font-semibold">Red</th>
+                <th className="text-center px-2 py-1 text-white/20 font-semibold">Wt</th>
+                <th className="text-center px-2 py-1 text-white/20 font-semibold">Edge</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.keys(LABELS).map(key => {
+                const b = predictor.features.blue[key] ?? 0;
+                const r = predictor.features.red[key] ?? 0;
+                const diff = b - r;
+                const isStreak = key === "streak";
+                const fmt = v => isStreak
+                  ? (v > 0 ? `+${(v * 5).toFixed(0)}` : (v * 5).toFixed(0))
+                  : `${(v * 100).toFixed(1)}%`;
+                const edgeColor = Math.abs(diff) < 0.005
+                  ? "text-white/20"
+                  : diff > 0 ? "text-blue-400" : "text-red-400";
+                const edgeText = Math.abs(diff) < 0.005
+                  ? "—"
+                  : diff > 0 ? "▲ Blue" : "▼ Red";
+                
+                const isExpanded = expandedKey === key;
+
+                return (
+                  <React.Fragment key={key}>
+                    <tr 
+                      className="border-t border-white/[0.04] hover:bg-white/[0.02] cursor-pointer transition-colors"
+                      onClick={() => setExpandedKey(isExpanded ? null : key)}
+                      tabIndex="0"
+                      role="button"
+                      aria-expanded={isExpanded}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setExpandedKey(isExpanded ? null : key);
+                        }
+                      }}
+                    >
+                      <td className="px-2 py-1 text-white/40 flex items-center gap-1">
+                        <span className="text-[9px] opacity-30 transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                        {LABELS[key]}
+                      </td>
+                      <td className={`px-2 py-1 text-center font-mono tabular-nums ${diff > 0.005 ? "text-blue-400" : "text-white/50"}`}>{fmt(b)}</td>
+                      <td className={`px-2 py-1 text-center font-mono tabular-nums ${diff < -0.005 ? "text-red-400" : "text-white/50"}`}>{fmt(r)}</td>
+                      <td className="px-2 py-1 text-center text-white/20">{(WEIGHTS[key] * 100).toFixed(0)}%</td>
+                      <td className={`px-2 py-1 text-center font-semibold ${edgeColor}`}>{edgeText}</td>
+                    </tr>
+                    {isExpanded && (
+                      <tr aria-hidden={!isExpanded}>
+                        <td colSpan={5} className="px-2 py-2 bg-white/[0.02] border-t border-white/[0.04]">
+                          <PredictorDetail keyName={key} details={predictor.details} ddVersion={ddVersion} />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+});
+
 // ── Live Game Banner ────────────────────────────────────────────────────────
 function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, onMatchClick }) {
   const SPECTATOR_DELAY_SECS = 142;
@@ -534,7 +784,6 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   });
   const [liveStats, setLiveStats] = useState(null);
   const [predictor, setPredictor] = useState(null);
-  const [showBreakdown, setShowBreakdown] = useState(false);
 
   useEffect(() => { getChampIdMap(ddVersion).then(setChampMap); }, [ddVersion]);
   // Riot's spectator API has a ~3-minute broadcast delay; compensate so our
@@ -684,6 +933,14 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
             ? last5.map((g, i) => (
               <div key={i} title={`Score: ${g.score}${isMe ? "\nClick to view game" : ""}`}
                 onClick={(e) => handleDotClick(e, g.matchId)}
+                tabIndex={isMe && g.matchId ? "0" : undefined}
+                role={isMe && g.matchId ? "button" : undefined}
+                onKeyDown={(e) => {
+                  if (isMe && g.matchId && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    handleDotClick(e, g.matchId);
+                  }
+                }}
                 className={`w-2 h-2 rounded-full ${g.win ? "bg-emerald-400" : "bg-red-400/80"} 
                     ${isMe && g.matchId ? "cursor-pointer hover:ring-2 hover:ring-white/40 active:scale-90 transition-all" : ""}`} />
             ))
@@ -726,101 +983,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
 
       {/* Win Predictor */}
       <div className="px-3 pb-3">
-        <div className="rounded-xl border border-slate-100 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.02] p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/30">Win Predictor</span>
-              {predictor && (
-                <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[8px] font-black text-white/20 uppercase tracking-widest">v4</span>
-              )}
-            </div>
-            {predictor && predictor.confidence !== undefined && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-bold text-slate-300 dark:text-white/20 uppercase tracking-tighter">Confidence:</span>
-                <span className="text-[10px] font-black text-[#c89b3c]">{Math.round(predictor.confidence * 100)}%</span>
-              </div>
-            )}
-            {!predictor && (
-              <span className="text-[10px] text-slate-300 dark:text-white/20 animate-pulse">Analysing…</span>
-            )}
-          </div>
-          {predictor ? (
-            <>
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-xs font-black text-blue-400 w-8 text-right tabular-nums">{predictor.bluePct}%</span>
-                <div className="flex-1 h-2.5 rounded-full overflow-hidden bg-slate-200 dark:bg-white/10 flex">
-                  <div className="h-full bg-blue-400 transition-all duration-700" style={{ width: `${predictor.bluePct}%` }} />
-                  <div className="h-full bg-red-400 flex-1" />
-                </div>
-                <span className="text-xs font-black text-red-400 w-8 tabular-nums">{predictor.redPct}%</span>
-              </div>
-              <div className="flex justify-between items-center px-10 mb-1">
-                <span className="text-[9px] text-blue-300 dark:text-blue-400/60 font-semibold">Blue</span>
-                <button
-                  onClick={() => setShowBreakdown(v => !v)}
-                  className="text-[9px] text-slate-400 dark:text-white/20 hover:text-white/50 transition-colors"
-                >
-                  {showBreakdown ? "▲ hide breakdown" : "▼ show breakdown"}
-                </button>
-                <span className="text-[9px] text-red-300 dark:text-red-400/60 font-semibold">Red</span>
-              </div>
-              {showBreakdown && predictor.features && (() => {
-                const LABELS = {
-                  rank: "Rank Score", season_wr: "Season WR", form: "Form (avg score)",
-                  recent_wr: "Recent WR (last 10)", champ_wr: "Champ WR", mastery: "Mastery",
-                  streak: "Streak", meta_wr: "Meta WR (Lolalytics)", matchup: "Matchup Adv",
-                };
-                const WEIGHTS = {
-                  rank: 0.30, season_wr: 0.10, form: 0.25, recent_wr: 0.20,
-                  champ_wr: 0.08, mastery: 0.04, streak: 0.03, meta_wr: 0.15, matchup: 0.10,
-                };
-                return (
-                  <div className="mt-2 rounded-lg overflow-hidden border border-white/[0.06]">
-                    <table className="w-full text-[10px]">
-                      <thead>
-                        <tr className="bg-white/[0.04]">
-                          <th className="text-left px-2 py-1 text-white/30 font-semibold">Feature</th>
-                          <th className="text-center px-2 py-1 text-blue-400/70 font-semibold">Blue</th>
-                          <th className="text-center px-2 py-1 text-red-400/70 font-semibold">Red</th>
-                          <th className="text-center px-2 py-1 text-white/20 font-semibold">Wt</th>
-                          <th className="text-center px-2 py-1 text-white/20 font-semibold">Edge</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.keys(LABELS).map(key => {
-                          const b = predictor.features.blue[key] ?? 0;
-                          const r = predictor.features.red[key] ?? 0;
-                          const diff = b - r;
-                          const isStreak = key === "streak";
-                          const fmt = v => isStreak
-                            ? (v > 0 ? `+${(v * 5).toFixed(0)}` : (v * 5).toFixed(0))
-                            : `${(v * 100).toFixed(1)}%`;
-                          const edgeColor = Math.abs(diff) < 0.005
-                            ? "text-white/20"
-                            : diff > 0 ? "text-blue-400" : "text-red-400";
-                          const edgeText = Math.abs(diff) < 0.005
-                            ? "—"
-                            : diff > 0 ? "▲ Blue" : "▼ Red";
-                          return (
-                            <tr key={key} className="border-t border-white/[0.04] hover:bg-white/[0.02]">
-                              <td className="px-2 py-1 text-white/40">{LABELS[key]}</td>
-                              <td className={`px-2 py-1 text-center font-mono tabular-nums ${diff > 0.005 ? "text-blue-400" : "text-white/50"}`}>{fmt(b)}</td>
-                              <td className={`px-2 py-1 text-center font-mono tabular-nums ${diff < -0.005 ? "text-red-400" : "text-white/50"}`}>{fmt(r)}</td>
-                              <td className="px-2 py-1 text-center text-white/20">{(WEIGHTS[key] * 100).toFixed(0)}%</td>
-                              <td className={`px-2 py-1 text-center font-semibold ${edgeColor}`}>{edgeText}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })()}
-            </>
-          ) : (
-            <div className="h-2.5 rounded-full bg-slate-200 dark:bg-white/10 animate-pulse" />
-          )}
-        </div>
+        <PredictorCard predictor={predictor} ddVersion={ddVersion} />
       </div>
     </div>
   );
@@ -1353,6 +1516,15 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
       <div
         className={`flex items-center gap-3 px-4 py-3 cursor-pointer select-none transition-colors duration-200 ${bgClass}`}
         onClick={onToggle}
+        tabIndex="0"
+        role="button"
+        aria-expanded={isExpanded}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
       >
         {/* Left accent bar */}
         <div className={`w-1 h-12 rounded-full flex-shrink-0 ${accentClass}`} />
