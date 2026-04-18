@@ -316,7 +316,7 @@ async def live_enrich(body: LiveEnrichRequest):
             async with httpx.AsyncClient(timeout=25.0) as client:
                 entries, match_ids = await asyncio.gather(
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
+                    riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=20&queue={match_queue_filter}"),
                     return_exceptions=True,
                 )
 
@@ -346,7 +346,7 @@ async def live_enrich(body: LiveEnrichRequest):
                     if all(isinstance(md, Exception) for md in match_datas):
                         api_failed = True
 
-                    recent_games, champ_ids = [], []
+                    recent_results, champ_ids = [], []
                     champ_wr_map: dict[str, list[int]] = {}
 
                     for md in match_datas:
@@ -361,7 +361,15 @@ async def live_enrich(body: LiveEnrichRequest):
                         won = bool(player["win"])
                         pos = player.get("teamPosition", "UNKNOWN")
                         participant_puuids = [p.get("puuid", "") for p in participants if p.get("puuid")]
-                        recent_games.append({"win": won, "score": round(score, 1), "matchId": md["metadata"]["matchId"], "participants": participant_puuids, "position": pos})
+                        
+                        # Store objects for internal logic, but we'll export booleans for UI
+                        recent_results.append({
+                            "win": won, 
+                            "score": round(score, 1), 
+                            "matchId": md["metadata"]["matchId"], 
+                            "participants": participant_puuids, 
+                            "position": pos
+                        })
 
                         cid = str(player.get("championId", ""))
                         champ_ids.append(cid)
@@ -371,22 +379,28 @@ async def live_enrich(body: LiveEnrichRequest):
                         if won:
                             champ_wr_map[cid][0] += 1
 
-                    if recent_games:
-                        avg_score  = round(sum(g["score"] for g in recent_games) / len(recent_games), 1)
-                        recent_wr  = round(sum(1 for g in recent_games if g["win"]) / len(recent_games), 3)
+                    if recent_results:
+                        avg_score  = round(sum(g["score"] for g in recent_results) / len(recent_results), 1)
+                        recent_wr  = round(sum(1 for g in recent_results if g["win"]) / len(recent_results), 3)
                         streak = 0
-                        direction = 1 if recent_games[0]["win"] else -1
-                        for g in recent_games:
+                        direction = 1 if recent_results[0]["win"] else -1
+                        for g in recent_results:
                             if (g["win"] and direction == 1) or (not g["win"] and direction == -1):
+                                # Streak logic
                                 streak += direction
                             else:
                                 break
                         from collections import Counter as _Counter
                         main_champs = [cid for cid, _ in _Counter(champ_ids).most_common(3)]
-                        positions = [g.get("position", "UNKNOWN") for g in recent_games if g.get("position") != "UNKNOWN"]
+                        positions = [g.get("position", "UNKNOWN") for g in recent_results if g.get("position") != "UNKNOWN"]
                         most_common_pos = _Counter(positions).most_common(1)[0][0] if positions else "UNKNOWN"
+                        
+                        # Export simple booleans for the Last 5 UI (prevents the "always green" JS truthy bug)
+                        ui_last5 = [g["win"] for g in recent_results[:5]]
+                        
                         base.update({
-                            "last5": recent_games[:5],
+                            "last5": ui_last5,  # Booleans for JS frontend
+                            "last5_details": recent_results[:5], # Full data for internal duo-detection
                             "avg_score": avg_score,
                             "recent_wr": recent_wr,
                             "champ_wr_map": champ_wr_map,
@@ -416,7 +430,7 @@ async def live_enrich(body: LiveEnrichRequest):
     for r in results:
         p_puuid = r["puuid"]
         if not p_puuid: continue
-        for g in r.get("last5", []):
+        for g in r.get("last5_details", []):
             match_participants = g.get("participants", [])
             match_id = g.get("matchId", "")
             if not match_id:
