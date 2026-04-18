@@ -525,18 +525,18 @@ function LaneIcon({ lane }) {
   );
 }
 
-const RankDetail = ({ p }) => (
+const RankDetail = ({ data }) => (
   <div className="flex flex-col items-end leading-none">
-    <span className={`text-[11px] font-bold ${TIER_COLORS[p.tier] || 'text-slate-400'}`}>
-      {p.tier} {p.division}
+    <span className={`text-[11px] font-bold ${TIER_COLORS[data.tier] || 'text-slate-400'}`}>
+      {data.tier === "Hidden Profile" ? "Hidden" : `${data.tier} ${data.division}`}
     </span>
-    <span className="text-[9px] text-white/30 mt-0.5">{p.lp} LP · {p.rankScore?.toFixed(0)} pts</span>
+    <span className="text-[9px] text-white/30 mt-0.5">{data.lp} LP · score: {data.score?.toFixed(2)}</span>
   </div>
 );
 
-const WRDetail = ({ p, keyName }) => {
-  const wr = p[keyName] || 0;
-  const games = p[`${keyName}_games`] || 0;
+const WRDetail = ({ data }) => {
+  const wr = data.wr || 0.5;
+  const games = (data.wins + data.losses) || 0;
   return (
     <div className="flex flex-col items-end leading-none">
       <span className={`text-[11px] font-bold ${wr >= 0.55 ? 'text-emerald-400' : wr >= 0.45 ? 'text-white/70' : 'text-red-400'}`}>
@@ -547,77 +547,79 @@ const WRDetail = ({ p, keyName }) => {
   );
 };
 
-const RecentWRDetail = ({ p }) => (
+const RecentWRDetail = ({ data }) => (
   <div className="flex items-center gap-0.5">
-    {(p.recentHistory || []).slice(0, 5).map((win, i) => (
+    {(data.last5 || []).map((win, i) => (
       <div key={i} className={`w-1.5 h-3 rounded-sm ${win ? 'bg-emerald-500' : 'bg-red-500/60'}`} />
     ))}
-    <span className="text-[11px] font-bold text-white/70 ml-1">{(p.recent_wr * 100).toFixed(0)}%</span>
+    <span className="text-[11px] font-bold text-white/70 ml-1">{(data.wr * 100).toFixed(0)}%</span>
   </div>
 );
 
-const FormDetail = ({ p }) => (
+const FormDetail = ({ data }) => (
   <div className="flex flex-col items-end leading-none">
-    <span className={`text-[11px] font-bold ${p.form >= 70 ? 'text-purple-400' : p.form >= 40 ? 'text-blue-400' : 'text-red-400'}`}>
-      {p.form?.toFixed(1)}
+    <span className={`text-[11px] font-bold ${data.avg_score >= 65 ? 'text-purple-400' : data.avg_score >= 40 ? 'text-blue-400' : 'text-red-400'}`}>
+      {data.avg_score?.toFixed(0)}
     </span>
-    <span className="text-[9px] text-white/30 mt-0.5">avg score</span>
+    <span className="text-[9px] text-white/30 mt-0.5">{data.label}</span>
   </div>
 );
 
-const MasteryDetail = ({ p }) => (
+const MasteryDetail = ({ data }) => (
   <div className="flex flex-col items-end leading-none">
     <div className="flex items-center gap-0.5">
-      {p.isMain && <span className="text-yellow-500 text-[10px]">★</span>}
-      <span className="text-[11px] font-bold text-white/70">Lvl {p.masteryLevel}</span>
+      {data.is_main && <span className="text-yellow-500 text-[10px]">★</span>}
+      <span className="text-[11px] font-bold text-white/70">{data.is_main ? "Main" : "Off-pick"}</span>
     </div>
-    <span className="text-[9px] text-white/30 mt-0.5">{(p.masteryPoints / 1000).toFixed(0)}k pts</span>
+    <span className="text-[9px] text-white/30 mt-0.5">score: {data.score?.toFixed(2)}</span>
   </div>
 );
 
-const StreakDetail = ({ p }) => (
+const StreakDetail = ({ data }) => (
   <div className="flex items-center gap-0.5">
-    {p.streak > 0 ? (
-      <span className="text-[11px] font-bold text-emerald-400">+{p.streak} W</span>
-    ) : p.streak < 0 ? (
-      <span className="text-[11px] font-bold text-red-400">{p.streak} L</span>
+    {data.value > 0 ? (
+      <span className="text-[11px] font-bold text-emerald-400">+{data.value} W</span>
+    ) : data.value < 0 ? (
+      <span className="text-[11px] font-bold text-red-400">{data.value} L</span>
     ) : (
       <span className="text-[11px] font-bold text-white/30">—</span>
     )}
   </div>
 );
 
-const MatchupDetail = ({ p }) => (
+const MatchupDetail = ({ data }) => (
   <div className="flex flex-col items-end leading-none">
-    <span className={`text-[11px] font-bold ${p.matchupAdv > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-      {(p.matchupAdv * 100).toFixed(1)}%
+    <span className={`text-[11px] font-bold ${data.score >= 0.5 ? 'text-emerald-400' : 'text-red-400'}`}>
+      {(data.vs_wr).toFixed(1)}%
     </span>
-    <span className="text-[9px] text-white/30 mt-0.5">vs opponent</span>
+    <span className="text-[9px] text-white/30 mt-0.5">{data.games > 0 ? `${data.games} games` : "no data"}</span>
   </div>
 );
 
 const PredictorPlayerRow = ({ p, keyName, ddVersion }) => {
   const champIcon = `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${p.championName}.png`;
-  
+  const data = p[keyName];
+  if (!data) return null;
+
   let content = null;
   switch (keyName) {
-    case 'rank': content = <RankDetail p={p} />; break;
+    case 'rank': content = <RankDetail data={data} />; break;
     case 'season_wr':
     case 'champ_wr':
-    case 'meta_wr': content = <WRDetail p={p} keyName={keyName} />; break;
-    case 'recent_wr': content = <RecentWRDetail p={p} />; break;
-    case 'form': content = <FormDetail p={p} />; break;
-    case 'mastery': content = <MasteryDetail p={p} />; break;
-    case 'streak': content = <StreakDetail p={p} />; break;
-    case 'matchup': content = <MatchupDetail p={p} />; break;
+    case 'meta_wr': content = <WRDetail data={data} />; break;
+    case 'recent_wr': content = <RecentWRDetail data={data} />; break;
+    case 'form': content = <FormDetail data={data} />; break;
+    case 'mastery': content = <MasteryDetail data={data} />; break;
+    case 'streak': content = <StreakDetail data={data} />; break;
+    case 'matchup': content = <MatchupDetail data={data} />; break;
     default: content = null;
   }
 
   return (
-    <div className="flex items-center justify-between gap-2 py-1 border-b border-white/[0.02] last:border-0">
+    <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.03] last:border-0">
       <div className="flex items-center gap-1.5 min-w-0">
-        <img src={champIcon} className="w-4 h-4 rounded border border-white/10" alt="" />
-        <span className="text-[10px] text-white/50 truncate">{p.summonerName}</span>
+        <img src={champIcon} className="w-4 h-4 rounded border border-white/10" alt="" onError={(e) => { e.target.style.display='none'; }} />
+        <span className="text-[10px] text-white/60 truncate">{p.summonerName}</span>
       </div>
       {content}
     </div>
@@ -736,7 +738,7 @@ const PredictorCard = React.memo(({ predictor, ddVersion }) => {
                 return (
                   <React.Fragment key={key}>
                     <tr 
-                      className="border-t border-white/[0.04] hover:bg-white/[0.02] cursor-pointer transition-colors"
+                      className="border-t border-white/[0.04] hover:bg-white/[0.02] cursor-pointer group transition-colors"
                       onClick={() => setExpandedKey(isExpanded ? null : key)}
                       tabIndex="0"
                       role="button"
@@ -748,9 +750,11 @@ const PredictorCard = React.memo(({ predictor, ddVersion }) => {
                         }
                       }}
                     >
-                      <td className="px-2 py-1 text-white/40 flex items-center gap-1">
-                        <span className="text-[9px] opacity-30 transition-transform duration-200" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-                        {LABELS[key]}
+                      <td className="px-2 py-1 text-white/40">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[9px] opacity-30 transition-transform duration-200 group-hover:opacity-60" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                          {LABELS[key]}
+                        </div>
                       </td>
                       <td className={`px-2 py-1 text-center font-mono tabular-nums ${diff > 0.005 ? "text-blue-400" : "text-white/50"}`}>{fmt(b)}</td>
                       <td className={`px-2 py-1 text-center font-mono tabular-nums ${diff < -0.005 ? "text-red-400" : "text-white/50"}`}>{fmt(r)}</td>
@@ -759,7 +763,7 @@ const PredictorCard = React.memo(({ predictor, ddVersion }) => {
                     </tr>
                     {isExpanded && (
                       <tr aria-hidden={!isExpanded}>
-                        <td colSpan={5} className="px-2 py-2 bg-white/[0.02] border-t border-white/[0.04]">
+                        <td colSpan={5} className="px-2 py-3 bg-white/[0.01] border-t border-white/[0.04] border-b border-white/[0.04]">
                           <PredictorDetail keyName={key} details={predictor.details} ddVersion={ddVersion} />
                         </td>
                       </tr>
@@ -822,6 +826,8 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
         puuid: p.puuid,
         championId: p.championId,
         teamId: p.teamId,
+        summonerName: p.summonerName,
+        championName: champMap ? (champMap[String(p.championId)] ?? "Unknown") : "Unknown"
       }));
     if (participants.length === 0) return;
     getWinPredict(participants, liveStats)

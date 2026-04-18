@@ -10,6 +10,8 @@ class WinPredictParticipant(BaseModel):
     puuid: str
     championId: int
     teamId: int  # 100 = blue, 200 = red
+    summonerName: str = "Unknown"
+    championName: str = "Unknown"
 
 class WinPredictRequest(BaseModel):
     participants: List[WinPredictParticipant]

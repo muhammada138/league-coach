@@ -353,6 +353,10 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
             res = _player_features(live_stats.get(p.get("puuid", ""), {}), cid, champ_dict, opp_cid, role)
             if res:
                 f, d = res
+                # Inject identity info for frontend breakdown
+                d["puuid"] = p.get("puuid")
+                d["summonerName"] = p.get("summonerName", "Unknown")
+                d["championName"] = p.get("championName", "Unknown")
                 feats.append(f)
                 details_list.append(d)
             else:
