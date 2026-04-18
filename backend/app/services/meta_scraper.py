@@ -123,32 +123,39 @@ async def fetch_champion_matchups(rank: str, champ_name: str, lane: str) -> dict
                 except (ValueError, TypeError): pass
                 return val
 
-            # Find the matchup list: a list of refs where each resolves to a dict with cid+vsWr
-            matchup_list = None
+            # Collect ALL matchup lists: lists of refs where each resolves to a dict with cid+vsWr
+            matchups = {}
             for obj in objs:
                 if isinstance(obj, list) and len(obj) > 3:
-                    sample = _res(obj[0])
-                    if isinstance(sample, dict) and "cid" in sample and "vsWr" in sample:
-                        matchup_list = obj
-                        break
+                    try:
+                        first_item = _res(obj[0])
+                        if isinstance(first_item, dict) and "cid" in first_item and "vsWr" in first_item:
+                            for ref in obj:
+                                entry = _res(ref)
+                                if not isinstance(entry, dict):
+                                    continue
+                                
+                                cid_val = _res(entry.get("cid"))
+                                if cid_val is None: continue
+                                
+                                try:
+                                    cid_str = str(int(cid_val))
+                                    wr_val = float(_res(entry["vsWr"]))
+                                    games_val = int(_res(entry.get("n", 0)) or 0)
+                                    
+                                    if wr_val > 0:
+                                        # Deduplicate: if multiple lists contain the same champ, keep the entry with more data (higher n)
+                                        if cid_str not in matchups or games_val > matchups[cid_str]["games"]:
+                                            matchups[cid_str] = {"wr": wr_val, "games": games_val}
+                                except (ValueError, TypeError, KeyError):
+                                    continue
+                    except Exception:
+                        continue
 
-            if not matchup_list:
-                return {}
-
-            matchups = {}
-            for ref in matchup_list:
-                entry = _res(ref)
-                if not isinstance(entry, dict):
-                    continue
-                try:
-                    cid_val = _res(entry["cid"])
-                    cid_str = str(int(cid_val))
-                    wr_val = float(_res(entry["vsWr"]))
-                    games_val = int(_res(entry.get("n", 0)) or 0)
-                    if wr_val > 0:
-                        matchups[cid_str] = {"wr": wr_val, "games": games_val}
-                except Exception:
-                    continue
+            if not matchups:
+                logger.warning("No matchups extracted for %s (%s) in %s", champ_name, lane, rank)
+            else:
+                logger.info("  -> Extracted %d unique matchups.", len(matchups))
 
             return matchups
         except Exception as e:
