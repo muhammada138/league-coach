@@ -9,6 +9,41 @@ from ..state import META_FILE_PATH, sync_state
 
 logger = logging.getLogger(__name__)
 
+# --- CACHE ---
+_CACHED_FULL_VERSION = None
+_VERSION_CACHE_TIME = 0
+VERSION_CACHE_DURATION = 12 * 3600  # 12 hours
+
+async def _get_latest_version_full() -> str:
+    """Fetch the latest full LoL version from Data Dragon with caching."""
+    global _CACHED_FULL_VERSION, _VERSION_CACHE_TIME
+    now = time.time()
+    
+    if _CACHED_FULL_VERSION and (now - _VERSION_CACHE_TIME) < VERSION_CACHE_DURATION:
+        return _CACHED_FULL_VERSION
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get("https://ddragon.leagueoflegends.com/api/versions.json")
+            if resp.status_code == 200:
+                versions = resp.json()
+                if versions:
+                    _CACHED_FULL_VERSION = versions[0]
+                    _VERSION_CACHE_TIME = now
+                    return _CACHED_FULL_VERSION
+    except Exception as e:
+        logger.error("Failed to fetch latest version: %s", e)
+            
+    return _CACHED_FULL_VERSION or "14.8.1"
+
+async def get_current_patch() -> str:
+    """Fetch the latest LoL patch version (major.minor) from Data Dragon."""
+    full_version = await _get_latest_version_full()
+    parts = full_version.split(".")
+    if len(parts) >= 2:
+        return f"{parts[0]}.{parts[1]}"
+    return "14.8"
+
 # Lolalytics Rank Mappings - Aligned with seed tiers in ingestion.py
 RANKS = [
     "bronze", "silver", "gold", "platinum", "emerald", 
@@ -36,12 +71,11 @@ async def _ensure_champ_ids():
     if _CHAMP_ID_MAP:
         return
     
-    async with httpx.AsyncClient() as client:
+    version = await _get_latest_version_full()
+    url = f"https://ddragon.leagueoflegends.com/cdn/{version}/data/en_US/champion.json"
+    
+    async with httpx.AsyncClient(timeout=20.0) as client:
         try:
-            v_resp = await client.get("https://ddragon.leagueoflegends.com/api/versions.json")
-            if v_resp.status_code != 200: return
-            version = v_resp.json()[0]
-            url = f"https://ddragon.leagueoflegends.com/cdn/{version}/data/en_US/champion.json"
             resp = await client.get(url)
             if resp.status_code != 200: return
             data = resp.json()
@@ -59,7 +93,8 @@ async def _ensure_champ_ids():
 
 async def fetch_champion_matchups(rank: str, champ_name: str, lane: str) -> dict:
     """Returns {opp_cid_str: {'wr': float, 'games': int}} via Qwik state extraction."""
-    url = f"https://lolalytics.com/lol/{champ_name.lower()}/counters/?lane={lane}&tier={rank}&patch=16.8"
+    patch = await get_current_patch()
+    url = f"https://lolalytics.com/lol/{champ_name.lower()}/counters/?lane={lane}&tier={rank}&patch={patch}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://lolalytics.com/"
@@ -119,13 +154,14 @@ async def fetch_champion_matchups(rank: str, champ_name: str, lane: str) -> dict
 
 async def fetch_rank_meta(rank: str) -> dict:
     await _ensure_champ_ids()
+    patch = await get_current_patch()
     results = {"tier_avg": 50.0, "champions": {}}
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://lolalytics.com/"}
     
     async with httpx.AsyncClient(timeout=30.0) as client:
         for lane in LANES:
             lane_query = f"&lane={lane}" if lane else ""
-            url = f"https://lolalytics.com/lol/tierlist/?tier={rank}&patch=16.8{lane_query}"
+            url = f"https://lolalytics.com/lol/tierlist/?tier={rank}&patch={patch}{lane_query}"
             try:
                 logger.info("Scraping tierlist: rank=%s, lane=%s", rank, lane or "all")
                 resp = await client.get(url, headers=headers)
