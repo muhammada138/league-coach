@@ -115,6 +115,7 @@ function SavedDropdown() {
   return (
     <div ref={wrapperRef} className="relative">
       <button
+        aria-label="Toggle saved profiles dropdown"
         onClick={() => setOpen((o) => !o)}
         className={`flex items-center gap-1.5 h-9 px-3 rounded-xl border text-[11px] font-bold tracking-tight transition-all duration-200
           ${open
@@ -188,6 +189,7 @@ function SavedDropdown() {
                   </div>
 
                   <button
+                    aria-label="Remove saved profile"
                     onClick={(e) => { e.stopPropagation(); toggleSaved(p); }}
                     className="relative z-10 flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center
                       text-red-400/40 hover:text-red-500 hover:bg-red-500/10
