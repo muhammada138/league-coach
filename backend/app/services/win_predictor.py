@@ -390,15 +390,17 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
     blue_feats, blue_details = get_feats(blue_raw, blue_roles, red_role_map)
     red_feats, red_details  = get_feats(red_raw, red_roles, blue_role_map)
 
-    blue_known = [f for f in blue_feats if f is not None]
-    red_known  = [f for f in red_feats if f is not None]
-    all_known  = blue_known + red_known
+    # All players now return a vector (either real or neutral fallback)
+    # We define 'known' as not being hidden for confidence calculation
+    blue_known_mask = [not d.get("is_hidden", False) for d in blue_details]
+    red_known_mask  = [not d.get("is_hidden", False) for d in red_details]
+    all_known_count = sum(blue_known_mask) + sum(red_known_mask)
     
-    confidence = len(all_known) / len(participants) if participants else 0.0
-    global_mean = np.mean(all_known, axis=0) if all_known else _NEUTRAL.copy()
+    confidence = all_known_count / len(participants) if participants else 0.0
 
-    blue_team_mean = np.mean(blue_known, axis=0) if blue_known else global_mean.copy()
-    red_team_mean  = np.mean(red_known, axis=0) if red_known else global_mean.copy()
+    # Use all vectors for the team mean (hidden ones use neutral fallback already)
+    blue_team_mean = np.mean(blue_feats, axis=0) if blue_feats else _NEUTRAL.copy()
+    red_team_mean  = np.mean(red_feats, axis=0) if red_feats else _NEUTRAL.copy()
 
     blue_vec = blue_team_mean
     red_vec  = red_team_mean
