@@ -172,15 +172,35 @@ def _train_and_save() -> None:
 _NEUTRAL = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.0, 0.0, 0.5, 0.5], dtype=float)
 
 
-def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_champion_id: int = 0, role: str = "all"):
-    """Return a 9-dim feature vector for a single player, or None if hidden."""
+def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_champion_id: int = 0, role: str = "all") -> tuple[np.ndarray, dict]:
+    """Return a 9-dim feature vector for a single player, or neutral if hidden."""
     tier = stats.get("tier", "UNRANKED")
     wins = stats.get("wins", 0)
     losses = stats.get("losses", 0)
 
-    # Completely unknown / hidden profile (streamer mode — no data at all)
-    if not stats or (tier == "UNRANKED" and wins == 0 and losses == 0 and not stats.get("last5")):
-        return None
+    # Detect hidden profile (streamer mode)
+    is_hidden = not stats or (tier == "UNRANKED" and wins == 0 and losses == 0 and not stats.get("last5"))
+
+    if is_hidden:
+        details = {
+            "is_hidden": True,
+            "rank": {"tier": "Hidden Profile", "division": "", "lp": 0, "score": 0.5},
+            "season_wr": {"wins": 0, "losses": 0, "wr": 0.5, "conf": 0.0},
+            "form": {"avg_score": 50, "label": "Neutral"},
+            "recent_wr": {"wr": 0.5, "last5": []},
+            "champ_wr": {"wins": 0, "total": 0, "wr": 0.5, "conf": 0.0},
+            "mastery": {"is_main": False, "score": 0.0},
+            "streak": {"value": 0, "norm": 0.0},
+            "meta_wr": {"wr": 0.5},
+            "matchup": {
+                "opp_cid": opponent_champion_id,
+                "vs_wr": 50.0,
+                "games": 0,
+                "conf": 0.0,
+                "score": 0.5
+            }
+        }
+        return _NEUTRAL.copy(), details
 
     # 1. Rank score  (0 → 1)
     division = stats.get("division", "")
@@ -192,14 +212,14 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
         tier_val = TIER_SCORE.get(tier, 3.5)
         is_apex  = tier in ["MASTER", "GRANDMASTER", "CHALLENGER"]
         div_val  = 0.0 if is_apex else DIV_BONUS.get(division, 0.0)
-        
+
         # In apex tiers, LP is the primary differentiator. We give it more weight.
         if is_apex:
             # 100 LP in Master ≈ 0.4 rank points (vs 0.25 normally)
             lp_bonus = (lp_val / 100.0) * 0.4
         else:
             lp_bonus = (lp_val / 100.0) * 0.25
-            
+
         rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.2) / 1.2 # Allow some headroom
 
     # 2. Season WR — confidence-weighted toward 0.5 (full trust at 100 games)
@@ -255,12 +275,13 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
     # Lolalytics WR is usually around 50.0. Scale to 0-1.
     meta_wr_val = champ_meta.get("wr", 50.0)
     meta_wr = meta_wr_val / 100.0
-    
+
     # 9. Matchup Advantage — Specific counter winrate from Lolalytics
     matchup_adv = 0.5
     vs_wr = 50.0
     matchup_games = 0
     matchup_conf = 0.0
+    is_proxy = False
     if opponent_champion_id:
         opp_id_str = str(opponent_champion_id)
         matchups = champ_meta.get("matchups", {})
@@ -277,9 +298,11 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
             opp_wr = opp_meta.get("wr", 50.0)
             vs_wr = 50.0 + (meta_wr_val - opp_wr)
             matchup_adv = max(0.0, min(1.0, 0.5 + (meta_wr - (opp_wr / 100.0))))
+            is_proxy = True
         # else: no champ meta at all (Naafiri bronze top) → stays 0.5 neutral
 
     details = {
+        "is_hidden": False,
         "rank": {"tier": tier, "division": division, "lp": lp_val, "score": round(float(rank_score), 3)},
         "season_wr": {"wins": wins, "losses": losses, "wr": round(float(raw_wr), 3), "conf": round(float(conf), 2)},
         "form": {"avg_score": avg_score, "label": "Hot" if avg_score > 65 else "Cold" if avg_score < 40 else "Steady"},
@@ -289,19 +312,19 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
         "streak": {"value": streak_val, "norm": round(float(streak_norm), 2)},
         "meta_wr": {"wr": round(float(meta_wr), 3)},
         "matchup": {
-            "opp_cid": opponent_champion_id, 
-            "vs_wr": round(float(vs_wr), 1), 
-            "games": matchup_games, 
-            "conf": round(float(matchup_conf), 2), 
-            "score": round(float(matchup_adv), 3)
+            "opp_cid": opponent_champion_id,
+            "vs_wr": round(float(vs_wr), 1),
+            "games": matchup_games,
+            "conf": round(float(matchup_conf), 2),
+            "score": round(float(matchup_adv), 3),
+            "is_proxy": is_proxy
         }
     }
 
     return np.array([
-        rank_score, season_wr, form_score, recent_wr_val, champ_wr, 
+        rank_score, season_wr, form_score, recent_wr_val, champ_wr,
         mastery_score, streak_norm, meta_wr, matchup_adv
     ], dtype=float), details
-
 
 def _team_vector(player_feat_list: list) -> np.ndarray:
     arr = np.array(player_feat_list, dtype=float)

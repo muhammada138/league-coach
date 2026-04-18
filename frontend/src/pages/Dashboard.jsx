@@ -527,10 +527,12 @@ function LaneIcon({ lane }) {
 
 const RankDetail = ({ data }) => (
   <div className="flex flex-col items-end leading-none">
-    <span className={`text-[11px] font-bold ${TIER_COLORS[data.tier] || 'text-slate-400'}`}>
-      {data.tier === "Hidden Profile" ? "Hidden" : `${data.tier} ${data.division}`}
+    <span className={`text-[11px] font-bold ${data.tier === "Hidden Profile" ? 'text-slate-500' : (TIER_COLORS[data.tier] || 'text-slate-400')}`}>
+      {data.tier === "Hidden Profile" ? "Hidden Profile" : `${data.tier} ${data.division}`}
     </span>
-    <span className="text-[9px] text-white/30 mt-0.5">{data.lp} LP · score: {data.score?.toFixed(2)}</span>
+    <span className="text-[9px] text-white/30 mt-0.5">
+      {data.tier === "Hidden Profile" ? "Neutral Fallback" : `${data.lp} LP · score: ${data.score?.toFixed(2)}`}
+    </span>
   </div>
 );
 
@@ -589,10 +591,12 @@ const StreakDetail = ({ data }) => (
 
 const MatchupDetail = ({ data }) => (
   <div className="flex flex-col items-end leading-none">
-    <span className={`text-[11px] font-bold ${data.score >= 0.5 ? 'text-emerald-400' : 'text-red-400'}`}>
+    <span className={`text-[11px] font-bold ${data.score >= 0.505 ? 'text-emerald-400' : data.score <= 0.495 ? 'text-red-400' : 'text-white/70'}`}>
       {(data.vs_wr).toFixed(1)}%
     </span>
-    <span className="text-[9px] text-white/30 mt-0.5">{data.games > 0 ? `${data.games} games` : "no data"}</span>
+    <span className="text-[9px] text-white/30 mt-0.5">
+      {data.is_proxy ? "Proxy Data" : data.games > 0 ? `${data.games} games` : "no data"}
+    </span>
   </div>
 );
 
