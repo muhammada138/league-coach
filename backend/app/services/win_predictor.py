@@ -24,6 +24,7 @@ import json
 import logging
 import asyncio
 from pathlib import Path
+from collections import Counter
 
 import numpy as np
 
@@ -171,7 +172,7 @@ def _train_and_save() -> None:
 _NEUTRAL = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.0, 0.0, 0.5, 0.5], dtype=float)
 
 
-def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald", opponent_champion_id: int = 0, role: str = "all"):
+def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_champion_id: int = 0, role: str = "all"):
     """Return a 9-dim feature vector for a single player, or None if hidden."""
     tier = stats.get("tier", "UNRANKED")
     wins = stats.get("wins", 0)
@@ -182,16 +183,17 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
         return None
 
     # 1. Rank score  (0 → 1)
+    division = stats.get("division", "")
+    lp_val = stats.get("lp", 0)
     if tier == "UNRANKED":
         # Has recent game data but no rank — treat as low Iron; form/recent_wr will carry them
         rank_score = 1.5 / MAX_RANK
     else:
         tier_val = TIER_SCORE.get(tier, 3.5)
         is_apex  = tier in ["MASTER", "GRANDMASTER", "CHALLENGER"]
-        div_val  = 0.0 if is_apex else DIV_BONUS.get(stats.get("division", ""), 0.0)
+        div_val  = 0.0 if is_apex else DIV_BONUS.get(division, 0.0)
         
         # In apex tiers, LP is the primary differentiator. We give it more weight.
-        lp_val = stats.get("lp", 0)
         if is_apex:
             # 100 LP in Master ≈ 0.4 rank points (vs 0.25 normally)
             lp_bonus = (lp_val / 100.0) * 0.4
@@ -207,24 +209,29 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
     season_wr = raw_wr * conf + 0.5 * (1.0 - conf)
 
     # 3. Form score — avg performance score from last 10 games (quality, not just W/L)
-    form_score = stats.get("avg_score", 50) / 100.0
+    avg_score = stats.get("avg_score", 50)
+    form_score = avg_score / 100.0
 
     # 4. Recent WR — actual win fraction of last 10 games (outcome trend)
-    recent_wr = float(stats.get("recent_wr", 0.5))
+    recent_wr_val = float(stats.get("recent_wr", 0.5))
+    last5 = stats.get("last5", [])
 
     # 5. Champion-specific WR from last 10 games — confidence-weighted (full trust at 3+ games)
     champ_id_str = str(champion_id)
     champ_wr_map = stats.get("champ_wr_map", {})
     champ_data   = champ_wr_map.get(champ_id_str, [0, 0])
+    champ_wins   = champ_data[0]
     champ_total  = champ_data[1]
-    raw_champ_wr = champ_data[0] / champ_total if champ_total > 0 else 0.5
+    raw_champ_wr = champ_wins / champ_total if champ_total > 0 else 0.5
     champ_conf   = min(champ_total / 3.0, 1.0)
     champ_wr     = raw_champ_wr * champ_conf + 0.5 * (1.0 - champ_conf)
 
     # 6. Mastery score — is current champion in their top-3 most played recently?
     main_champs   = stats.get("main_champs", [])
     mastery_score = 0.0
+    is_main = False
     if champ_id_str in main_champs:
+        is_main = True
         idx = main_champs.index(champ_id_str)
         for threshold, val in [(0, 0.06), (1, 0.04), (2, 0.02)]:
             if idx == threshold:
@@ -232,16 +239,11 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
                 break
 
     # 7. Streak momentum  (−1 → 1)
-    streak      = max(-5, min(5, stats.get("streak", 0)))
+    streak_val  = stats.get("streak", 0)
+    streak      = max(-5, min(5, streak_val))
     streak_norm = streak / 5.0
 
     # 8. Meta WR (Lolalytics) — how good is the champ in this rank?
-    meta = get_meta_data()
-    rank_key = _RANK_TO_META.get(lobby_rank.lower(), "emerald")
-    
-    rank_data = meta.get("data", {}).get(rank_key, {})
-    champ_dict = rank_data.get("champions", {})  # champions are nested under "champions" key
-
     # Try lane-specific lookup first, then fall back to 'all'
     role_key = role.lower()
     if role_key == "utility": role_key = "support"
@@ -251,31 +253,54 @@ def _player_features(stats: dict, champion_id: int, lobby_rank: str = "emerald",
         champ_meta = champ_dict.get(f"{champ_id_str}:all", champ_dict.get(champ_id_str, {}))
 
     # Lolalytics WR is usually around 50.0. Scale to 0-1.
-    meta_wr = champ_meta.get("wr", 50.0) / 100.0
+    meta_wr_val = champ_meta.get("wr", 50.0)
+    meta_wr = meta_wr_val / 100.0
     
     # 9. Matchup Advantage — Specific counter winrate from Lolalytics
     matchup_adv = 0.5
+    vs_wr = 50.0
+    matchup_games = 0
+    matchup_conf = 0.0
     if opponent_champion_id:
         opp_id_str = str(opponent_champion_id)
         matchups = champ_meta.get("matchups", {})
         if opp_id_str in matchups:
             raw = matchups[opp_id_str]
-            wr = raw["wr"] if isinstance(raw, dict) else raw
+            vs_wr = raw["wr"] if isinstance(raw, dict) else raw
             # Confidence-weight toward neutral when games count is low (<100 games)
-            games = raw.get("games", 100) if isinstance(raw, dict) else 100
-            conf = min(games / 100.0, 1.0)
-            matchup_adv = (wr / 100.0) * conf + 0.5 * (1.0 - conf)
+            matchup_games = raw.get("games", 100) if isinstance(raw, dict) else 100
+            matchup_conf = min(matchup_games / 100.0, 1.0)
+            matchup_adv = (vs_wr / 100.0) * matchup_conf + 0.5 * (1.0 - matchup_conf)
         elif champ_meta:
             # Fallback: use relative meta WR difference as a proxy for matchup strength
             opp_meta = champ_dict.get(f"{opp_id_str}:{role_key}", champ_dict.get(f"{opp_id_str}:all", {}))
-            opp_wr = opp_meta.get("wr", 50.0) / 100.0
-            matchup_adv = max(0.0, min(1.0, 0.5 + (meta_wr - opp_wr)))
+            opp_wr = opp_meta.get("wr", 50.0)
+            vs_wr = 50.0 + (meta_wr_val - opp_wr)
+            matchup_adv = max(0.0, min(1.0, 0.5 + (meta_wr - (opp_wr / 100.0))))
         # else: no champ meta at all (Naafiri bronze top) → stays 0.5 neutral
 
+    details = {
+        "rank": {"tier": tier, "division": division, "lp": lp_val, "score": round(float(rank_score), 3)},
+        "season_wr": {"wins": wins, "losses": losses, "wr": round(float(raw_wr), 3), "conf": round(float(conf), 2)},
+        "form": {"avg_score": avg_score, "label": "Hot" if avg_score > 65 else "Cold" if avg_score < 40 else "Steady"},
+        "recent_wr": {"wr": round(float(recent_wr_val), 3), "last5": last5},
+        "champ_wr": {"wins": champ_wins, "total": champ_total, "wr": round(float(raw_champ_wr), 3), "conf": round(float(champ_conf), 2)},
+        "mastery": {"is_main": is_main, "score": round(float(mastery_score), 3)},
+        "streak": {"value": streak_val, "norm": round(float(streak_norm), 2)},
+        "meta_wr": {"wr": round(float(meta_wr), 3)},
+        "matchup": {
+            "opp_cid": opponent_champion_id, 
+            "vs_wr": round(float(vs_wr), 1), 
+            "games": matchup_games, 
+            "conf": round(float(matchup_conf), 2), 
+            "score": round(float(matchup_adv), 3)
+        }
+    }
+
     return np.array([
-        rank_score, season_wr, form_score, recent_wr, champ_wr, 
+        rank_score, season_wr, form_score, recent_wr_val, champ_wr, 
         mastery_score, streak_norm, meta_wr, matchup_adv
-    ], dtype=float)
+    ], dtype=float), details
 
 
 def _team_vector(player_feat_list: list) -> np.ndarray:
@@ -311,21 +336,32 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
     lobby_rank = "EMERALD"
     if known_tiers:
         # Pick the most common tier as the anchor for meta stats
-        from collections import Counter
         lobby_rank = Counter(known_tiers).most_common(1)[0][0]
+
+    # Load meta data once per prediction
+    meta = get_meta_data()
+    rank_key = _RANK_TO_META.get(lobby_rank.lower(), "emerald")
+    champ_dict = meta.get("data", {}).get(rank_key, {}).get("champions", {})
 
     def get_feats(team_players, roles, opp_role_map):
         feats = []
+        details_list = []
         for p in team_players:
             cid = p.get("championId", 0)
             role = roles.get(cid, "UNKNOWN")
             opp_cid = opp_role_map.get(role, 0)
-            f = _player_features(live_stats.get(p.get("puuid", ""), {}), cid, lobby_rank, opp_cid, role)
-            feats.append(f)
-        return feats
+            res = _player_features(live_stats.get(p.get("puuid", ""), {}), cid, champ_dict, opp_cid, role)
+            if res:
+                f, d = res
+                feats.append(f)
+                details_list.append(d)
+            else:
+                feats.append(None)
+                details_list.append(None)
+        return feats, details_list
 
-    blue_feats = get_feats(blue_raw, blue_roles, red_role_map)
-    red_feats  = get_feats(red_raw, red_roles, blue_role_map)
+    blue_feats, blue_details = get_feats(blue_raw, blue_roles, red_role_map)
+    red_feats, red_details  = get_feats(red_raw, red_roles, blue_role_map)
 
     blue_known = [f for f in blue_feats if f is not None]
     red_known  = [f for f in red_feats if f is not None]
@@ -373,6 +409,10 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
         "redPct": 100 - blue_pct,
         "confidence": round(float(confidence), 2),
         "features": features,
+        "details": {
+            "blue": blue_details,
+            "red": red_details
+        }
     }
 
 
