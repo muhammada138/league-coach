@@ -8,7 +8,6 @@ env/
 venv/
 .venv/
 *.egg-info/
-dist/
 build/
 
 # Environment
@@ -27,7 +26,7 @@ build/
 .DS_Store
 Thumbs.db
 
-# Frontend (future)
+# Frontend
 node_modules/
 .next/
 dist/
@@ -35,24 +34,20 @@ dist/
 # Docs / specs
 docs/
 
-# Runtime data (generated at startup, not source-controlled)
+# Runtime data
 backend/data/
 backend/model/
-docs/maestro/
 
-# Planning and Artifacts
+# Artifacts & Planning
 plan.md
 *.plan.md
 artifacts/
-
-# Bot Planning & Artifacts
-plan.md
-*.plan.md
 docs/maestro/
 docs/superpowers/
 docs/plans/
-
 .worktrees/
-docs/superpowers/
 ideas_temp.md
 .superpowers/
+
+# Scratch & Debug
+backend/scratch/

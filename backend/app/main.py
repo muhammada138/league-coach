@@ -38,18 +38,23 @@ async def _meta_scheduler():
         now_ts = time.time()
         today = now.date()
 
-        # Full sync (tierlist + all matchups) at 5:30 AM daily
-        if now.hour == 5 and now.minute == 30 and last_full_date != today:
+        # 1. Full Deep Sync Priority (5:30 AM Window)
+        is_sync_window = (now.hour == 5 and now.minute >= 30)
+        
+        if is_sync_window and last_full_date != today:
             if not meta_scraper.is_sync_active():
                 last_full_date = today
-                logger.info("Scheduler: starting daily matchup sync (5:30 AM)")
+                logger.info("Scheduler: starting daily matchup sync (5:30 AM window)")
                 asyncio.create_task(meta_scraper.sync_meta(mode="matchups"))
+                continue  # Skip tierlist check during this trigger minute
 
-        # Tierlist-only refresh every 4 hours (skip if any sync is running)
-        elif now_ts - last_tierlist_ts >= 4 * 3600 and not meta_scraper.is_sync_active():
-            last_tierlist_ts = now_ts
-            logger.info("Scheduler: starting 4-hour tierlist refresh")
-            asyncio.create_task(meta_scraper.sync_meta(mode="tierlist"))
+        # 2. Regular Tierlist Refresh (every 4 hours)
+        # Skip if in the deep sync window or if any sync is already active
+        elif not is_sync_window and not meta_scraper.is_sync_active():
+            if now_ts - last_tierlist_ts >= 4 * 3600:
+                last_tierlist_ts = now_ts
+                logger.info("Scheduler: starting 4-hour tierlist refresh")
+                asyncio.create_task(meta_scraper.sync_meta(mode="tierlist"))
 
 
 @asynccontextmanager

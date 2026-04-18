@@ -399,15 +399,41 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
     blue_feats, blue_details = get_feats(blue_raw, blue_roles, red_role_map)
     red_feats, red_details  = get_feats(red_raw, red_roles, blue_role_map)
 
-    # All players now return a vector (either real or neutral fallback)
-    # We define 'known' as not being hidden for confidence calculation
-    blue_known_mask = [not d.get("is_hidden", False) for d in blue_details]
-    red_known_mask  = [not d.get("is_hidden", False) for d in red_details]
-    all_known_count = sum(blue_known_mask) + sum(red_known_mask)
-    
-    confidence = all_known_count / len(participants) if participants else 0.0
+    # --- HEURISTIC IMPUTATION ---
+    # Instead of hardcoded 0.5 neutral, hidden players inherit mean of known teammates.
+    def impute_team(feats, details):
+        known_indices = [i for i, d in enumerate(details) if not d.get("is_hidden", False)]
+        if not known_indices:
+            return  # Entire team hidden; keep neutral 0.5 fallback
+        
+        # Calculate mean of all features from known players
+        # Note: We exclude index 8 (matchup_adv) from imputation as it is champion-specific
+        # and already resolved for hidden players via meta-data proxies.
+        known_vecs = [feats[i] for i in known_indices]
+        team_mean = np.mean(known_vecs, axis=0)
+        
+        for i, d in enumerate(details):
+            if d.get("is_hidden", False):
+                # Update feature vector (indices 0-7: Rank, WR, Form, Recent, Champ, Mastery, Streak, Meta)
+                feats[i][:8] = team_mean[:8]
+                
+                # Update details for the "Math" UI to be transparent
+                d["rank"]["score"] = round(float(feats[i][0]), 3)
+                d["rank"]["tier"] = "Hidden (Estimated)"
+                d["season_wr"]["wr"] = round(float(feats[i][1]), 3)
+                d["form"]["avg_score"] = int(feats[i][2] * 100)
+                d["form"]["label"] = "Estimated"
+                d["recent_wr"]["wr"] = round(float(feats[i][3]), 3)
+                d["champ_wr"]["wr"] = round(float(feats[i][4]), 3)
+                d["meta_wr"]["wr"] = round(float(feats[i][7]), 3)
 
-    # Use all vectors for the team mean (hidden ones use neutral fallback already)
+    impute_team(blue_feats, blue_details)
+    impute_team(red_feats, red_details)
+
+    # All players now have a representative vector.
+    confidence = (sum(not d.get("is_hidden", False) for d in blue_details) + 
+                  sum(not d.get("is_hidden", False) for d in red_details)) / len(participants) if participants else 0.0
+
     blue_team_mean = np.mean(blue_feats, axis=0) if blue_feats else _NEUTRAL.copy()
     red_team_mean  = np.mean(red_feats, axis=0) if red_feats else _NEUTRAL.copy()
 
