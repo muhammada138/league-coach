@@ -7,13 +7,18 @@ class LiveEnrichRequest(BaseModel):
     region: str = "na1"
 
 class WinPredictParticipant(BaseModel):
-    puuid: str
+    puuid: Optional[str] = ""
     championId: int
     teamId: int  # 100 = blue, 200 = red
     summonerName: str = "Unknown"
     championName: str = "Unknown"
     spell1Id: Optional[int] = 0
     spell2Id: Optional[int] = 0
+
+    @field_validator('puuid', mode='before')
+    @classmethod
+    def coerce_none_puuid(cls, v):
+        return v if v is not None else ""
 
     @field_validator('spell1Id', 'spell2Id', mode='before')
     @classmethod
