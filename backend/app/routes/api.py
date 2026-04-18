@@ -221,8 +221,10 @@ async def get_scoreboard(match_id: str, region: str = RIOT_REGION):
         rank = ranks[i] if not isinstance(ranks[i], Exception) else "Unranked"
         perks = p.get("perks", {})
         primary_style = next((s for s in perks.get("styles", []) if s.get("description") == "primaryStyle"), {})
-        primary_perk = primary_style.get("selections", [{}])[0].get("perk") if primary_style.get("selections") else None
         sub_style = next((s for s in perks.get("styles", []) if s.get("description") == "subStyle"), {})
+        primary_selections = [sel.get("perk") for sel in primary_style.get("selections", [])]
+        sub_selections = [sel.get("perk") for sel in sub_style.get("selections", [])]
+        stat_perks = perks.get("statPerks", {})
         participants_out.append({
             "puuid": p.get("puuid", ""), "riotIdGameName": p.get("riotIdGameName") or p.get("summonerName") or "Unknown",
             "riotIdTagline": p.get("riotIdTagline", ""), "championName": p["championName"],
@@ -232,7 +234,12 @@ async def get_scoreboard(match_id: str, region: str = RIOT_REGION):
             "totalDamageDealtToChampions": p.get("totalDamageDealtToChampions", 0),
             "goldEarned": p.get("goldEarned", 0),
             "summoner1Id": p.get("summoner1Id", 0), "summoner2Id": p.get("summoner2Id", 0),
-            "primaryPerk": primary_perk, "subStyle": sub_style.get("style"),
+            "primaryPerk": primary_selections[0] if primary_selections else None,
+            "primaryStyle": primary_style.get("style"),
+            "primarySelections": primary_selections,
+            "subStyle": sub_style.get("style"),
+            "subSelections": sub_selections,
+            "statPerks": [stat_perks.get("offense"), stat_perks.get("flex"), stat_perks.get("defense")],
             "win": p["win"], "teamId": p["teamId"], "gameDuration": data["info"]["gameDuration"],
             "score": _compute_perf_score(p, participants, None, data["info"]["gameDuration"]), "rank": rank,
             "items": [p.get(f"item{j}", 0) for j in range(7)],
