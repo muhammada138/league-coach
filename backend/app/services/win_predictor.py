@@ -370,8 +370,7 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
     champ_dict = meta.get("data", {}).get(rank_key, {}).get("champions", {})
 
     def get_feats(team_players, roles, opp_role_map):
-        feats = []
-        details_list = []
+        feats_with_roles = []
         for p in team_players:
             cid = p.get("championId", 0)
             role = roles.get(cid, "UNKNOWN")
@@ -379,16 +378,19 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
             res = _player_features(live_stats.get(p.get("puuid", ""), {}), cid, champ_dict, opp_cid, role)
             if res:
                 f, d = res
-                # Inject identity info for frontend breakdown
                 d["puuid"] = p.get("puuid")
                 d["summonerName"] = p.get("summonerName", "Unknown")
                 d["championName"] = p.get("championName", "Unknown")
-                feats.append(f)
-                details_list.append(d)
+                d["role"] = role
+                feats_with_roles.append((f, d))
             else:
-                feats.append(None)
-                details_list.append(None)
-        return feats, details_list
+                feats_with_roles.append((None, None))
+        
+        # Sort by role priority: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY, UNKNOWN
+        role_order = {"TOP": 0, "JUNGLE": 1, "MIDDLE": 2, "BOTTOM": 3, "UTILITY": 4, "UNKNOWN": 5}
+        feats_with_roles.sort(key=lambda x: role_order.get(x[1].get("role", "UNKNOWN") if x[1] else "UNKNOWN", 99))
+        
+        return [x[0] for x in feats_with_roles], [x[1] for x in feats_with_roles]
 
     blue_feats, blue_details = get_feats(blue_raw, blue_roles, red_role_map)
     red_feats, red_details  = get_feats(red_raw, red_roles, blue_role_map)
