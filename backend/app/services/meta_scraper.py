@@ -36,13 +36,24 @@ async def _get_latest_version_full() -> str:
             
     return _CACHED_FULL_VERSION or "14.8.1"
 
+async def get_patch_at_offset(offset: int = 0) -> str:
+    """Fetch a patch version (major.minor) from Data Dragon by index (0=current, 1=prev)."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get("https://ddragon.leagueoflegends.com/api/versions.json")
+            if resp.status_code == 200:
+                versions = resp.json()
+                if len(versions) > offset:
+                    full_v = versions[offset]
+                    parts = full_v.split(".")
+                    if len(parts) >= 2:
+                        return f"{parts[0]}.{parts[1]}"
+    except Exception as e:
+        logger.error("Failed to fetch patch at offset %d: %s", offset, e)
+    return "14.8" # Fallback
+
 async def get_current_patch() -> str:
-    """Fetch the latest LoL patch version (major.minor) from Data Dragon."""
-    full_version = await _get_latest_version_full()
-    parts = full_version.split(".")
-    if len(parts) >= 2:
-        return f"{parts[0]}.{parts[1]}"
-    return "14.8"
+    return await get_patch_at_offset(0)
 
 # Lolalytics Rank Mappings - Aligned with seed tiers in ingestion.py
 RANKS = [
@@ -54,7 +65,7 @@ RANKS = [
 LANES = ["", "top", "jungle", "middle", "bottom", "support"]
 # Pin matchup data to a specific patch (new patches often have bad sample sizes).
 # Set to None to always use the current live patch.
-MATCHUP_PATCH_OVERRIDE = "16.7"
+MATCHUP_PATCH_OVERRIDE = None
 
 _TIER_LABELS = {
     1: "S+", 2: "S", 3: "S-",
@@ -94,10 +105,13 @@ async def _ensure_champ_ids():
         except Exception as e:
             logger.error("Failed to fetch champion IDs: %s", e)
 
-async def fetch_champion_matchups(rank: str, champ_name: str, lane: str) -> dict:
+async def fetch_champion_matchups(rank: str, champ_name: str, lane: str, patch: str = None) -> dict:
     """Returns {opp_cid_str: {'wr': float, 'games': int}} via Qwik state extraction."""
-    patch = MATCHUP_PATCH_OVERRIDE or await get_current_patch()
-    url = f"https://lolalytics.com/lol/{champ_name.lower()}/counters/?lane={lane}&tier={rank}&patch={patch}"
+    if not patch:
+        patch = MATCHUP_PATCH_OVERRIDE or await get_current_patch()
+        
+    lane_param = f"&lane={lane}" if lane and lane != "all" else ""
+    url = f"https://lolalytics.com/lol/{champ_name.lower()}/counters/?tier={rank}&patch={patch}{lane_param}"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Referer": "https://lolalytics.com/"
@@ -123,34 +137,46 @@ async def fetch_champion_matchups(rank: str, champ_name: str, lane: str) -> dict
                 except (ValueError, TypeError): pass
                 return val
 
-            # Collect ALL matchup lists: lists of refs where each resolves to a dict with cid+vsWr
+            # Greedy Extraction: Scan all objects for matchup signatures (cid + vsWr)
             matchups = {}
             for obj in objs:
-                if isinstance(obj, list) and len(obj) > 3:
+                # Some matchups are nested in lists, others are flat in the objs array.
+                # We harvest anything with a 'cid' and 'vsWr'.
+                candidate = None
+                if isinstance(obj, dict) and "cid" in obj and "vsWr" in obj:
+                    candidate = obj
+                
+                if candidate:
                     try:
-                        first_item = _res(obj[0])
-                        if isinstance(first_item, dict) and "cid" in first_item and "vsWr" in first_item:
-                            for ref in obj:
-                                entry = _res(ref)
-                                if not isinstance(entry, dict):
-                                    continue
-                                
+                        cid_val = _res(candidate.get("cid"))
+                        if cid_val is None: continue
+                        
+                        cid_str = str(int(float(cid_val)))
+                        wr_val = float(_res(candidate["vsWr"]))
+                        games_val = int(_res(candidate.get("n", 0)) or 0)
+                        
+                        if wr_val > 0:
+                            # Keep highest game count version if duplicates exist in state
+                            if cid_str not in matchups or games_val > matchups[cid_str]["games"]:
+                                matchups[cid_str] = {"wr": wr_val, "games": games_val}
+                    except (ValueError, TypeError, KeyError):
+                        continue
+                
+                # Also check lists of references as a fallback
+                elif isinstance(obj, list) and len(obj) > 3:
+                     for ref in obj:
+                        entry = _res(ref)
+                        if isinstance(entry, dict) and "cid" in entry and "vsWr" in entry:
+                            try:
                                 cid_val = _res(entry.get("cid"))
                                 if cid_val is None: continue
-                                
-                                try:
-                                    cid_str = str(int(cid_val))
-                                    wr_val = float(_res(entry["vsWr"]))
-                                    games_val = int(_res(entry.get("n", 0)) or 0)
-                                    
-                                    if wr_val > 0:
-                                        # Deduplicate: if multiple lists contain the same champ, keep the entry with more data (higher n)
-                                        if cid_str not in matchups or games_val > matchups[cid_str]["games"]:
-                                            matchups[cid_str] = {"wr": wr_val, "games": games_val}
-                                except (ValueError, TypeError, KeyError):
-                                    continue
-                    except Exception:
-                        continue
+                                cid_str = str(int(float(cid_val)))
+                                wr_val = float(_res(entry["vsWr"]))
+                                games_val = int(_res(entry.get("n", 0)) or 0)
+                                if wr_val > 0:
+                                    if cid_str not in matchups or games_val > matchups[cid_str]["games"]:
+                                        matchups[cid_str] = {"wr": wr_val, "games": games_val}
+                            except: continue
 
             if not matchups:
                 logger.warning("No matchups extracted for %s (%s) in %s", champ_name, lane, rank)
@@ -312,6 +338,9 @@ async def sync_meta(mode="full"):
     
     logger.info("Starting Meta Sync (Mode: %s)...", mode)
     try:
+        current_patch  = await get_patch_at_offset(0)
+        previous_patch = await get_patch_at_offset(1)
+        
         existing = get_meta_data()
         full_meta = existing.get("data", {})
         
@@ -324,8 +353,8 @@ async def sync_meta(mode="full"):
                 if sync_state["cancel_requested"]: break
                 while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(1.0)
                 
-                logger.info("Syncing tierlist: %s", rank)
-                rank_data = await fetch_rank_meta(rank)
+                logger.info("Syncing tierlist: %s (Patch %s)", rank, current_patch)
+                rank_data = await fetch_rank_meta(rank, patch=current_patch)
                 if not rank_data: continue
                 
                 if rank not in full_meta:
@@ -364,8 +393,9 @@ async def sync_meta(mode="full"):
                     stale = not cdata.get("matchups") or (now_ts - cdata.get("last_checked", 0)) > 86400
                     if mode == "matchups" or stale:
                         name, lane = cdata["name"], cdata["lane"]
-                        logger.info("  -> Crawling matchups: %s (%s) in %s", name, lane, rank)
-                        matchups = await fetch_champion_matchups(rank, name, lane)
+                        # PHASE 2: Matchups (use previous patch for higher density)
+                        logger.info("  -> Crawling matchups: %s (%s) in %s (Patch %s)", name, lane, rank, previous_patch)
+                        matchups = await fetch_champion_matchups(rank, name, lane, patch=previous_patch)
                         
                         full_meta[rank]["champions"][cid_str]["last_checked"] = now_ts
                         if matchups:
