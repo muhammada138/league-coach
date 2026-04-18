@@ -260,7 +260,7 @@ async def get_live_game(puuid: str, region: str = RIOT_REGION):
                 "queueId": data.get("gameQueueConfigId", 420),
                 "participants": [
                     {
-                        "puuid": p.get("puuid", ""),
+                        "puuid": p.get("puuid") or "",
                         "summonerName": (p.get("riotId") or p.get("summonerName") or "Unknown").split("#")[0],
                         "tagLine": (p.get("riotId") or "").split("#")[1] if "#" in (p.get("riotId") or "") else "",
                         "teamId": p.get("teamId", 0),
