@@ -265,8 +265,8 @@ async def get_live_game(puuid: str, region: str = RIOT_REGION):
                         "tagLine": (p.get("riotId") or "").split("#")[1] if "#" in (p.get("riotId") or "") else "",
                         "teamId": p.get("teamId", 0),
                         "championId": p.get("championId", 0),
-                        "spell1Id": p.get("spell1Id"),
-                        "spell2Id": p.get("spell2Id"),
+                        "spell1Id": p.get("spell1Id") or 0,
+                        "spell2Id": p.get("spell2Id") or 0,
                         "assignedPosition": all_roles.get(p.get("championId", 0), "UNKNOWN"),
                     }
                     for p in raw

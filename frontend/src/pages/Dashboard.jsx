@@ -600,6 +600,8 @@ const MatchupDetail = ({ data }) => (
   </div>
 );
 
+const ROLE_ABBREV = { TOP: "Top", JUNGLE: "Jgl", MIDDLE: "Mid", BOTTOM: "Bot", UTILITY: "Sup" };
+
 const PredictorPlayerRow = ({ p, keyName, ddVersion }) => {
   const champIcon = `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${p.championName}.png`;
   const data = p[keyName];
@@ -619,9 +621,14 @@ const PredictorPlayerRow = ({ p, keyName, ddVersion }) => {
     default: content = null;
   }
 
+  const roleLabel = ROLE_ABBREV[p.role];
+
   return (
     <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.03] last:border-0">
       <div className="flex items-center gap-1.5 min-w-0">
+        {roleLabel && (
+          <span className="text-[9px] font-bold text-white/30 w-6 shrink-0">{roleLabel}</span>
+        )}
         <img src={champIcon} className="w-4 h-4 rounded border border-white/10" alt="" onError={(e) => { e.target.style.display='none'; }} />
         <span className="text-[10px] text-white/60 truncate">{p.summonerName}</span>
       </div>

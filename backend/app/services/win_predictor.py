@@ -349,8 +349,8 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
     red_raw  = [p for p in participants if p.get("teamId") == 200]
     
     blue_roles, red_roles = await asyncio.gather(
-        assign_team_roles([{"championId": p.get("championId", 0), "spells": [p.get("spell1Id"), p.get("spell2Id")] if "spell1Id" in p else []} for p in blue_raw]),
-        assign_team_roles([{"championId": p.get("championId", 0), "spells": [p.get("spell1Id"), p.get("spell2Id")] if "spell1Id" in p else []} for p in red_raw])
+        assign_team_roles([{"championId": p.get("championId", 0), "spells": [p.get("spell1Id") or 0, p.get("spell2Id") or 0]} for p in blue_raw]),
+        assign_team_roles([{"championId": p.get("championId", 0), "spells": [p.get("spell1Id") or 0, p.get("spell2Id") or 0]} for p in red_raw])
     )
     
     # Map role -> championId for matchup lookup
