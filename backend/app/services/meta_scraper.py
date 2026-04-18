@@ -188,9 +188,10 @@ async def fetch_champion_matchups(rank: str, champ_name: str, lane: str, patch: 
             logger.error("Error scraping %s matchups for %s: %s", lane, champ_name, e)
             return {}
 
-async def fetch_rank_meta(rank: str) -> dict:
+async def fetch_rank_meta(rank: str, patch: str = None) -> dict:
     await _ensure_champ_ids()
-    patch = await get_current_patch()
+    if not patch:
+        patch = await get_current_patch()
     results = {"tier_avg": 50.0, "champions": {}}
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://lolalytics.com/"}
     
