@@ -305,8 +305,11 @@ async def sync_meta(mode="full"):
         existing = get_meta_data()
         full_meta = existing.get("data", {})
         
+        # Ensure we have tierlist data before doing matchups
+        needs_tierlist = not full_meta or mode in ("full", "tierlist")
+
         # --- PHASE 1: TIERLIST (FAST) ---
-        if mode in ("full", "tierlist"):
+        if needs_tierlist:
             for rank in RANKS:
                 if sync_state["cancel_requested"]: break
                 while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(1.0)
