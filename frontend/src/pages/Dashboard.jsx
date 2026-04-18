@@ -600,6 +600,8 @@ const MatchupDetail = ({ data }) => (
   </div>
 );
 
+const ROLE_ABBREV = { TOP: "Top", JUNGLE: "Jgl", MIDDLE: "Mid", BOTTOM: "Bot", UTILITY: "Sup" };
+
 const PredictorPlayerRow = ({ p, keyName, ddVersion }) => {
   const champIcon = `https://ddragon.leagueoflegends.com/cdn/${ddVersion}/img/champion/${p.championName}.png`;
   const data = p[keyName];
@@ -619,9 +621,14 @@ const PredictorPlayerRow = ({ p, keyName, ddVersion }) => {
     default: content = null;
   }
 
+  const roleLabel = ROLE_ABBREV[p.role];
+
   return (
     <div className="flex items-center justify-between gap-2 py-1.5 border-b border-white/[0.03] last:border-0">
       <div className="flex items-center gap-1.5 min-w-0">
+        {roleLabel && (
+          <span className="text-[9px] font-bold text-white/30 w-6 shrink-0">{roleLabel}</span>
+        )}
         <img src={champIcon} className="w-4 h-4 rounded border border-white/10" alt="" onError={(e) => { e.target.style.display='none'; }} />
         <span className="text-[10px] text-white/60 truncate">{p.summonerName}</span>
       </div>
@@ -637,11 +644,11 @@ const PredictorDetail = React.memo(({ keyName, details, ddVersion }) => {
     <div className="grid grid-cols-2 gap-4 animate-fadeIn">
       <div className="space-y-0.5">
         <div className="text-[9px] font-bold uppercase tracking-widest text-blue-400/40 mb-1">Blue Team</div>
-        {details.blue.map(p => <PredictorPlayerRow key={p.puuid} p={p} keyName={keyName} ddVersion={ddVersion} />)}
+        {details.blue.map((p, i) => <PredictorPlayerRow key={p.puuid || `blue-${i}`} p={p} keyName={keyName} ddVersion={ddVersion} />)}
       </div>
       <div className="space-y-0.5">
         <div className="text-[9px] font-bold uppercase tracking-widest text-red-400/40 mb-1">Red Team</div>
-        {details.red.map(p => <PredictorPlayerRow key={p.puuid} p={p} keyName={keyName} ddVersion={ddVersion} />)}
+        {details.red.map((p, i) => <PredictorPlayerRow key={p.puuid || `red-${i}`} p={p} keyName={keyName} ddVersion={ddVersion} />)}
       </div>
     </div>
   );
@@ -825,13 +832,14 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   useEffect(() => {
     if (!liveStats || !champMap) return;
     const participants = liveGame.participants
-      .filter((p) => p.puuid)
       .map((p) => ({
         puuid: p.puuid,
         championId: p.championId,
         teamId: p.teamId,
         summonerName: p.summonerName,
-        championName: champMap ? (champMap[String(p.championId)] ?? "Unknown") : "Unknown"
+        championName: champMap ? (champMap[String(p.championId)] ?? "Unknown") : "Unknown",
+        spell1Id: p.spell1Id,
+        spell2Id: p.spell2Id
       }));
     if (participants.length === 0) return;
     getWinPredict(participants, liveStats)

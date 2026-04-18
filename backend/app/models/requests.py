@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import List, Dict, Any
+from pydantic import BaseModel, field_validator
+from typing import List, Dict, Any, Optional
 
 class LiveEnrichRequest(BaseModel):
     puuids: List[str]
@@ -12,6 +12,13 @@ class WinPredictParticipant(BaseModel):
     teamId: int  # 100 = blue, 200 = red
     summonerName: str = "Unknown"
     championName: str = "Unknown"
+    spell1Id: Optional[int] = 0
+    spell2Id: Optional[int] = 0
+
+    @field_validator('spell1Id', 'spell2Id', mode='before')
+    @classmethod
+    def coerce_none_to_zero(cls, v):
+        return v if v is not None else 0
 
 class WinPredictRequest(BaseModel):
     participants: List[WinPredictParticipant]
