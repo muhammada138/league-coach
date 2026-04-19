@@ -135,9 +135,10 @@ async def _generate_coaching(game_name: str, stats: Dict[str, Any], games: List[
     if games:
         game_history_context = "RECENT MATCH HISTORY (Newest First):\n"
         for i, g in enumerate(games[:10]):
-            res = "W" if g["win"] else "L"
+            ps = g["playerStats"]
+            res = "W" if ps["win"] else "L"
             mvp = f" [{g['mvpAce']}]" if g.get("mvpAce") else ""
-            game_history_context += f"- Match {i+1}: {res}, {g['championName']}, {g['kills']}/{g['deaths']}/{g['assists']}, Score: {g['score']}{mvp}\n"
+            game_history_context += f"- Match {i+1}: {res}, {ps['championName']}, {ps['kills']}/{ps['deaths']}/{ps['assists']}, Score: {g['score']}{mvp}\n"
     
     system_prompt = (
         "You are an Elite League of Legends Analyst. Give direct, high-level feedback to this specific player. "
