@@ -569,7 +569,7 @@ const RankDetail = ({ data }) => (
 
 const WRDetail = ({ data }) => {
   const wr = data.wr || 0.5;
-  const games = data.total ?? ((data.wins || 0) + (data.losses || 0)) || 0;
+  const games = (data.total ?? ((data.wins || 0) + (data.losses || 0))) || 0;
   return (
     <div className="flex flex-col items-end leading-none">
       <span className={`text-[11px] font-bold ${wr >= 0.55 ? 'text-emerald-400' : wr >= 0.45 ? 'text-white/70' : 'text-red-400'}`}>
@@ -1013,7 +1013,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
           <span className="text-sm font-bold text-slate-800 dark:text-white tabular-nums">{mins}:{secs}</span>
           <span className="text-xs text-slate-400 dark:text-white/30">{queueLabel}</span>
         </div>
-        <button onClick={onClose} className="text-slate-400 dark:text-white/20 hover:text-slate-600 dark:hover:text-white/50 transition-colors">
+        <button onClick={onClose} aria-label="Close live game" className="text-slate-400 dark:text-white/20 hover:text-slate-600 dark:hover:text-white/50 transition-colors">
           <svg className="w-4 h-4" viewBox="0 0 12 12" fill="none">
             <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
@@ -2418,6 +2418,7 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
                   />
                   <button
                     type="submit"
+                    aria-label="Ask about gameplay"
                     disabled={!chatInput.trim() || chatLoading}
                     className="flex-shrink-0 w-6 h-6 rounded-lg bg-[#c89b3c] disabled:opacity-30 flex items-center justify-center transition-opacity"
                   >
@@ -2718,6 +2719,7 @@ export default function Dashboard() {
           </button>
           <button
             onClick={handleRefresh}
+            aria-label="Refresh profile data"
             disabled={refreshing}
             className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 dark:text-white/30 hover:text-[#c89b3c] dark:hover:text-[#c89b3c] disabled:opacity-50 transition-colors"
           >
