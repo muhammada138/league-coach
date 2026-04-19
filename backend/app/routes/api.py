@@ -54,7 +54,7 @@ async def backfill_if_needed(puuid: str, tier: str, division: str, lp: int, wins
                 # Add snapshot BEFORE this game result
                 # But actually it's easier to add snapshot AFTER this game result
                 # and work backwards.
-                snapshots.append((puuid, tier, division, curr_lp, curr_wins, curr_losses, ts))
+                snapshots.append((puuid, tier, division, curr_lp, curr_wins, curr_losses, ts, 'RANKED_SOLO_5x5'))
                 
                 # Reverse the result for the next (older) game
                 if p["win"]:
@@ -394,11 +394,11 @@ async def live_enrich(body: LiveEnrichRequest):
                         positions = [g.get("position", "UNKNOWN") for g in recent_results if g.get("position") != "UNKNOWN"]
                         most_common_pos = _Counter(positions).most_common(1)[0][0] if positions else "UNKNOWN"
                         
-                        # Export simple booleans for the Last 5 UI (prevents the "always green" JS truthy bug)
-                        ui_last5 = [g["win"] for g in recent_results[:5]]
+                        # Export objects so frontend can show score/matchId on hover
+                        ui_last5 = [{"win": g["win"], "score": g["score"], "matchId": g["matchId"]} for g in recent_results[:5]]
                         
                         base.update({
-                            "last5": ui_last5,  # Booleans for JS frontend
+                            "last5": ui_last5, 
                             "last5_details": recent_results[:5], # Full data for internal duo-detection
                             "avg_score": avg_score,
                             "recent_wr": recent_wr,

@@ -583,7 +583,7 @@ const WRDetail = ({ data }) => {
 const RecentWRDetail = ({ data }) => (
   <div className="flex items-center gap-0.5">
     {(data.last5 || []).map((win, i) => (
-      <div key={i} className={`w-1.5 h-3 rounded-sm ${win ? 'bg-emerald-500' : 'bg-red-500/60'}`} />
+      <div key={i} className={`w-1.5 h-3 rounded-sm ${(win?.win ?? win) ? 'bg-emerald-500' : 'bg-red-500/60'}`} />
     ))}
     <span className="text-[11px] font-bold text-white/70 ml-1">{(data.wr * 100).toFixed(0)}%</span>
   </div>
