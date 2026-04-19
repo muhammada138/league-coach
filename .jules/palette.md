@@ -1,0 +1,3 @@
+## 2024-10-24 - [Keyboard Accessibility in Hover-Revealed Actions]
+**Learning:** This application uses a recurring pattern where secondary action buttons (like remove from favorites/recent) are wrapped in containers with `opacity-0 group-hover:opacity-100`. This hides the elements from keyboard-only and screen reader users during tab navigation, as they receive focus but remain invisible.
+**Action:** Always include `focus-within:opacity-100` on the parent container or `focus-visible:opacity-100` directly on the button when implementing hover-revealed action groups to ensure keyboard accessibility.
