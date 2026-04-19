@@ -153,7 +153,7 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10, regi
     if not games: raise HTTPException(status_code=404, detail="Could not process any matches")
 
     stats = _aggregate_games_stats(games)
-    coaching = await _generate_coaching(game_name, stats)
+    coaching = await _generate_coaching(game_name, stats, games=games)
     game_summaries, most_diffed_lane = _build_game_summaries(games)
     
     result = {

@@ -130,33 +130,41 @@ def _aggregate_games_stats(games: List[Dict[str, Any]]) -> Dict[str, Any]:
         "champ_stats": champ_stats,
     }
 
-async def _generate_coaching(game_name: str, stats: Dict[str, Any]) -> str:
+async def _generate_coaching(game_name: str, stats: Dict[str, Any], games: List[Dict[str, Any]] = None) -> str:
+    game_history_context = ""
+    if games:
+        game_history_context = "RECENT MATCH HISTORY (Newest First):\n"
+        for i, g in enumerate(games[:10]):
+            res = "W" if g["win"] else "L"
+            mvp = f" [{g['mvpAce']}]" if g.get("mvpAce") else ""
+            game_history_context += f"- Match {i+1}: {res}, {g['championName']}, {g['kills']}/{g['deaths']}/{g['assists']}, Score: {g['score']}{mvp}\n"
+    
     system_prompt = (
-        "You are a League of Legends coach giving direct, personal feedback to this specific player. "
-        "Always speak in second person: 'you', 'your', 'you're'. Talk like a real coach, not a report writer. "
-        "Be blunt and human. No corporate filler. Give 3-4 weaknesses where they are underperforming vs their lobby. "
-        "Each tip: 1-2 sentences max. Lead with the problem, end with one concrete fix. "
-        "Bold (**) every stat number and every key concept/stat name. "
-        "IMPORTANT: Always reference champion abilities by their key (Q, W, E, R, Passive) — never use the ability's actual name. "
-        "Make every tip specific to that champion's actual kit and win conditions — no generic advice. "
-        f"The player is mainly playing **{stats['most_played_champ']}** — tailor every tip to this champion's specific mechanics. "
-        "If they play multiple champions, tailor advice to each champion's kit and how it enables their specific win conditions. "
-        "FORMATTING RULES: Start each tip with a number and a period (e.g., '1. ', '2. '). "
-        "Each numbered tip must be on its own new line. No intro sentence."
+        "You are an Elite League of Legends Analyst. Give direct, high-level feedback to this specific player. "
+        "Speak in second person: 'you', 'your'. Talk like a high-Elo coach, not a report writer. "
+        "Be blunt, human, and insightful. No corporate filler. "
+        "EVALUATION MODE:\n"
+        "1. If you see multiple [MVP] or scores > 85, you are in 'STREAK MODE'. Praise their dominance, identify what they are doing perfectly, and give 'elite maintenance' tips to stay consistent.\n"
+        "2. If scores are average (40-70), identify 3-4 specific kit-based weaknesses.\n"
+        "3. NEVER suggest improvements for things they did perfectly in a recent MVP game (e.g., don't tell them to gank more if they just went 20/0/7). Use the Match History to prove your points.\n\n"
+        "FEEDBACK RULES:\n"
+        "- Each tip: 1-2 sentences max. Lead with the insight, end with a concrete fix.\n"
+        "- Bold (**) every stat number and every key concept/stat name.\n"
+        "- Always reference champion abilities by their key (Q, W, E, R, Passive) — never use ability names.\n"
+        "- Tailor every tip to the champion's specific mechanics and win conditions.\n"
+        "FORMATTING: Start each tip with a number (e.g., '1. '). New line for each tip. No intro/outro."
     )
     user_prompt = (
         f"Player: {game_name}\n"
-        f"Champions played: {stats['champ_breakdown']}\n"
-        f"Most played role: {stats['most_common_position']}\n"
-        f"Win rate last {stats['n']} games: {stats['win_rate']}%\n\n"
-        f"Player averages vs lobby averages:\n"
-        f"- KDA: {stats['player_kda']:.2f} vs {stats['lobby_kda']:.2f}\n"
-        f"- CSPM: {stats['player_cspm']:.2f} vs {stats['lobby_cspm']:.2f}\n"
-        f"- Vision score: {stats['player_avgs']['visionScore']:.1f} vs {stats['lobby_avgs_agg']['visionScore']:.1f}\n"
-        f"- Damage dealt: {stats['player_avgs']['totalDamageDealtToChampions']:.0f} vs {stats['lobby_avgs_agg']['totalDamageDealtToChampions']:.0f}\n"
-        f"- Gold earned: {stats['player_avgs']['goldEarned']:.0f} vs {stats['lobby_avgs_agg']['goldEarned']:.0f}\n"
-        f"- Wards placed: {stats['player_avgs']['wardsPlaced']:.1f} vs {stats['lobby_avgs_agg']['wardsPlaced']:.1f}\n"
-        f"- Wards killed: {stats['player_avgs']['wardsKilled']:.1f} vs {stats['lobby_avgs_agg']['wardsKilled']:.1f}"
+        f"Main Champion: {stats['most_played_champ']}\n"
+        f"Role: {stats['most_common_position']}\n"
+        f"Win Rate: {stats['win_rate']}%\n\n"
+        f"{game_history_context}\n"
+        f"Averages vs Lobby:\n"
+        f"- KDA: {stats['player_kda']:.2f} (Lobby: {stats['lobby_kda']:.2f})\n"
+        f"- CSPM: {stats['player_cspm']:.2f} (Lobby: {stats['lobby_cspm']:.2f})\n"
+        f"- Vision: {stats['player_avgs']['visionScore']:.1f} (Lobby: {stats['lobby_avgs_agg']['visionScore']:.1f})\n"
+        f"- Dmg/Gold: {stats['player_avgs']['totalDamageDealtToChampions']:.0f} / {stats['player_avgs']['goldEarned']:.0f}"
     )
     return await get_coaching_feedback(system_prompt, user_prompt)
 
