@@ -2257,7 +2257,19 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
     .filter((s) => s.length > 0 && /^\d+\./.test(s))
     .map((s) => s.replace(/^\d+\.\s*/, "").trim());
 
+  const mvpCount = (games || []).filter(g => g.mvpAce === "MVP").length;
+  const isOnStreak = mvpCount >= 3;
+
   const fallback = tips.length === 0;
+
+  const getIcon = (tip) => {
+    const t = tip.toLowerCase();
+    if (t.includes("vision") || t.includes("ward") || t.includes("map control")) return "👁️";
+    if (t.includes("kills") || t.includes("combat") || t.includes("fight") || t.includes("aggressive")) return "⚔️";
+    if (t.includes("gold") || t.includes("cs") || t.includes("farm") || t.includes("economy")) return "💰";
+    if (t.includes("objective") || t.includes("dragon") || t.includes("baron") || t.includes("turret")) return "🏰";
+    return "💡";
+  };
 
   const handleAsk = async (e) => {
     e.preventDefault();
@@ -2314,7 +2326,21 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
         {tab === "coaching" ? (
           <div className="flex flex-col lg:flex-1 lg:min-h-0 lg:overflow-hidden">
             {/* Single unified scroll area: tips + chat together */}
-            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-5 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-5 space-y-5">
+              {/* Performance Streak Banner */}
+              {isOnStreak && (
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-yellow-500/20 to-amber-600/10 border border-yellow-500/30 p-4 animate-fadeIn">
+                  <div className="absolute -top-6 -right-6 w-24 h-24 bg-yellow-400/10 blur-3xl rounded-full" />
+                  <div className="relative z-10 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-yellow-400/20 flex items-center justify-center text-xl">🏆</div>
+                    <div>
+                      <h4 className="text-sm font-black text-yellow-500 uppercase tracking-widest">Elite Performance</h4>
+                      <p className="text-[11px] text-yellow-400/80 font-medium">{mvpCount} MVPs in recent games. You are currently in Peak Flow state.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {fallback ? (
                 <div className="text-sm text-slate-600 dark:text-white/60 leading-relaxed
                   [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white
@@ -2322,17 +2348,26 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
                   <ReactMarkdown>{coaching}</ReactMarkdown>
                 </div>
               ) : (
-                tips.map((tip, i) => (
-                  <div key={i} className="flex gap-3">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#c89b3c]/10 border border-[#c89b3c]/30 text-[#c89b3c] text-xs font-bold flex items-center justify-center mt-0.5">
-                      {i + 1}
-                    </span>
-                    <div className="text-sm text-slate-700 dark:text-white/70 leading-relaxed
-                      [&_strong]:font-bold [&_strong]:text-slate-900 [&_strong]:dark:text-white [&_em]:italic">
-                      <ReactMarkdown>{tip}</ReactMarkdown>
+                <div className="grid gap-3">
+                  {tips.map((tip, i) => (
+                    <div key={i} className="group relative rounded-2xl bg-white/[0.02] border border-white/[0.05] p-4 transition-all duration-300 hover:bg-white/[0.04] hover:border-[#c89b3c]/30 hover:shadow-lg hover:shadow-black/20">
+                      <div className="flex gap-4">
+                        <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:bg-[#c89b3c]/10 group-hover:border-[#c89b3c]/20">
+                          {getIcon(tip)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-[#c89b3c]/60">Insight {i + 1}</span>
+                          </div>
+                          <div className="text-[13px] text-slate-700 dark:text-white/80 leading-relaxed font-medium
+                            [&_strong]:font-black [&_strong]:text-slate-900 [&_strong]:dark:text-white [&_em]:italic">
+                            <ReactMarkdown>{tip}</ReactMarkdown>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
 
               {chatHistory.length > 0 && (
