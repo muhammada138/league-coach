@@ -58,6 +58,14 @@ def _process_match(match_id: str, match_data: dict, puuid: str) -> Dict[str, Any
         "gameDuration": game_duration,
     }
     lobby_avgs = {stat: sum(p[stat] for p in participants) / len(participants) for stat in NUMERIC_STATS}
+    
+    # Role-aware Vision Comparison: Don't compare carries to supports
+    is_support = player.get("teamPosition") == "UTILITY"
+    vis_group = [p for p in participants if (p.get("teamPosition") == "UTILITY") == is_support]
+    if vis_group:
+        role_vis_avg = sum(p["visionScore"] for p in vis_group) / len(vis_group)
+        lobby_avgs["visionScore"] = role_vis_avg
+
     deltas = {stat: player_stats[stat] - lobby_avgs[stat] for stat in NUMERIC_STATS}
     minutes = game_duration / 60
     player_cspm = player_stats["totalMinionsKilled"] / minutes if minutes > 0 else 0
@@ -146,8 +154,8 @@ async def _generate_coaching(game_name: str, stats: Dict[str, Any], games: List[
         "STRICT RULE: NO GENERIC ADVICE. Never tell them to 'buy items', 'ward more', or 'keep up the good work'. "
         "Every tip must focus on MACRO concepts: Tempo, Pathing efficiency, Objective setup, Wave state, or Item Spikes.\n\n"
         "EVALUATION HIERARCHY:\n"
-        "1. STREAK MODE: If you see multiple [MVP] or high scores, PRIORITIZE dominance. Ignore low Vision/Wards — they are carrying anyway. Focus on 'How to finish the game faster' or 'How to maintain this lead'.\n"
-        "2. CORE STATS ONLY: Focus on Kills, CS, Gold, and Objective damage. Vision score is a secondary stat — only mention it if they are LOSING and getting caught.\n\n"
+        "1. STREAK MODE: If you see multiple [MVP] or high scores, PRIORITIZE dominance. IGNORE Vision/Wards entirely — they are carrying anyway. Focus on 'How to finish the game faster'.\n"
+        "2. CORE STATS ONLY: Focus on Kills, CS, Gold, and Objective damage. Vision score is mathematically biased by Supports — only mention it if they are LOSING and getting caught constantly.\n\n"
         "THE 'GOLD STANDARD' TIP (Example of what to write):\n"
         "'To stay consistent, work on balancing your **7.44 CSPM** with more efficient **farming routes**, allowing you to keep up your high damage output while also denying gold to the enemy team with well-timed **W clears**.'\n\n"
         "FEEDBACK RULES:\n"
@@ -162,10 +170,10 @@ async def _generate_coaching(game_name: str, stats: Dict[str, Any], games: List[
         f"Role: {stats['most_common_position']}\n"
         f"Win Rate: {stats['win_rate']}%\n\n"
         f"{game_history_context}\n"
-        f"Averages vs Lobby:\n"
+        f"Averages vs Lobby (Vision is Role-Adjusted):\n"
         f"- KDA: {stats['player_kda']:.2f} (Lobby: {stats['lobby_kda']:.2f})\n"
         f"- CSPM: {stats['player_cspm']:.2f} (Lobby: {stats['lobby_cspm']:.2f})\n"
-        f"- Vision: {stats['player_avgs']['visionScore']:.1f} (Lobby: {stats['lobby_avgs_agg']['visionScore']:.1f})\n"
+        f"- Vision: {stats['player_avgs']['visionScore']:.1f} (Role-Adjusted Avg: {stats['lobby_avgs_agg']['visionScore']:.1f})\n"
         f"- Dmg/Gold: {stats['player_avgs']['totalDamageDealtToChampions']:.0f} / {stats['player_avgs']['goldEarned']:.0f}"
     )
     return await get_coaching_feedback(system_prompt, user_prompt)
