@@ -281,7 +281,7 @@ export default function SearchInput({
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-all duration-200">
                     <button
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
@@ -289,7 +289,8 @@ export default function SearchInput({
                         e.stopPropagation();
                         toggleSaved(s);
                       }}
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all
+                      aria-label={s.isSaved ? "Remove Favorite" : "Favorite Profile"}
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-[#c89b3c] transition-all
                         ${s.isSaved
                           ? "bg-[#c89b3c]/10 text-[#c89b3c] shadow-sm shadow-[#c89b3c]/5"
                           : "text-slate-400 dark:text-white/20 hover:text-[#c89b3c] hover:bg-[#c89b3c]/10"}`}
@@ -307,7 +308,8 @@ export default function SearchInput({
                         if (s.type === 'saved') toggleSaved(s);
                         else removeFromHistory(s);
                       }}
-                      className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500/30 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                      aria-label={s.type === 'saved' ? "Remove Favorite" : "Remove from Recent"}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500/30 hover:text-red-500 hover:bg-red-500/10 focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-red-500 transition-all"
                       title={s.type === 'saved' ? "Remove Favorite" : "Remove from Recent"}
                     >
                       <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8">

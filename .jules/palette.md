@@ -1,0 +1,3 @@
+## 2025-04-20 - Ensure Keyboard Accessibility for Hover-Revealed Actions
+**Learning:** Found two places using `opacity-0 group-hover:opacity-100` for action buttons inside interactive elements (`SearchInput.jsx` and `Navbar.jsx`). This pattern makes buttons invisible to sighted keyboard users when tab-navigating because the hover state isn't triggered by focus.
+**Action:** Always add `focus-within:opacity-100` to the parent container OR `focus:opacity-100 focus-visible:opacity-100` directly to the button alongside `opacity-0 group-hover:opacity-100` to ensure buttons become visible during keyboard navigation. ARIA labels are also missing on several of these icon-only buttons.

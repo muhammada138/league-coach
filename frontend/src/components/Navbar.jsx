@@ -189,9 +189,10 @@ function SavedDropdown() {
 
                   <button
                     onClick={(e) => { e.stopPropagation(); toggleSaved(p); }}
+                    aria-label="Remove saved profile"
                     className="relative z-10 flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center
                       text-red-400/40 hover:text-red-500 hover:bg-red-500/10
-                      opacity-0 group-hover:opacity-100 transition-all"
+                      opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none transition-all"
                   >
                     <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <path d="M12 4L4 12M4 4l8 8" strokeLinecap="round" />
