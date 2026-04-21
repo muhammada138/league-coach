@@ -30,7 +30,8 @@ async def _meta_scheduler():
         asyncio.create_task(meta_scraper.sync_meta(mode="tierlist"))
         last_tierlist_ts = time.time()
 
-    last_full_date = None
+    # Try to resume the last_full_date from the meta file's timestamp to avoid double sync on restarts
+    last_full_date = datetime.fromtimestamp(last_tierlist_ts).date() if last_tierlist_ts > 0 else None
 
     while True:
         await asyncio.sleep(60)
@@ -38,19 +39,20 @@ async def _meta_scheduler():
         now_ts = time.time()
         today = now.date()
 
-        # 1. Full Deep Sync Priority (5:30 AM Window)
-        is_sync_window = (now.hour == 5 and now.minute >= 30)
+        # 1. Full Deep Sync Priority (Any time after 5:30 AM that hasn't run today)
+        is_after_trigger = (now.hour > 5 or (now.hour == 5 and now.minute >= 30))
         
-        if is_sync_window and last_full_date != today:
+        if is_after_trigger and last_full_date != today:
             if not meta_scraper.is_sync_active():
                 last_full_date = today
-                logger.info("Scheduler: starting daily matchup sync (5:30 AM window)")
-                asyncio.create_task(meta_scraper.sync_meta(mode="matchups"))
+                logger.info("Scheduler: starting daily full sync (Target: 5:30 AM, Actual: %02d:%02d)", now.hour, now.minute)
+                # Use mode="full" to ensure both tierlist and matchups are refreshed together daily
+                asyncio.create_task(meta_scraper.sync_meta(mode="full"))
                 continue  # Skip tierlist check during this trigger minute
 
         # 2. Regular Tierlist Refresh (every 4 hours)
-        # Skip if in the deep sync window or if any sync is already active
-        elif not is_sync_window and not meta_scraper.is_sync_active():
+        # Skip if any sync is already active
+        elif not meta_scraper.is_sync_active():
             if now_ts - last_tierlist_ts >= 4 * 3600:
                 last_tierlist_ts = now_ts
                 logger.info("Scheduler: starting 4-hour tierlist refresh")

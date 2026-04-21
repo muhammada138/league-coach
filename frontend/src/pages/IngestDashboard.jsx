@@ -51,21 +51,51 @@ export default function IngestDashboard() {
     }
   };
 
+  const [history, setHistory] = useState([]); // Store {processed, time} for delta calc
+
   const processed   = status?.processed_count ?? 0;
   const target      = status?.total_target    ?? 50000;
   const isPaused    = status?.is_paused       ?? true;
   const pct         = target > 0 ? Math.min((processed / target) * 100, 100) : 0;
   const pctDisplay  = pct.toFixed(1);
 
-  // ETA rough estimate — shown only when running and some progress exists
-  const etaText = (() => {
-    if (isPaused || processed === 0) return null;
-    // 9 matches/min cold → ~43/min once rank cache warms (shared TTL cache)
+  // Track history for delta calculation
+  useEffect(() => {
+    if (processed > 0) {
+      setHistory(prev => {
+        const now = Date.now();
+        // Keep last 5 minutes of history for a stable moving average
+        const filtered = prev.filter(h => now - h.time < 300000);
+        return [...filtered, { processed, time: now }];
+      });
+    }
+  }, [processed]);
+
+  // Calculate actual speed and ETA
+  const { matchesPerMin, etaText } = (() => {
+    if (isPaused || processed === 0 || history.length < 2) {
+      return { matchesPerMin: 0, etaText: isPaused ? null : "Calculating speed..." };
+    }
+
+    const first = history[0];
+    const last  = history[history.length - 1];
+    const deltaMatches = last.processed - first.processed;
+    const deltaMins    = (last.time - first.time) / 60000;
+
+    if (deltaMins <= 0 || deltaMatches <= 0) {
+      return { matchesPerMin: 0, etaText: "Stalled or starting..." };
+    }
+
+    const mpm = deltaMatches / deltaMins;
     const remaining = target - processed;
-    const minsLeft  = Math.round(remaining / 20); // avg across warm-up
-    if (minsLeft > 1440) return `~${Math.round(minsLeft / 1440)}d remaining`;
-    if (minsLeft > 60)   return `~${Math.round(minsLeft / 60)}h remaining`;
-    return `~${minsLeft}m remaining`;
+    const minsLeft  = Math.round(remaining / mpm);
+
+    let text = "";
+    if (minsLeft > 1440) text = `~${(minsLeft / 1440).toFixed(1)}d remaining`;
+    else if (minsLeft > 60) text = `~${(minsLeft / 60).toFixed(1)}h remaining`;
+    else text = `~${minsLeft}m remaining`;
+
+    return { matchesPerMin: Math.round(mpm), etaText: text };
   })();
 
   return (
@@ -153,11 +183,18 @@ export default function IngestDashboard() {
 
           {/* Pct + ETA row */}
           <div className="flex items-center justify-between mb-8">
-            <span className="text-[#c89b3c] text-sm font-bold tabular-nums">
-              {pctDisplay}%
-            </span>
+            <div className="flex flex-col">
+              <span className="text-[#c89b3c] text-sm font-bold tabular-nums">
+                {pctDisplay}%
+              </span>
+              {!isPaused && matchesPerMin > 0 && (
+                <span className="text-white/20 text-[10px] font-medium uppercase tracking-wider mt-0.5">
+                  {matchesPerMin} m/min
+                </span>
+              )}
+            </div>
             {etaText && (
-              <span className="text-white/25 text-xs">{etaText}</span>
+              <span className="text-white/25 text-xs text-right whitespace-pre-wrap">{etaText}</span>
             )}
           </div>
 
