@@ -1,0 +1,4 @@
+## 2024-04-21 - Explicit Allowlists for Dynamic Table Names in SQLite
+**Vulnerability:** SQL Injection in administrative/maintenance scripts. The scripts used python string formatting (e.g. `cursor.execute(f"DELETE FROM {table_name}")`) to issue commands on dynamically retrieved table names. Table names and column names in SQLite cannot be parameterized (i.e. you cannot do `cursor.execute("DELETE FROM ?", (table_name,))`).
+**Learning:** Even internal admin scripts run the risk of executing untrusted data when interpolating unparameterizable components like table names directly into query strings.
+**Prevention:** For operations like `DELETE FROM` or `DROP TABLE` where the target table is dynamic, the table name MUST be validated against a hardcoded application-level allowlist (e.g. `ALLOWED_TABLES = {'lp_history', 'training_matches', ...}`) before string interpolation.

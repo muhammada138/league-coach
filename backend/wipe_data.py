@@ -14,8 +14,13 @@ def wipe_data():
     tables = cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     print(f"Found tables: {[t[0] for t in tables]}")
     
+    ALLOWED_TABLES = {'lp_history', 'training_matches', 'ingestion_status', 'training_matches_v1'}
+
     for table_name in [t[0] for t in tables]:
         if table_name != 'sqlite_sequence':
+            if table_name not in ALLOWED_TABLES:
+                print(f"Skipping table: {table_name} (Not in ALLOWED_TABLES)")
+                continue
             print(f"Wiping table: {table_name}")
             cursor.execute(f"DELETE FROM {table_name}")
     
