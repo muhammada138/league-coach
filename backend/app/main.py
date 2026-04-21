@@ -31,7 +31,8 @@ async def _meta_scheduler():
         last_tierlist_ts = time.time()
 
     # Persistent tracker for the daily full sync
-    sync_marker_path = "backend/data/.last_full_sync"
+    from .state import DATA_DIR
+    sync_marker_path = DATA_DIR / ".last_full_sync"
     def get_last_full_date():
         try:
             with open(sync_marker_path, "r") as f:

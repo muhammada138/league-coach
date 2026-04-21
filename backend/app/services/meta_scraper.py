@@ -397,7 +397,7 @@ async def sync_meta(mode="full"):
                     while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(1.0)
                     
                     # Force re-crawl on explicit matchups mode; otherwise skip if fresh (<24h)
-                    stale = not cdata.get("matchups") or (now_ts - cdata.get("last_checked", 0)) > 86400
+                    stale = (now_ts - cdata.get("last_checked", 0)) > 86400
                     name, lane = cdata["name"], cdata["lane"]
                     
                     if lane == "all": return # Skip "all" lane to save massive time; we only need specific lane matchups
