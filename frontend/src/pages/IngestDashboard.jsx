@@ -82,8 +82,13 @@ export default function IngestDashboard() {
     const deltaMatches = last.processed - first.processed;
     const deltaMins    = (last.time - first.time) / 60000;
 
-    if (deltaMins <= 0 || deltaMatches <= 0) {
-      return { matchesPerMin: 0, etaText: "Stalled or starting..." };
+    if (deltaMins < 0.16) { // wait at least 10s for first calculation
+      return { matchesPerMin: 0, etaText: isPaused ? null : "Calculating speed..." };
+    }
+
+    if (deltaMatches <= 0) {
+      const totalTrackingTime = (last.time - first.time) / 1000;
+      return { matchesPerMin: 0, etaText: totalTrackingTime > 30 ? "Ingestion Stalled" : "Calculating speed..." };
     }
 
     const mpm = deltaMatches / deltaMins;
