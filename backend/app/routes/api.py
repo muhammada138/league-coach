@@ -313,15 +313,21 @@ async def live_enrich(body: LiveEnrichRequest):
         api_failed = False
         try:
             async with httpx.AsyncClient(timeout=25.0) as client:
-                entries, match_ids, mastery_data = await asyncio.gather(
+                entries, match_ids, mastery_data, summoner_data = await asyncio.gather(
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
                     riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/{puuid}/top?count=20"),
+                    riot_get(client, f"https://{region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"),
                     return_exceptions=True,
                 )
 
                 if isinstance(entries, Exception) or isinstance(match_ids, Exception):
                     api_failed = True
+                    
+                if not isinstance(summoner_data, Exception):
+                    base.update({
+                        "summonerLevel": summoner_data.get("summonerLevel", 0)
+                    })
                     
                 high_mastery_champs = []
                 if not isinstance(mastery_data, Exception):
