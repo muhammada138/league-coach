@@ -948,6 +948,13 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
                 Duo
               </span>
             )}
+            {stats?.summonerLevel > 0 && stats?.summonerLevel < 70 && (
+              (stats?.wins + stats?.losses > 0 && (stats?.wins / (stats?.wins + stats?.losses)) > 0.60) || stats?.recent_wr >= 0.60
+            ) && (
+              <span title={`Level ${stats.summonerLevel} with high winrate`} className="text-[8px] font-black px-1 rounded border border-blue-400/40 text-blue-400 bg-blue-400/10 uppercase tracking-tighter">
+                Smurf
+              </span>
+            )}
             {p.assignedPosition && p.assignedPosition !== "UNKNOWN" && (
               <LaneIcon lane={p.assignedPosition} />
             )}
