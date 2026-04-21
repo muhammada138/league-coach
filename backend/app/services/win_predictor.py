@@ -518,11 +518,49 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
         diff_val = float(np.dot(blue_vec - red_vec, w))
         prob = 1.0 / (1.0 + np.exp(-diff_val * 25.0))
 
+    # --- DUO SYNERGY ADJUSTMENT ---
+    # Synergistic duos give massive real-game advantages through coordination.
+    def get_synergy(team_details):
+        groups = {}
+        for d in team_details:
+            if not d: continue
+            puuid = d.get("puuid")
+            stats = live_stats.get(puuid, {})
+            gid = stats.get("duo_group", 0)
+            if gid != 0:
+                groups.setdefault(gid, []).append(d.get("role", "UNKNOWN"))
+        
+        score = 0.0
+        for gid, roles in groups.items():
+            if len(roles) >= 2:
+                score += 1.0 # base duo bonus
+                roles_set = set(roles)
+                if {"BOTTOM", "UTILITY"}.issubset(roles_set):
+                    score += 0.7 # High synergy: Bot lane
+                elif {"MIDDLE", "JUNGLE"}.issubset(roles_set):
+                    score += 0.5 # High synergy: Mid/Jg
+                elif {"TOP", "JUNGLE"}.issubset(roles_set):
+                    score += 0.4 # High synergy: Top/Jg
+        return min(score, 3.0)
+
+    blue_synergy = get_synergy(blue_details)
+    red_synergy = get_synergy(red_details)
+
+    # Convert probability to logit, add precision duo adjustment, and convert back.
+    # 0.08 logit translates to roughly +2% flat win odds at 50%. A bot duo (1.7) will give +3.4% win odds.
+    prob = max(1e-9, min(1.0 - 1e-9, prob))
+    logit = np.log(prob / (1.0 - prob))
+    logit += (blue_synergy - red_synergy) * 0.08
+    prob = 1.0 / (1.0 + np.exp(-logit))
+
     _FEAT = ["rank", "season_wr", "form", "recent_wr", "champ_wr", "mastery", "streak", "meta_wr", "matchup"]
     features = {
         "blue": {k: round(float(blue_team_mean[i]), 3) for i, k in enumerate(_FEAT)},
         "red":  {k: round(float(red_team_mean[i]),  3) for i, k in enumerate(_FEAT)},
     }
+    # Append the synergy scores manually so it avoids ML dimension breakage
+    features["blue"]["synergy"] = blue_synergy
+    features["red"]["synergy"] = red_synergy
 
     blue_pct = max(1, min(99, round(prob * 100)))
     return {
