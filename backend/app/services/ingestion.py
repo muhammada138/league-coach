@@ -12,8 +12,8 @@ new match:
     (e.g. training on match[0] uses perf from match[1]-match[5]) — no leakage
   - Other 9 players get neutral form (0.5) — real rank/WR is the key signal
 
-Feature vector per player (7-dim):
-  [rank_score, season_wr, form_score, 0.5, 0.5, 0.0, 0.0]
+Feature vector per player (9-dim):
+  [rank_score, season_wr, form_score, 0.5, 0.5, 0.0, 0.0, meta_wr, matchup_adv]
 
 Rate limiting
 -------------
@@ -135,23 +135,41 @@ from .meta_scraper import sync_meta, get_meta_data
 
 # ... (rest of imports) ...
 
-def _player_feats(rank_entry: dict | None, form: float = 0.5, champion_id: int = 0, lobby_rank: str = "emerald", opp_id: int = 0) -> list[float]:
+def _player_feats(rank_entry: dict | None, form: float = 0.5, champion_id: int = 0, lobby_rank: str = "emerald", opp_id: int = 0, role: str = "all") -> list[float]:
     """9-dim feature vector. meta stats added from Lolalytics."""
     rank_score, season_wr = _rank_score_from_entry(rank_entry)
     
     meta = get_meta_data()
     rank_key = lobby_rank.lower()
     rank_meta = meta.get("data", {}).get(rank_key, {})
+    champs = rank_meta.get("champions", {})
     
-    cid_str = str(champion_id)
-    champ_meta = rank_meta.get(cid_str, {})
+    # Map role to Lolalytics lane key
+    role_map = {
+        "TOP": "top",
+        "JUNGLE": "jungle",
+        "MIDDLE": "middle",
+        "BOTTOM": "bottom",
+        "UTILITY": "support"
+    }
+    lane_key = role_map.get(role.upper(), "all")
+    
+    cid_str = f"{champion_id}:{lane_key}"
+    champ_meta = champs.get(cid_str, {})
+    if not champ_meta and lane_key != "all":
+        # Fallback to 'all' if specific lane data is missing
+        champ_meta = champs.get(f"{champion_id}:all", {})
+        
     meta_wr = champ_meta.get("wr", 50.0) / 100.0
     
     matchup_adv = 0.5
     if opp_id:
-        opp_meta = rank_meta.get(str(opp_id), {})
-        opp_wr = opp_meta.get("wr", 50.0) / 100.0
-        matchup_adv = 0.5 + (meta_wr - opp_wr)
+        # Matchup WR is vsWr in champ_meta['matchups'][opp_id]
+        matchups = champ_meta.get("matchups", {})
+        opp_stat = matchups.get(str(opp_id), {})
+        matchup_wr = opp_stat.get("wr")
+        if matchup_wr:
+            matchup_adv = float(matchup_wr) / 100.0
 
     return [rank_score, season_wr, form, 0.5, 0.5, 0.0, 0.0, meta_wr, matchup_adv]
 
@@ -293,6 +311,11 @@ async def _process_player(
             # Determine lobby rank (for training, we use the tier of the seed player)
             lobby_rank = (seed_rank_entry.get("tier") if seed_rank_entry else "EMERALD") or "EMERALD"
 
+            # Compute seed player's form from chronologically PRIOR matches in this same batch.
+            # ordered list is [NEWEST, ..., OLDEST]. So matches[i+1:] are older than matches[i].
+            prior_matches = [match_details[m] for m in ordered[i+1:] if m in match_details]
+            seed_form = _compute_seed_form(puuid, prior_matches)
+
             def team_vec(players: list, roles, opp_role_map) -> list[float]:
                 feats = []
                 for p in players:
@@ -305,7 +328,8 @@ async def _process_player(
                         seed_form if p.get("puuid") == puuid else 0.5,
                         champion_id=cid,
                         lobby_rank=lobby_rank,
-                        opp_id=opp_cid
+                        opp_id=opp_cid,
+                        role=role
                     )
                     feats.append(f)
                 return np.mean(feats, axis=0).tolist()
@@ -318,7 +342,7 @@ async def _process_player(
             saved += 1
 
         except Exception as exc:
-            logger.debug("Feature extraction failed for %s: %s", mid, exc)
+            logger.error("Feature extraction failed for %s: %s", mid, exc, exc_info=True)
 
     return saved
 
