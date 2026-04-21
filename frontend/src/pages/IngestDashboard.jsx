@@ -7,14 +7,19 @@ function fmt(n) {
 
 export default function IngestDashboard() {
   const [status, setStatus]   = useState(null);
+  const [metaStatus, setMetaStatus] = useState({ active: false });
   const [toggling, setToggling] = useState(false);
   const [error, setError]     = useState("");
   const intervalRef = useRef(null);
 
   const fetchStatus = async () => {
     try {
-      const data = await getIngestStatus();
-      setStatus(data);
+      const [ingestData, metaData] = await Promise.all([
+        getIngestStatus(),
+        fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/sync-status`).then(r => r.json())
+      ]);
+      setStatus(ingestData);
+      setMetaStatus(metaData);
       setError("");
     } catch {
       setError("Could not reach backend.");
@@ -143,21 +148,30 @@ export default function IngestDashboard() {
           {/* Status pill */}
           <div className="flex items-center justify-between mb-6">
             <span className="text-[11px] font-bold tracking-widest uppercase text-white/30">
-              Status
+              System Status
             </span>
-            {status === null ? (
-              <span className="text-white/20 text-xs">Loading…</span>
-            ) : (
-              <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold tracking-widest uppercase
-                px-3 py-1 rounded-full border
-                ${isPaused
-                  ? "text-amber-400 border-amber-400/30 bg-amber-400/[0.08]"
-                  : "text-emerald-400 border-emerald-400/30 bg-emerald-400/[0.08]"
-                }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${isPaused ? "bg-amber-400" : "bg-emerald-400 animate-pulse"}`} />
-                {isPaused ? "Paused" : "Running"}
-              </span>
-            )}
+            <div className="flex gap-2">
+              {metaStatus.active && (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-widest uppercase
+                  px-3 py-1 rounded-full border border-blue-400/30 bg-blue-400/[0.08] text-blue-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                  Meta Tuning
+                </span>
+              )}
+              {status === null ? (
+                <span className="text-white/20 text-xs text-right leading-[22px]">Loading…</span>
+              ) : (
+                <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold tracking-widest uppercase
+                  px-3 py-1 rounded-full border
+                  ${isPaused
+                    ? "text-amber-400 border-amber-400/30 bg-amber-400/[0.08]"
+                    : "text-emerald-400 border-emerald-400/30 bg-emerald-400/[0.08]"
+                  }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isPaused ? "bg-amber-400" : "bg-emerald-400 animate-pulse"}`} />
+                  {isPaused ? "Paused" : "Ingest Running"}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Big counter */}
