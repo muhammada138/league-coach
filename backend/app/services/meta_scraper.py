@@ -394,9 +394,9 @@ async def sync_meta(mode="full"):
                     stale = not cdata.get("matchups") or (now_ts - cdata.get("last_checked", 0)) > 86400
                     if mode == "matchups" or stale:
                         name, lane = cdata["name"], cdata["lane"]
-                        # PHASE 2: Matchups (use previous patch for higher density)
-                        logger.info("  -> Crawling matchups: %s (%s) in %s (Patch %s)", name, lane, rank, previous_patch)
-                        matchups = await fetch_champion_matchups(rank, name, lane, patch=previous_patch)
+                        # PHASE 2: Matchups (use current patch for full consistency with tierlist)
+                        logger.info("  -> Crawling matchups: %s (%s) in %s (Patch %s)", name, lane, rank, current_patch)
+                        matchups = await fetch_champion_matchups(rank, name, lane, patch=current_patch)
                         
                         full_meta[rank]["champions"][cid_str]["last_checked"] = now_ts
                         if matchups:
@@ -424,6 +424,15 @@ async def sync_meta(mode="full"):
         if not sync_state["cancel_requested"]:
             with open(META_FILE_PATH, "w") as f:
                 json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": False}, f, indent=2)
+            
+            # Write completion marker so scheduler knows the daily sync finished successfully
+            if mode == "full":
+                try:
+                    import datetime
+                    with open("backend/data/.last_full_sync", "w") as f:
+                        f.write(datetime.datetime.now().strftime("%Y-%m-%d"))
+                except: pass
+
             logger.info("Sync Process Finished.")
 
     except Exception as e:
