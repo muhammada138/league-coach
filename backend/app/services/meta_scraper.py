@@ -347,6 +347,9 @@ async def sync_meta(mode="full"):
         
         # Ensure we have tierlist data before doing matchups
         needs_tierlist = not full_meta or mode in ("full", "tierlist")
+        if mode == "full" and full_meta and (int(time.time()) - existing.get("tierlist_updated", 0)) < 43200:
+            logger.info("Tierlist fetched recently (<12h). Skipping Phase 1.")
+            needs_tierlist = False
 
         # --- PHASE 1: TIERLIST (FAST) ---
         if needs_tierlist:
@@ -375,10 +378,11 @@ async def sync_meta(mode="full"):
                     full_meta[rank]["champions"] = new_champs
 
             # Save Tierlist immediately
+            existing["tierlist_updated"] = int(time.time())
             with open(META_FILE_PATH, "w") as f:
-                json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
+                json.dump({"tierlist_updated": existing["tierlist_updated"], "updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
             logger.info("Tierlist Phase Complete.")
-
+            
         # --- PHASE 2: MATCHUPS (DEEP) ---
         if mode in ("full", "matchups") and not sync_state["cancel_requested"]:
             import random
@@ -410,7 +414,7 @@ async def sync_meta(mode="full"):
                         
                         if random.random() < 0.03: # 3% chance to save to reduce disk thrashing
                             with open(META_FILE_PATH, "w") as f:
-                                json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
+                                json.dump({"tierlist_updated": existing.get("tierlist_updated", 0), "updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
 
             tasks = []
             for rank in RANKS:
@@ -426,7 +430,7 @@ async def sync_meta(mode="full"):
 
         if not sync_state["cancel_requested"]:
             with open(META_FILE_PATH, "w") as f:
-                json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": False}, f, indent=2)
+                json.dump({"tierlist_updated": existing.get("tierlist_updated", 0), "updated_at": time.time(), "data": full_meta, "is_partial": False}, f, indent=2)
             
             # Write completion marker so scheduler knows the daily sync finished successfully
             if mode == "full":
