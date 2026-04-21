@@ -354,8 +354,8 @@ async def sync_meta(mode="full"):
                 if sync_state["cancel_requested"]: break
                 while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(1.0)
                 
-                logger.info("Syncing tierlist: %s (Patch %s)", rank, current_patch)
-                rank_data = await fetch_rank_meta(rank, patch=current_patch)
+                logger.info("Syncing tierlist: %s (Patch %s)", rank, previous_patch)
+                rank_data = await fetch_rank_meta(rank, patch=previous_patch)
                 if not rank_data: continue
                 
                 if rank not in full_meta:
@@ -394,9 +394,9 @@ async def sync_meta(mode="full"):
                     stale = not cdata.get("matchups") or (now_ts - cdata.get("last_checked", 0)) > 86400
                     if mode == "matchups" or stale:
                         name, lane = cdata["name"], cdata["lane"]
-                        # PHASE 2: Matchups (use current patch for full consistency with tierlist)
-                        logger.info("  -> Crawling matchups: %s (%s) in %s (Patch %s)", name, lane, rank, current_patch)
-                        matchups = await fetch_champion_matchups(rank, name, lane, patch=current_patch)
+                        # PHASE 2: Matchups (use previous patch for better sample size, as requested)
+                        logger.info("  -> Crawling matchups: %s (%s) in %s (Patch %s)", name, lane, rank, previous_patch)
+                        matchups = await fetch_champion_matchups(rank, name, lane, patch=previous_patch)
                         
                         full_meta[rank]["champions"][cid_str]["last_checked"] = now_ts
                         if matchups:
