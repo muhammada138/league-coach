@@ -1,5 +1,5 @@
 import sqlite3
-import pandas as pd
+import csv
 import json
 from pathlib import Path
 
@@ -12,29 +12,51 @@ def export():
         print(f"❌ Database not found at {DB_PATH}")
         return
 
-    print(f"📦 Exporting from {DB_PATH}...")
+    print(f"📦 Exporting from {DB_PATH} using built-in CSV module...")
     
-    with sqlite3.connect(DB_PATH) as conn:
-        df = pd.read_sql_query("SELECT * FROM training_matches", conn)
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
         
-    if df.empty:
-        print("⚠️ No data found in 'training_matches' table.")
-        return
+        cursor.execute("SELECT * FROM training_matches")
+        rows = cursor.fetchall()
+        
+        if not rows:
+            print("⚠️ No data found in 'training_matches' table.")
+            return
 
-    # Optional: Flatten the JSON columns for easier reading in Excel
-    print("🧹 Flattening features for readability...")
-    def parse_feats(x):
-        try:
-            return "|".join([f"{v:.3f}" for v in json.loads(x)])
-        except:
-            return x
+        # Get column names
+        fields = rows[0].keys()
+        
+        with open(EXPORT_PATH, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=list(fields) + ['blue_feats_flat', 'red_feats_flat'])
+            writer.writeheader()
+            
+            for row in rows:
+                d = dict(row)
+                
+                # Flatten features for readability
+                try:
+                    b_list = json.loads(d['blue_feats'])
+                    d['blue_feats_flat'] = "|".join([f"{v:.3f}" for v in b_list])
+                except:
+                    d['blue_feats_flat'] = ""
+                    
+                try:
+                    r_list = json.loads(d['red_feats'])
+                    d['red_feats_flat'] = "|".join([f"{v:.3f}" for v in r_list])
+                except:
+                    d['red_feats_flat'] = ""
+                
+                writer.writerow(d)
 
-    df['blue_feats_flat'] = df['blue_feats'].apply(parse_feats)
-    df['red_feats_flat'] = df['red_feats'].apply(parse_feats)
+        print(f"✅ Success! Data exported to: {EXPORT_PATH}")
+        print(f"📊 Total Rows: {len(rows)}")
+        conn.close()
 
-    df.to_csv(EXPORT_PATH, index=False)
-    print(f"✅ Success! Data exported to: {EXPORT_PATH}")
-    print(f"📊 Total Rows: {len(df)}")
+    except Exception as e:
+        print(f"❌ Export failed: {e}")
 
 if __name__ == "__main__":
     export()
