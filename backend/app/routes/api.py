@@ -552,6 +552,12 @@ async def ingest_toggle():
     return await db.toggle_ingestion()
 
 
+@router.post("/admin/retrain")
+async def admin_retrain():
+    """Trigger ML model retraining and return accuracy stats."""
+    return win_predictor.retrain_on_real_data()
+
+
 @router.get("/admin/data-summary")
 async def admin_data_summary():
     from ..services.meta_scraper import get_meta_data, _CHAMP_ID_MAP, is_sync_active, is_sync_paused, get_sync_mode
