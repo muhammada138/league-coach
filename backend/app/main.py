@@ -30,21 +30,32 @@ async def _meta_scheduler():
         asyncio.create_task(meta_scraper.sync_meta(mode="tierlist"))
         last_tierlist_ts = time.time()
 
-    # Try to resume the last_full_date from the meta file's timestamp to avoid double sync on restarts
-    last_full_date = datetime.fromtimestamp(last_tierlist_ts).date() if last_tierlist_ts > 0 else None
+    # Persistent tracker for the daily full sync
+    sync_marker_path = "backend/data/.last_full_sync"
+    def get_last_full_date():
+        try:
+            with open(sync_marker_path, "r") as f:
+                return f.read().strip()
+        except: return None
+    
+    last_full_date_str = get_last_full_date()
 
     while True:
         await asyncio.sleep(60)
         now = datetime.now()
         now_ts = time.time()
-        today = now.date()
+        today_str = now.strftime("%Y-%m-%d")
 
         # 1. Full Deep Sync Priority (Any time after 5:30 AM that hasn't run today)
         is_after_trigger = (now.hour > 5 or (now.hour == 5 and now.minute >= 30))
         
-        if is_after_trigger and last_full_date != today:
+        if is_after_trigger and last_full_date_str != today_str:
             if not meta_scraper.is_sync_active():
-                last_full_date = today
+                last_full_date_str = today_str
+                try:
+                    with open(sync_marker_path, "w") as f: f.write(today_str)
+                except: pass
+
                 logger.info("Scheduler: starting daily full sync (Target: 5:30 AM, Actual: %02d:%02d)", now.hour, now.minute)
                 # Use mode="full" to ensure both tierlist and matchups are refreshed together daily
                 asyncio.create_task(meta_scraper.sync_meta(mode="full"))

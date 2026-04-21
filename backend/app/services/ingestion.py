@@ -222,21 +222,21 @@ async def _process_player(
         logger.debug("Match IDs failed for %.12s: %s", puuid, exc)
         return 0
 
-    # Step 2: Fetch match details for all new matches
-    match_details: dict[str, dict] = {}
-    for mid in match_ids:
-        status = db._get_ingestion_status_sync()
-        if status["is_paused"] or status["processed_count"] >= status["total_target"]:
-            break
-        if await db.has_training_match(mid):
-            continue
+    # Step 2: Fetch match details for all new matches — Parallelized
+    status = db._get_ingestion_status_sync()
+    if status["is_paused"] or status["processed_count"] >= status["total_target"]:
+        return 0
+
+    new_mids = [mid for mid in match_ids if not await db.has_training_match(mid)]
+    if not new_mids: return 0
+
+    async def _fetch_detail(mid):
         try:
-            match_details[mid] = await _riot_get(
-                client,
-                f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}",
-            )
-        except Exception as exc:
-            logger.debug("Match fetch failed %s: %s", mid, exc)
+            return mid, await _riot_get(client, f"https://{RIOT_ROUTING}.api.riotgames.com/lol/match/v5/matches/{mid}")
+        except Exception: return mid, None
+
+    detail_results = await asyncio.gather(*[_fetch_detail(mid) for mid in new_mids])
+    match_details: dict[str, dict] = {mid: data for mid, data in detail_results if data}
 
     if not match_details:
         return 0
@@ -249,33 +249,31 @@ async def _process_player(
             if uid and uid != puuid:
                 other_puuids.add(uid)
 
-    # Step 4: Resolve rank for every unique non-seed participant.
-    # Check the global TTL cache first — participants repeat across seed players
-    # within the same rank tier, so cache hit rate climbs quickly after warmup.
-    _rank_cache_set(puuid, seed_rank_entry)  # seed is already fresh
+    # Step 4: Resolve rank for every unique non-seed participant — Parallelized
+    _rank_cache_set(puuid, seed_rank_entry)
     rank_cache: dict[str, dict | None] = {puuid: seed_rank_entry}
+    uncached_puuids = []
 
     for other_puuid in other_puuids:
         hit, cached_entry = _rank_cache_get(other_puuid)
         if hit:
             rank_cache[other_puuid] = cached_entry
-            continue
+        else:
+            uncached_puuids.append(other_puuid)
 
-        status = db._get_ingestion_status_sync()
-        if status["is_paused"]:
-            return 0
-
+    async def _fetch_rank(target_puuid):
         try:
-            entries = await _riot_get(
-                client,
-                f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{other_puuid}",
-            )
-        except Exception:
-            entries = []
+            entries = await _riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{target_puuid}")
+            entry = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
+            _rank_cache_set(target_puuid, entry)
+            return target_puuid, entry
+        except: 
+            return target_puuid, None
 
-        entry = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
-        _rank_cache_set(other_puuid, entry)
-        rank_cache[other_puuid] = entry
+    if uncached_puuids:
+        rank_results = await asyncio.gather(*[_fetch_rank(u) for u in uncached_puuids])
+        for target_puuid, entry in rank_results:
+            rank_cache[target_puuid] = entry
 
     # Step 5: Build ordered list of new match IDs (newest → oldest, API order)
     ordered = [mid for mid in match_ids if mid in match_details]
