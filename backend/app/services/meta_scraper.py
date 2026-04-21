@@ -403,19 +403,22 @@ async def sync_meta(mode="full"):
                     if lane == "all": return # Skip "all" lane to save massive time; we only need specific lane matchups
 
                     if mode == "matchups" or stale:
-                        # PHASE 2: Matchups (use previous patch for better sample size, as requested)
-                        logger.info("  -> Crawling matchups: %s (%s) in %s (Patch %s)", name, lane, rank, previous_patch)
-                        matchups = await fetch_champion_matchups(rank, name, lane, patch=previous_patch)
-                        
-                        full_meta[rank]["champions"][cid_str]["last_checked"] = now_ts
-                        if matchups:
-                            full_meta[rank]["champions"][cid_str]["matchups"] = matchups
-                        
-                        # 0.35s delay + HTTP time natively hits ~1-1.5 total hours
-                        await asyncio.sleep(0.35)
-                        
-                        if random.random() < 0.03: # 3% chance to save to reduce disk thrashing
-                            save_meta_data({"tierlist_updated": existing.get("tierlist_updated", 0), "updated_at": time.time(), "data": full_meta, "is_partial": True})
+                        try:
+                            # PHASE 2: Matchups (use previous patch for better sample size, as requested)
+                            logger.info("  -> Crawling matchups: %s (%s) in %s (Patch %s)", name, lane, rank, previous_patch)
+                            matchups = await fetch_champion_matchups(rank, name, lane, patch=previous_patch)
+                            
+                            full_meta[rank]["champions"][cid_str]["last_checked"] = now_ts
+                            if matchups:
+                                full_meta[rank]["champions"][cid_str]["matchups"] = matchups
+                            
+                            # 0.35s delay + HTTP time natively hits ~1-1.5 total hours
+                            await asyncio.sleep(0.35)
+                            
+                            if random.random() < 0.03: # 3% chance to save to reduce disk thrashing
+                                save_meta_data({"tierlist_updated": existing.get("tierlist_updated", 0), "updated_at": time.time(), "data": full_meta, "is_partial": True})
+                        except Exception as e:
+                            logger.error("  -> Failed to crawl %s (%s) in %s: %s", name, lane, rank, e)
 
             tasks = []
             for rank in RANKS:
@@ -426,7 +429,7 @@ async def sync_meta(mode="full"):
                     tasks.append(crawl_one(rank, cid_str, cdata))
             
             if tasks:
-                await asyncio.gather(*tasks)
+                await asyncio.gather(*tasks, return_exceptions=True)
             logger.info("Matchup Phase Complete.")
 
         if not sync_state["cancel_requested"]:
