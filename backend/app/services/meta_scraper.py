@@ -392,8 +392,11 @@ async def sync_meta(mode="full"):
                     
                     # Force re-crawl on explicit matchups mode; otherwise skip if fresh (<24h)
                     stale = not cdata.get("matchups") or (now_ts - cdata.get("last_checked", 0)) > 86400
+                    name, lane = cdata["name"], cdata["lane"]
+                    
+                    if lane == "all": return # Skip "all" lane to save massive time; we only need specific lane matchups
+
                     if mode == "matchups" or stale:
-                        name, lane = cdata["name"], cdata["lane"]
                         # PHASE 2: Matchups (use previous patch for better sample size, as requested)
                         logger.info("  -> Crawling matchups: %s (%s) in %s (Patch %s)", name, lane, rank, previous_patch)
                         matchups = await fetch_champion_matchups(rank, name, lane, patch=previous_patch)
@@ -402,10 +405,10 @@ async def sync_meta(mode="full"):
                         if matchups:
                             full_meta[rank]["champions"][cid_str]["matchups"] = matchups
                         
-                        # 5s delay ensures full collection takes ~1.5 hours and is anti-bot safe
-                        await asyncio.sleep(5.0)
+                        # 0.35s delay + HTTP time natively hits ~1-1.5 total hours
+                        await asyncio.sleep(0.35)
                         
-                        if random.random() < 0.15: # 15% chance to save
+                        if random.random() < 0.03: # 3% chance to save to reduce disk thrashing
                             with open(META_FILE_PATH, "w") as f:
                                 json.dump({"updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
 
