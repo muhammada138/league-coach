@@ -410,10 +410,17 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
   const uid = useId().replace(/:/g, "");
   const currentLP = profile?.lp ?? 0;
   const rankLabel = profile?.tier === "UNRANKED" ? "Unranked" : `${profile?.tier} ${profile?.division}`;
-  if (!games || games.length === 0) return null;
-  const ordered = [...games].reverse();
 
-  const series = (() => {
+  // ⚡ Bolt: Cache reversed games array to prevent recalculating on every hover event
+  const ordered = useMemo(() => {
+    if (!games) return [];
+    return [...games].reverse()
+  }, [games]);
+
+  // ⚡ Bolt: Cache series calculation containing expensive localStorage read/parse
+  // This prevents synchronous I/O blocking the main thread during rapid hover interactions
+  const series = useMemo(() => {
+    if (!games || games.length === 0) return [];
     const storageKey = `${cachePrefix}_${puuid}`;
     const fingerprint = `${currentLP}:${games.map((g) => g?.matchId).join(",")}`;
     try {
@@ -423,7 +430,9 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
     const computed = computeLPSeries(games, currentLP);
     try { localStorage.setItem(storageKey, JSON.stringify({ fingerprint, series: computed })); } catch { /* ignore */ }
     return computed;
-  })();
+  }, [cachePrefix, puuid, currentLP, games]);
+
+  if (!games || games.length === 0) return null;
 
   const min = Math.min(...series);
   const max = Math.max(...series);
@@ -569,7 +578,7 @@ const RankDetail = ({ data }) => (
 
 const WRDetail = ({ data }) => {
   const wr = data.wr || 0.5;
-  const games = data.total ?? ((data.wins || 0) + (data.losses || 0)) || 0;
+  const games = data.total ?? (((data.wins || 0) + (data.losses || 0)) || 0);
   return (
     <div className="flex flex-col items-end leading-none">
       <span className={`text-[11px] font-bold ${wr >= 0.55 ? 'text-emerald-400' : wr >= 0.45 ? 'text-white/70' : 'text-red-400'}`}>
@@ -1047,9 +1056,14 @@ const toAbsLP = (tier, div, lp) => (TIER_BASE_LP[tier] ?? 1200) + (DIV_BASE_LP[d
 function LpHistoryGraph({ history }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const uid = useId().replace(/:/g, "");
-  if (!history || history.length < 2) return null;
 
-  const series = history.map((h) => ({ ...h, absLp: toAbsLP(h.tier, h.division, h.lp) }));
+  // ⚡ Bolt: Cache array mapping to prevent object creation on every hover event render
+  const series = useMemo(() => {
+    if (!history) return [];
+    return history.map((h) => ({ ...h, absLp: toAbsLP(h.tier, h.division, h.lp) }));
+  }, [history]);
+
+  if (!history || history.length < 2) return null;
 
   const W = 260, H = 56, padX = 8, padY = 8;
   const innerW = W - 2 * padX, innerH = H - 2 * padY;
