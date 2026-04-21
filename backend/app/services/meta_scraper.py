@@ -382,7 +382,7 @@ async def sync_meta(mode="full"):
         # --- PHASE 2: MATCHUPS (DEEP) ---
         if mode in ("full", "matchups") and not sync_state["cancel_requested"]:
             import random
-            sem = asyncio.Semaphore(2)
+            sem = asyncio.Semaphore(1)
             now_ts = int(time.time())
 
             async def crawl_one(rank, cid_str, cdata):
@@ -402,7 +402,8 @@ async def sync_meta(mode="full"):
                         if matchups:
                             full_meta[rank]["champions"][cid_str]["matchups"] = matchups
                         
-                        await asyncio.sleep(2.0)
+                        # 5s delay ensures full collection takes ~1.5 hours and is anti-bot safe
+                        await asyncio.sleep(5.0)
                         
                         if random.random() < 0.15: # 15% chance to save
                             with open(META_FILE_PATH, "w") as f:
