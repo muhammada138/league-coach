@@ -617,17 +617,32 @@ def retrain_on_real_data() -> dict:
             _model = model
             return {"ok": True, "source": "synthetic-only", "real_rows": 0, "synthetic_rows": 20_000, "test_accuracy": round(acc, 4)}
 
-        # Build feature matrix — no synthetic mixing at this scale
+        # Build feature matrix — skip any legacy rows with mismatched feature counts
         X_all, y_all = [], []
         for row in real_rows:
-            blue = np.array(json.loads(row["blue_feats"]), dtype=float)
-            red  = np.array(json.loads(row["red_feats"]),  dtype=float)
-            if zero_form:
-                blue[2] = 0.5
-                red[2]  = 0.5
-            diff = blue - red
-            X_all.append(np.concatenate([blue, red, diff]))
-            y_all.append(int(row["blue_won"]))
+            try:
+                b_raw = json.loads(row["blue_feats"])
+                r_raw = json.loads(row["red_feats"])
+                
+                # Check for 9-dim features (standard for current version)
+                if len(b_raw) != 9 or len(r_raw) != 9:
+                    continue
+                    
+                blue = np.array(b_raw, dtype=float)
+                red  = np.array(r_raw,  dtype=float)
+                
+                if zero_form:
+                    blue[2] = 0.5
+                    red[2]  = 0.5
+                    
+                diff = blue - red
+                X_all.append(np.concatenate([blue, red, diff]))
+                y_all.append(int(row["blue_won"]))
+            except Exception:
+                continue
+
+        if not X_all:
+            return {"ok": False, "error": "No valid training rows found after length filtering"}
 
         X = np.array(X_all)
         y = np.array(y_all)
