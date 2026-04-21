@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 async def _meta_scheduler():
     """Tierlist refresh every 4 h; full deep sync daily at 5:30 AM server time."""
-    await asyncio.sleep(30)  # let uvicorn finish startup
+    await asyncio.sleep(10)  # let uvicorn finish startup
 
     # If meta data is missing or stale, do an immediate tierlist sync
     meta = meta_scraper.get_meta_data()

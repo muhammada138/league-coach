@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { getIngestStatus, toggleIngest } from "../api/riot";
+import { getIngestStatus, toggleIngest, getSyncStatus } from "../api/riot";
 
 function fmt(n) {
   return n?.toLocaleString() ?? "0";
@@ -16,7 +16,7 @@ export default function IngestDashboard() {
     try {
       const [ingestData, metaData] = await Promise.all([
         getIngestStatus(),
-        fetch(`${import.meta.env.VITE_API_BASE_URL}/admin/sync-status`).then(r => r.json())
+        getSyncStatus()
       ]);
       setStatus(ingestData);
       setMetaStatus(metaData);

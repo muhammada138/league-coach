@@ -56,6 +56,9 @@ export const syncMeta = (mode = "full") =>
 export const cancelSync = () =>
   api.post("/admin/cancel-sync").then((r) => r.data);
 
+export const getSyncStatus = () =>
+  api.get("/admin/sync-status").then((r) => r.data);
+
 export const toggleSyncPause = () =>
   api.post("/admin/toggle-sync-pause").then((r) => r.data);
 
