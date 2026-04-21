@@ -313,14 +313,21 @@ async def live_enrich(body: LiveEnrichRequest):
         api_failed = False
         try:
             async with httpx.AsyncClient(timeout=25.0) as client:
-                entries, match_ids = await asyncio.gather(
+                entries, match_ids, mastery_data = await asyncio.gather(
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
                     riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
+                    riot_get(client, f"https://{region}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/{puuid}/top?count=20"),
                     return_exceptions=True,
                 )
 
                 if isinstance(entries, Exception) or isinstance(match_ids, Exception):
                     api_failed = True
+                    
+                high_mastery_champs = []
+                if not isinstance(mastery_data, Exception):
+                    for champ_mast in mastery_data:
+                        if champ_mast.get("championPoints", 0) >= 400000:
+                            high_mastery_champs.append(str(champ_mast.get("championId")))
 
                 # Rank lookup — ranked queues use the matching entry; normals fall back to solo rank as skill proxy
                 if not isinstance(entries, Exception):
@@ -404,6 +411,7 @@ async def live_enrich(body: LiveEnrichRequest):
                             "recent_wr": recent_wr,
                             "champ_wr_map": champ_wr_map,
                             "main_champs": main_champs,
+                            "high_mastery_champs": high_mastery_champs,
                             "streak": streak,
                             "most_common_position": most_common_pos,
                         })
