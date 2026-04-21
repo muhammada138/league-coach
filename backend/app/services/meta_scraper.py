@@ -360,8 +360,8 @@ async def sync_meta(mode="full"):
                 if sync_state["cancel_requested"]: break
                 while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(1.0)
                 
-                logger.info("Syncing tierlist: %s (Patch %s)", rank, previous_patch)
-                rank_data = await fetch_rank_meta(rank, patch=previous_patch)
+                logger.info("Syncing tierlist: %s (Patch %s)", rank, current_patch)
+                rank_data = await fetch_rank_meta(rank, patch=current_patch)
                 if not rank_data: continue
                 
                 if rank not in full_meta:
