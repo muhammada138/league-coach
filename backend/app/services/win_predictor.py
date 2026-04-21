@@ -546,11 +546,31 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
     blue_synergy = get_synergy(blue_details)
     red_synergy = get_synergy(red_details)
 
-    # Convert probability to logit, add precision duo adjustment, and convert back.
-    # 0.08 logit translates to roughly +2% flat win odds at 50%. A bot duo (1.7) will give +3.4% win odds.
+    # --- SMURF ADJUSTMENT ---
+    # Smurfs possess significantly higher individual skill than their current rank suggests.
+    def get_smurf_bonus(team_details):
+        bonus = 0.0
+        for d in team_details:
+            if not d: continue
+            puuid = d.get("puuid")
+            stats = live_stats.get(puuid, {})
+            if stats.get("is_smurf"):
+                # A single smurf is a massive threat (+2.5% odds)
+                bonus += 1.0 
+        return min(bonus, 2.5) # Cap at 2.5 smurfs worth of impact
+
+    blue_smurf = get_smurf_bonus(blue_details)
+    red_smurf = get_smurf_bonus(red_details)
+
+    # Convert probability to logit, add precision adjustments, and convert back.
+    # 0.08 logit translates to roughly +2% flat win odds at 50%.
     prob = max(1e-9, min(1.0 - 1e-9, prob))
     logit = np.log(prob / (1.0 - prob))
+    
+    # Apply Duo Synergy (coord) + Smurf Bonus (skill)
     logit += (blue_synergy - red_synergy) * 0.08
+    logit += (blue_smurf - red_smurf) * 0.12 # Smurfs have higher individual agency than duos
+    
     prob = 1.0 / (1.0 + np.exp(-logit))
 
     _FEAT = ["rank", "season_wr", "form", "recent_wr", "champ_wr", "mastery", "streak", "meta_wr", "matchup"]
@@ -558,9 +578,11 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
         "blue": {k: round(float(blue_team_mean[i]), 3) for i, k in enumerate(_FEAT)},
         "red":  {k: round(float(red_team_mean[i]),  3) for i, k in enumerate(_FEAT)},
     }
-    # Append the synergy scores manually so it avoids ML dimension breakage
+    # Append stats manually so it avoids ML dimension breakage
     features["blue"]["synergy"] = blue_synergy
     features["red"]["synergy"] = red_synergy
+    features["blue"]["smurf_threat"] = blue_smurf
+    features["red"]["smurf_threat"] = red_smurf
 
     blue_pct = max(1, min(99, round(prob * 100)))
     return {

@@ -948,10 +948,14 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
                 Duo
               </span>
             )}
-            {stats?.summonerLevel > 0 && stats?.summonerLevel < 70 && (
-              (stats?.wins + stats?.losses > 0 && (stats?.wins / (stats?.wins + stats?.losses)) > 0.60) || stats?.recent_wr >= 0.60
-            ) && (
-              <span title={`Level ${stats.summonerLevel} with high winrate`} className="text-[8px] font-black px-1 rounded border border-blue-400/40 text-blue-400 bg-blue-400/10 uppercase tracking-tighter">
+            {stats?.is_smurf && (
+              <span 
+                title={stats.smurf_reason} 
+                className="group/smurf relative flex items-center gap-1 text-[8px] font-black px-1.5 py-0.5 rounded border border-amber-400/40 text-amber-300 bg-amber-400/10 uppercase tracking-tighter animate-pulse"
+              >
+                <svg className="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
                 Smurf
               </span>
             )}

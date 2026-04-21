@@ -410,6 +410,23 @@ async def live_enrich(body: LiveEnrichRequest):
                         # Export objects so frontend can show score/matchId on hover
                         ui_last5 = [{"win": g["win"], "score": g["score"], "matchId": g["matchId"]} for g in recent_results[:5]]
                         
+                        # -- Smurf Detection --
+                        # Rules: Level < 80, Overall WR > 60%, and Recent Performance > 60
+                        lvl = base.get("summonerLevel", 300)
+                        total_games = base.get("wins", 0) + base.get("losses", 0)
+                        overall_wr = (base.get("wins", 0) / total_games) if total_games > 10 else 0.5
+                        
+                        is_smurf = False
+                        smurf_reason = ""
+                        
+                        if lvl < 80:
+                            if overall_wr > 0.62:
+                                is_smurf = True
+                                smurf_reason = "Low level / High WR"
+                            elif avg_score > 70:
+                                is_smurf = True
+                                smurf_reason = "Low level / Dominant Form"
+
                         base.update({
                             "last5": ui_last5, 
                             "last5_details": recent_results[:5], # Full data for internal duo-detection
@@ -420,6 +437,8 @@ async def live_enrich(body: LiveEnrichRequest):
                             "high_mastery_champs": high_mastery_champs,
                             "streak": streak,
                             "most_common_position": most_common_pos,
+                            "is_smurf": is_smurf,
+                            "smurf_reason": smurf_reason
                         })
         except Exception:
             api_failed = True
