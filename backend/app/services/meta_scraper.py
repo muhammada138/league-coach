@@ -7,9 +7,12 @@ import re
 from pathlib import Path
 from ..state import META_FILE_PATH, sync_state
 
-logger = logging.getLogger(__name__)
+import re
+import os
+from pathlib import Path
+from ..state import META_FILE_PATH, sync_state, DATA_DIR
 
-# --- CACHE ---
+logger = logging.getLogger(__name__)
 _CACHED_FULL_VERSION = None
 _VERSION_CACHE_TIME = 0
 VERSION_CACHE_DURATION = 12 * 3600  # 12 hours
@@ -379,8 +382,7 @@ async def sync_meta(mode="full"):
 
             # Save Tierlist immediately
             existing["tierlist_updated"] = int(time.time())
-            with open(META_FILE_PATH, "w") as f:
-                json.dump({"tierlist_updated": existing["tierlist_updated"], "updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
+            save_meta_data({"tierlist_updated": existing["tierlist_updated"], "updated_at": time.time(), "data": full_meta, "is_partial": True})
             logger.info("Tierlist Phase Complete.")
             
         # --- PHASE 2: MATCHUPS (DEEP) ---
@@ -413,8 +415,7 @@ async def sync_meta(mode="full"):
                         await asyncio.sleep(0.35)
                         
                         if random.random() < 0.03: # 3% chance to save to reduce disk thrashing
-                            with open(META_FILE_PATH, "w") as f:
-                                json.dump({"tierlist_updated": existing.get("tierlist_updated", 0), "updated_at": time.time(), "data": full_meta, "is_partial": True}, f, indent=2)
+                            save_meta_data({"tierlist_updated": existing.get("tierlist_updated", 0), "updated_at": time.time(), "data": full_meta, "is_partial": True})
 
             tasks = []
             for rank in RANKS:
@@ -429,14 +430,13 @@ async def sync_meta(mode="full"):
             logger.info("Matchup Phase Complete.")
 
         if not sync_state["cancel_requested"]:
-            with open(META_FILE_PATH, "w") as f:
-                json.dump({"tierlist_updated": existing.get("tierlist_updated", 0), "updated_at": time.time(), "data": full_meta, "is_partial": False}, f, indent=2)
+            save_meta_data({"tierlist_updated": existing.get("tierlist_updated", 0), "updated_at": time.time(), "data": full_meta, "is_partial": False})
             
             # Write completion marker so scheduler knows the daily sync finished successfully
             if mode == "full":
                 try:
                     import datetime
-                    with open("backend/data/.last_full_sync", "w") as f:
+                    with open(DATA_DIR / ".last_full_sync", "w") as f:
                         f.write(datetime.datetime.now().strftime("%Y-%m-%d"))
                 except: pass
 
@@ -448,6 +448,12 @@ async def sync_meta(mode="full"):
         sync_state["active"] = False
         sync_state["mode"] = "idle"
     return True
+
+def save_meta_data(data_dict: dict):
+    tmp_path = str(META_FILE_PATH) + ".tmp"
+    with open(tmp_path, "w") as f:
+        json.dump(data_dict, f, indent=2)
+    os.replace(tmp_path, META_FILE_PATH)
 
 def get_meta_data() -> dict:
     if not META_FILE_PATH.exists(): return {}
