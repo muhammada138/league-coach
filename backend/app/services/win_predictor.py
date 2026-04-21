@@ -300,9 +300,15 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
 
     # 6. Mastery score — is current champion in their top-3 most played recently?
     main_champs   = stats.get("main_champs", [])
+    high_mastery  = stats.get("high_mastery_champs", [])
+    
     mastery_score = 0.0
     is_main = False
-    if champ_id_str in main_champs:
+    
+    if champ_id_str in high_mastery:
+        is_main = True
+        mastery_score = 0.06 # Maximum mastery score for OTPs
+    elif champ_id_str in main_champs:
         is_main = True
         idx = main_champs.index(champ_id_str)
         for threshold, val in [(0, 0.06), (1, 0.04), (2, 0.02)]:
@@ -366,11 +372,30 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
     red_role_map  = {role: cid for cid, role in red_roles.items()}
 
     # Determine lobby average rank
-    known_tiers = [live_stats.get(p.get("puuid"), {}).get("tier") for p in participants if live_stats.get(p.get("puuid"), {}).get("tier")]
+    known_tiers = [live_stats.get(p.get("puuid"), {}).get("tier") for p in participants if live_stats.get(p.get("puuid"), {}).get("tier") and live_stats.get(p.get("puuid"), {}).get("tier") != "UNRANKED"]
     lobby_rank = "EMERALD"
     if known_tiers:
         # Pick the most common tier as the anchor for meta stats
         lobby_rank = Counter(known_tiers).most_common(1)[0][0]
+        
+    known_rank_scores = []
+    
+    # Calculate exactly what the rank feature is (0.0 to 1.0)
+    for p in participants:
+         tier = live_stats.get(p.get("puuid"), {}).get("tier", "UNRANKED")
+         if tier != "UNRANKED":
+             div = live_stats.get(p.get("puuid"), {}).get("division", "")
+             lp = live_stats.get(p.get("puuid"), {}).get("lp", 0)
+             if tier in ["MASTER", "GRANDMASTER", "CHALLENGER"]:
+                effective_lp = max(0, lp + {"MASTER": 0, "GRANDMASTER": 800, "CHALLENGER": 1600}.get(tier, 0))
+                known_rank_scores.append(min(0.70 + (effective_lp / 5600.0) * 0.30, 1.0))
+             else:
+                t_val = TIER_SCORE.get(tier, 3.5)
+                d_val = DIV_BONUS.get(div, 0.0)
+                lp_b = (lp / 100.0) * 0.25
+                known_rank_scores.append(min((t_val + d_val + lp_b) / MAX_RANK, 0.70))
+                
+    lobby_mean_rank_score = float(np.mean(known_rank_scores)) if known_rank_scores else 0.5
 
     # Load meta data once per prediction
     meta = get_meta_data()
@@ -387,6 +412,13 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
             if res:
                 f, d = res
                 d["puuid"] = p.get("puuid")
+                # OVERRIDE: Rank is now a Delta against the lobby mean. 0.5 means EXACTLY lobby average.
+                # Lower rank (smurf) = HIGHER delta score.
+                # Higher rank (hardstuck) = LOWER delta score.
+                raw_rank = f[0]
+                smurf_delta = 0.5 + ((lobby_mean_rank_score - raw_rank) * 2.0)
+                f[0] = max(0.0, min(1.0, smurf_delta))
+                
                 d["summonerName"] = p.get("summonerName", "Unknown")
                 d["championName"] = p.get("championName", "Unknown")
                 d["role"] = role
