@@ -199,24 +199,55 @@ async def has_history(puuid: str) -> bool:
 
 def _get_ingestion_status_sync() -> dict:
     with sqlite3.connect(DB_PATH) as conn:
+        # Migrate: ensure paused_at exists
+        cursor = conn.execute("PRAGMA table_info(ingestion_status)")
+        cols = [r[1] for r in cursor.fetchall()]
+        if 'paused_at' not in cols:
+            conn.execute("ALTER TABLE ingestion_status ADD COLUMN paused_at INTEGER DEFAULT 0")
+            conn.commit()
+
         row = conn.execute(
-            "SELECT processed_count, total_target, is_paused FROM ingestion_status WHERE id = 1"
+            "SELECT processed_count, total_target, is_paused, paused_at FROM ingestion_status WHERE id = 1"
         ).fetchone()
     if row is None:
-        return {"processed_count": 0, "total_target": 50000, "is_paused": True}
-    return {"processed_count": row[0], "total_target": row[1], "is_paused": bool(row[2])}
+        return {"processed_count": 0, "total_target": 50000, "is_paused": True, "paused_at": 0}
+    return {
+        "processed_count": row[0], 
+        "total_target": row[1], 
+        "is_paused": bool(row[2]),
+        "paused_at": row[3] or 0
+    }
 
 
 def _toggle_ingestion_sync() -> dict:
     with sqlite3.connect(DB_PATH) as conn:
+        # Migrate in-place if needed
+        cursor = conn.execute("PRAGMA table_info(ingestion_status)")
+        if 'paused_at' not in [r[1] for r in cursor.fetchall()]:
+            conn.execute("ALTER TABLE ingestion_status ADD COLUMN paused_at INTEGER DEFAULT 0")
+
+        # Get current state
+        row = conn.execute("SELECT is_paused FROM ingestion_status WHERE id = 1").fetchone()
+        was_paused = bool(row[0]) if row else True
+        new_paused = 0 if was_paused else 1
+        paused_at = int(time.time()) if new_paused else 0
+
         conn.execute(
-            "UPDATE ingestion_status SET is_paused = CASE WHEN is_paused = 1 THEN 0 ELSE 1 END WHERE id = 1"
+            "UPDATE ingestion_status SET is_paused = ?, paused_at = ? WHERE id = 1",
+            (new_paused, paused_at)
         )
         conn.commit()
+        
         row = conn.execute(
-            "SELECT processed_count, total_target, is_paused FROM ingestion_status WHERE id = 1"
+            "SELECT processed_count, total_target, is_paused, paused_at FROM ingestion_status WHERE id = 1"
         ).fetchone()
-    return {"processed_count": row[0], "total_target": row[1], "is_paused": bool(row[2])}
+
+    return {
+        "processed_count": row[0], 
+        "total_target": row[1], 
+        "is_paused": bool(row[2]),
+        "paused_at": row[3] or 0
+    }
 
 
 async def get_ingestion_status() -> dict:
@@ -225,6 +256,16 @@ async def get_ingestion_status() -> dict:
 
 async def toggle_ingestion() -> dict:
     return await asyncio.to_thread(_toggle_ingestion_sync)
+
+
+async def resume_ingestion() -> None:
+    """Explicitly turn ingestion ON and clear paused_at."""
+    await asyncio.to_thread(_resume_ingestion_sync)
+
+def _resume_ingestion_sync():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("UPDATE ingestion_status SET is_paused = 0, paused_at = 0 WHERE id = 1")
+        conn.commit()
 
 
 # ---------------------------------------------------------------------------
