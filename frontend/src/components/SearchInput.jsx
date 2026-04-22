@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import RegionSelector from "./RegionSelector";
 import useSearchHistory from "../hooks/useSearchHistory";
 
@@ -35,7 +35,7 @@ export default function SearchInput({
 
   const queryParams = gameName.trim().toLowerCase();
 
-  const suggestions = (() => {
+  const suggestions = useMemo(() => {
     const list = queryParams ? (() => {
       const seen = new Set();
       const results = [];
@@ -70,7 +70,7 @@ export default function SearchInput({
       );
       return { ...item, isSaved };
     }).slice(0, 10);
-  })();
+  }, [queryParams, suggestionTab, saved, history]);
 
   const applySuggestion = (s) => {
     setGameName(s.gameName);
