@@ -58,13 +58,11 @@ def test_load_or_train_model_success(mock_logger, mock_load, mock_path):
 
 
 @patch("app.services.win_predictor.Path")
-@patch("app.services.win_predictor._train_and_save")
 @patch("app.services.win_predictor.logger")
-def test_load_or_train_model_trains(mock_logger, mock_train_and_save, mock_path):
+def test_load_or_train_model_fallback(mock_logger, mock_path):
     mock_path.exists.return_value = False
 
     with patch("app.services.win_predictor.MODEL_PATH", mock_path):
         load_or_train_model()
 
-    mock_train_and_save.assert_called_once()
-    mock_logger.info.assert_called_with("No saved model – training on synthetic data (one-time, ~5 s)")
+    mock_logger.info.assert_called_with("No saved model – using linear fallback until retrained.")
