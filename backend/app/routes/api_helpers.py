@@ -33,6 +33,17 @@ async def _fetch_recent_matches(client: httpx.AsyncClient, puuid: str, routing: 
             match_ids = ids
             queue_used = q
             break
+            
+    # Fallback: if no matches in prioritized queues, fetch ANY match
+    if not match_ids:
+        try:
+            fallback_ids = await riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count={count}")
+            if isinstance(fallback_ids, list) and fallback_ids:
+                match_ids = fallback_ids
+                queue_used = 0 # 0 denotes mixed/unknown queue
+        except Exception:
+            pass
+
     if not match_ids: raise HTTPException(status_code=404, detail="No matches found")
     
     # Cache the result
