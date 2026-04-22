@@ -8,7 +8,10 @@ client = TestClient(app)
 def test_read_main():
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "app": "Rift IQ Backend"}
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert data["service"] == "Rift IQ Backend"
+    assert "timestamp" in data
 
 @pytest.mark.asyncio
 async def test_get_summoner_mock(mocker):
