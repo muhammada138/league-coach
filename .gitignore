@@ -51,6 +51,7 @@ ideas_temp.md
 
 # Scratch & Debug
 backend/scratch/
+backend/scripts/
 backend/data/
 test_*.html
 test_qwik.py

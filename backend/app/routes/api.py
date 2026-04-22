@@ -1,24 +1,29 @@
-from fastapi import APIRouter, HTTPException
-import httpx
 import asyncio
 import itertools
 import time
 from collections import Counter
+
+import httpx
+from fastapi import APIRouter, HTTPException
+
+# Local services and utilities
+from ..services import db, win_predictor
 from ..services.riot import (
     riot_get, get_cached_rank, get_match_timeline, 
     _compute_perf_score, _compute_diffed_lane, get_match_details
 )
 from ..services.groq import get_coaching_feedback, ask_coach_question
-from ..state import RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, CACHE_VERSION, get_routing, MATCH_FETCH_SEM
+from ..state import (
+    RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, 
+    CACHE_VERSION, get_routing, MATCH_FETCH_SEM
+)
 from ..models.requests import LiveEnrichRequest, AskRequest, WinPredictRequest
-from ..services import win_predictor
-from ..services import db
 from .api_helpers import (
     _fetch_recent_matches, _process_match, _aggregate_games_stats,
     _generate_coaching, _build_game_summaries, NUMERIC_STATS
 )
 
-router = APIRouter()
+router = APIRouter(tags=["Main API"])
 
 async def backfill_if_needed(puuid: str, tier: str, division: str, lp: int, wins: int, losses: int):
     if await db.has_history(puuid):
