@@ -349,9 +349,20 @@ def get_enriched_profile(puuid: str) -> tuple | None:
 def save_enriched_profile(puuid: str, data: dict) -> None:
     now = int(time.time())
     with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute("SELECT data FROM enriched_profiles WHERE puuid = ?", (puuid,)).fetchone()
+        if row:
+            try:
+                existing_data = json.loads(row[0])
+                existing_data.update(data)
+                merged_data = json.dumps(existing_data)
+            except Exception:
+                merged_data = json.dumps(data)
+        else:
+            merged_data = json.dumps(data)
+            
         conn.execute(
             "INSERT OR REPLACE INTO enriched_profiles (puuid, data, last_updated) VALUES (?, ?, ?)",
-            (puuid, json.dumps(data), now)
+            (puuid, merged_data, now)
         )
         conn.commit()
 
