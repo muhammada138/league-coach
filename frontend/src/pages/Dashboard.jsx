@@ -1165,26 +1165,32 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
                 )}
               </div>
             )}
+            <div className="flex items-center gap-2 ml-auto lg:ml-2">
+              <button
+                onClick={() => handleRefresh()}
+                disabled={refreshing}
+                title="Force refresh data from Riot API"
+                className={`flex-shrink-0 flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded border transition-all duration-200
+                  ${refreshing 
+                    ? "border-blue-400/20 text-blue-400/50 cursor-wait bg-blue-400/5" 
+                    : "border-blue-400/40 text-blue-400 hover:bg-blue-400/10 cursor-pointer"
+                  }`}
+              >
+                <svg className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {refreshing ? "updating" : "update"}
+              </button>
+              {profile.last_updated && (
+                <span className="text-[10px] text-slate-400 dark:text-white/20 whitespace-nowrap hidden sm:inline">
+                   {timeAgo(profile.last_updated * 1000)}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-3 mb-2">
             <p className="text-xs text-slate-400 dark:text-white/30">Level {profile.summonerLevel}</p>
             <div className="h-3 w-px bg-slate-200 dark:bg-white/10" />
-            <button
-              onClick={() => handleRefresh()}
-              disabled={refreshing}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold transition-all
-                ${refreshing ? "opacity-50 cursor-wait" : ""}`}
-            >
-              <svg className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {refreshing ? "Updating..." : "Update"}
-            </button>
-            {profile.last_updated && (
-              <span className="text-[10px] text-slate-500 dark:text-white/20 whitespace-nowrap">
-                Last updated: {timeAgo(profile.last_updated * 1000)}
-              </span>
-            )}
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className={`text-sm font-bold ${tierColor}`}>
