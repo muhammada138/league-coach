@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getAdminDataSummary, syncMeta, cancelSync, toggleSyncPause, cleanupData } from "../api/riot";
+import { getAdminDataSummary, syncMeta, cancelSync, toggleSyncPause, cleanupData, retrainModel, toggleIngest } from "../api/riot";
 
 function fmt(n) {
   return n?.toLocaleString() ?? "0";
@@ -15,6 +15,7 @@ export default function AdminData() {
   const [syncing, setSyncing] = useState(false);
   const [paused, setPaused] = useState(false);
   const [cleaning, setCleaning] = useState(false);
+  const [retraining, setRetraining] = useState(false);
   const [error, setError] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRank, setSelectedRank] = useState(searchParams.get("rank") || "emerald");
@@ -98,6 +99,32 @@ export default function AdminData() {
       setError("Cleanup failed.");
     } finally {
       setCleaning(false);
+    }
+  };
+
+  const handleRetrain = async () => {
+    setRetraining(true);
+    try {
+      const res = await retrainModel();
+      if (res.ok) {
+        alert(`Retrained successfully! Test Acc: ${(res.test_accuracy * 100).toFixed(1)}%`);
+      } else {
+        alert("Retrain failed: " + res.error);
+      }
+    } catch (err) {
+      setError("Retrain failed.");
+    } finally {
+      setRetraining(false);
+      fetchData();
+    }
+  };
+
+  const handleToggleIngest = async () => {
+    try {
+      await toggleIngest();
+      fetchData();
+    } catch (err) {
+      setError("Failed to toggle ingestion.");
     }
   };
 
@@ -199,11 +226,41 @@ export default function AdminData() {
       <div className="max-w-6xl mx-auto">
         
         {/* Header Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10">
-          <StatCard title="Training Pool" value={fmt(data?.training?.match_count)} label="Matches" color="#c89b3c" />
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-10">
+          
+          <div className="bg-white/[0.03] border border-white/[0.07] rounded-3xl p-6 backdrop-blur-sm shadow-xl flex flex-col justify-between">
+            <div>
+              <h2 className="text-[10px] font-black uppercase tracking-widest text-[#c89b3c] mb-4">Training Pool</h2>
+              <div className="text-3xl font-black mb-1 tracking-tighter tabular-nums">{fmt(data?.training?.match_count)}</div>
+              <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest">Matches</p>
+            </div>
+            <button
+              onClick={handleRetrain}
+              disabled={retraining}
+              className="mt-3 w-full bg-white/5 border border-white/10 rounded-xl py-2 hover:bg-[#c89b3c]/20 transition-all text-[9px] font-black uppercase tracking-widest text-[#c89b3c]/80 hover:text-[#c89b3c]"
+            >
+              {retraining ? "Training..." : "Retrain Model"}
+            </button>
+          </div>
+
           <StatCard title="Inventory" value={data?.meta?.champion_count} label="Champions" color="#3b82f6" />
+          
+          <div className="bg-white/[0.03] border border-white/[0.07] rounded-3xl p-6 backdrop-blur-sm shadow-xl flex flex-col justify-between">
+            <div>
+              <h2 className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mb-4">Data Ingestion</h2>
+              <div className="text-xl font-black mb-1 tracking-tighter capitalize">{data?.ingestion?.is_active ? "Running" : (data?.ingestion?.is_paused ? "Paused" : "Idle")}</div>
+              <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest">Background Worker</p>
+            </div>
+             <button
+              onClick={handleToggleIngest}
+              className={`mt-3 w-full rounded-xl py-2 transition-all text-[9px] font-black uppercase tracking-widest border ${data?.ingestion?.is_paused ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20' : 'border-rose-500/20 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20'}`}
+            >
+              {data?.ingestion?.is_paused ? "Resume Ingestion" : "Pause Ingestion"}
+            </button>
+          </div>
+
           <StatCard 
-            title="Status" 
+            title="Meta Sync" 
             value={syncing ? (paused ? "Paused" : (data?.meta?.mode === 'matchups' ? "Deep Crawl" : "Fast Sync")) : "Standby"} 
             label={data?.meta?.updated_at ? new Date(data.meta.updated_at * 1000).toLocaleTimeString() : "No Data"}
             color={syncing ? (paused ? "#f87171" : "#f59e0b") : "#10b981"} 

@@ -135,6 +135,9 @@ export const toggleSyncPause = () =>
 export const cleanupData = () =>
   api.post("/admin/cleanup").then((r) => r.data);
 
+export const retrainModel = () =>
+  api.post("/admin/retrain").then((r) => r.data);
+
 
 // --- Ingestion Control ---
 
