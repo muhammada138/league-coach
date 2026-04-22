@@ -104,6 +104,25 @@ sync_state = {
     "cancel_requested": False
 }
 
+# Rate Limit Tracking (Transient/In-memory)
+rate_limit_state = {
+    "active": False,
+    "until": 0
+}
+
+def set_rate_limited(seconds: int):
+    rate_limit_state["active"] = True
+    rate_limit_state["until"] = time.time() + seconds
+
+def is_rate_limited() -> bool:
+    if rate_limit_state["active"] and time.time() > rate_limit_state["until"]:
+        rate_limit_state["active"] = False
+        rate_limit_state["until"] = 0
+    return rate_limit_state["active"]
+
+def get_rate_limit_remaining() -> int:
+    return max(0, int(rate_limit_state["until"] - time.time()))
+
 # Global Rate Limiting Semaphore for Match Details
 # Caps total concurrent match-detail fetches across all requests/users.
 MATCH_FETCH_SEM = asyncio.Semaphore(5)
