@@ -145,6 +145,33 @@ export default function IngestDashboard() {
             </div>
           )}
 
+          {status?.rate_limited && (
+            <div className="mb-6 flex items-center justify-between gap-3 px-5 py-4 rounded-2xl
+              bg-amber-500/5 border border-amber-500/20 shadow-lg shadow-amber-900/10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center text-xl animate-pulse">
+                  🛑
+                </div>
+                <div>
+                  <div className="text-xs font-black text-amber-500 uppercase tracking-widest">
+                    Riot Rate Limited
+                  </div>
+                  <div className="text-[10px] text-amber-400/60 font-medium">
+                    The API is cooling down...
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="text-lg font-black text-amber-500 tabular-nums">
+                  {status.rate_limit_remaining}s
+                </span>
+                <span className="text-[9px] text-amber-400/40 uppercase font-black tracking-tighter">
+                  Remaining
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Status pill */}
           <div className="flex items-center justify-between mb-6">
             <span className="text-[11px] font-bold tracking-widest uppercase text-white/30">
