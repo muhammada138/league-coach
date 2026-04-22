@@ -405,35 +405,34 @@ function ErrorScreen({ message, onRetry }) {
 }
 
 // ── LP Trend Graph ─────────────────────────────────────────────────────────
-function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
+function LPGraph({ games, profile, puuid, cachePrefix = "lp", history }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const uid = useId().replace(/:/g, "");
   const currentLP = profile?.lp ?? 0;
   const rankLabel = profile?.tier === "UNRANKED" ? "Unranked" : `${profile?.tier} ${profile?.division}`;
-  if (!games || games.length === 0) return null;
-  const ordered = [...games].reverse();
+  
+  // Use persistent server history if possible, otherwise fallback to calculated last 10
+  const series = useMemo(() => {
+    if (history && history.length >= 2) {
+      return history.map(h => toAbsLP(h.tier, h.division, h.lp));
+    }
+    if (!games || games.length === 0) return [currentLP];
+    return computeLPSeries(games, currentLP);
+  }, [history, games, currentLP]);
 
-  const series = (() => {
-    const storageKey = `${cachePrefix}_${puuid}`;
-    const fingerprint = `${currentLP}:${games.map((g) => g?.matchId).join(",")}`;
-    try {
-      const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null");
-      if (stored?.fingerprint === fingerprint) return stored.series;
-    } catch { /* ignore */ }
-    const computed = computeLPSeries(games, currentLP);
-    try { localStorage.setItem(storageKey, JSON.stringify({ fingerprint, series: computed })); } catch { /* ignore */ }
-    return computed;
-  })();
+  if (series.length < 2 && (!games || games.length === 0)) return null;
 
   const min = Math.min(...series);
   const max = Math.max(...series);
-  const range = Math.max(max - min, 30);
+  const range = Math.max(max - min, 40);
   const W = 260, H = 52, padX = 8, padY = 8;
   const innerW = W - 2 * padX, innerH = H - 2 * padY;
   const toX = (i) => padX + (i / (series.length - 1)) * innerW;
   const toY = (v) => padY + innerH - ((v - min) / range) * innerH;
+
   const pathD = series.map((v, i) => `${i === 0 ? "M" : "L"} ${toX(i).toFixed(1)} ${toY(v).toFixed(1)}`).join(" ");
   const areaD = `${pathD} L ${toX(series.length - 1).toFixed(1)} ${(padY + innerH).toFixed(1)} L ${toX(0).toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
+  
   const netDelta = series[series.length - 1] - series[0];
   const lineColor = netDelta >= 0 ? "#10b981" : "#ef4444";
 
@@ -441,10 +440,14 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
     <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06]">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">
-          LP Trend · Last {games.length}
+          LP Trend · {history && history.length >= 2 ? "30d History" : `Last ${games?.length ?? 0}`}
         </span>
         <span className={`text-xs font-bold ${TIER_COLORS[profile?.tier] ?? "text-slate-700 dark:text-white/80"} transition-colors duration-200`}>
-          {hoveredIdx !== null ? `${rankLabel} · ${series[hoveredIdx]} LP` : `${rankLabel} · ${currentLP} LP`}
+          {hoveredIdx !== null ? (
+            history && history[hoveredIdx] 
+              ? `${history[hoveredIdx].tier} ${history[hoveredIdx].division} · ${history[hoveredIdx].lp} LP`
+              : `${rankLabel} · ${series[hoveredIdx]} LP`
+          ) : `${rankLabel} · ${currentLP} LP`}
         </span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
@@ -459,33 +462,46 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
         {series.map((v, i) => {
           const cx = toX(i);
           const cy = toY(v);
-          const game = i > 0 ? ordered[i - 1] : null;
-          const dotColor = i === 0 ? "#475569" : game?.win ? "#10b981" : "#ef4444";
+          
+          let dotColor = "#475569";
+          if (i > 0) {
+            if (history && history.length >= 2) {
+              const prev = history[i-1];
+              const curr = history[i];
+              const won = toAbsLP(curr.tier, curr.division, curr.lp) >= toAbsLP(prev.tier, prev.division, prev.lp);
+              dotColor = won ? "#10b981" : "#ef4444";
+            } else {
+              const ordered = [...(games || [])].reverse();
+              const game = ordered[i - 1];
+              dotColor = game?.win ? "#10b981" : "#ef4444";
+            }
+          }
+
           const hovered = hoveredIdx === i;
           return (
             <g key={i} transform={`translate(${cx.toFixed(1)},${cy.toFixed(1)})`}
               onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)}>
-              {/* glow ring */}
               <circle r="5" fill={dotColor}
                 style={{
                   opacity: hovered ? 0.22 : 0, transformBox: "fill-box", transformOrigin: "center",
                   transform: hovered ? "scale(1)" : "scale(0.3)", transition: "opacity 0.18s, transform 0.18s"
                 }} />
-              {/* main dot */}
               <circle r="3" fill={dotColor}
                 style={{
                   transformBox: "fill-box", transformOrigin: "center",
                   transform: hovered ? "scale(1.55)" : "scale(1)", transition: "transform 0.18s ease"
                 }} />
-              {/* hit area */}
               <circle r="8" fill="transparent" style={{ cursor: "default" }} />
             </g>
           );
         })}
         {hoveredIdx !== null && (() => {
           const lp = series[hoveredIdx];
-          const game = hoveredIdx > 0 ? ordered[hoveredIdx - 1] : null;
-          const label = game ? `${rankLabel} · ${lp} LP · ${game.win ? "W" : "L"}` : `${rankLabel} · ${lp} LP`;
+          const histEntry = history && history[hoveredIdx];
+          const label = histEntry 
+            ? `${histEntry.tier} ${histEntry.division} · ${lp} LP`
+            : `${rankLabel} · ${lp} LP`;
+          
           const cx = toX(hoveredIdx);
           const cy = toY(lp);
           const tw = label.length * 7 + 14;
@@ -504,7 +520,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp" }) {
         })()}
       </svg>
       <div className="flex justify-between text-[10px] text-slate-400 dark:text-white/20 mt-0.5">
-        <span>{games.length} games ago</span>
+        <span>{history && history.length >= 2 ? new Date(history[0].timestamp * 1000).toLocaleDateString() : `${games?.length ?? 0} games ago`}</span>
         <span>Now · {currentLP} LP</span>
       </div>
     </div>
@@ -1050,88 +1066,12 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
 }
 
 // ── Profile Card ───────────────────────────────────────────────────────────
-// ── 30-Day LP History Graph ─────────────────────────────────────────────────
+// ── Profile Card Support ────────────────────────────────────────────────────
 const TIER_BASE_LP = { IRON: 0, BRONZE: 400, SILVER: 800, GOLD: 1200, PLATINUM: 1600, EMERALD: 2000, DIAMOND: 2400, MASTER: 2800, GRANDMASTER: 2800, CHALLENGER: 2800 };
 const DIV_BASE_LP = { I: 300, II: 200, III: 100, IV: 0 };
 const toAbsLP = (tier, div, lp) => (TIER_BASE_LP[tier] ?? 1200) + (DIV_BASE_LP[div] ?? 0) + (lp || 0);
 
-function LpHistoryGraph({ history }) {
-  const [hoveredIdx, setHoveredIdx] = useState(null);
-  const uid = useId().replace(/:/g, "");
-  if (!history || history.length < 2) return null;
-
-  const series = history.map((h) => ({ ...h, absLp: toAbsLP(h.tier, h.division, h.lp) }));
-
-  const W = 260, H = 56, padX = 8, padY = 8;
-  const innerW = W - 2 * padX, innerH = H - 2 * padY;
-
-  const minTs = series[0].timestamp;
-  const maxTs = series[series.length - 1].timestamp;
-  const allLp = series.map((s) => s.absLp);
-  const minAbsLp = Math.min(...allLp);
-  const maxAbsLp = Math.max(...allLp);
-  const lpRange = Math.max(maxAbsLp - minAbsLp, 200);
-
-  const toX = (ts) => maxTs === minTs ? padX + innerW / 2 : padX + ((ts - minTs) / (maxTs - minTs)) * innerW;
-  const toY = (v) => padY + innerH - ((v - minAbsLp) / lpRange) * innerH;
-
-  const pathD = series.map((s, i) => `${i === 0 ? "M" : "L"} ${toX(s.timestamp).toFixed(1)} ${toY(s.absLp).toFixed(1)}`).join(" ");
-  const last = series[series.length - 1];
-  const first = series[0];
-  const lineColor = last.absLp >= first.absLp ? "#10b981" : "#ef4444";
-  const areaD = `${pathD} L ${toX(last.timestamp).toFixed(1)} ${(padY + innerH).toFixed(1)} L ${toX(first.timestamp).toFixed(1)} ${(padY + innerH).toFixed(1)} Z`;
-
-  const hovered = hoveredIdx !== null ? series[hoveredIdx] : null;
-  const display = hovered ?? last;
-  const rankLabel = (s) =>
-    s.tier === "UNRANKED" ? "Unranked"
-      : `${s.tier.charAt(0) + s.tier.slice(1).toLowerCase()} ${s.division} · ${s.lp} LP`;
-  const dateLabel = (ts) => new Date(ts * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
-  return (
-    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06]">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">
-          LP Trend · Last 30d
-        </span>
-        <span className={`text-xs font-bold ${TIER_COLORS[display.tier] ?? "text-slate-700 dark:text-white/80"} transition-colors duration-200`}>
-          {rankLabel(display)}
-        </span>
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H }}>
-        <defs>
-          <linearGradient id={uid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={lineColor} stopOpacity="0.18" />
-            <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={areaD} fill={`url(#${uid})`} />
-        <path d={pathD} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        {series.map((s, i) => {
-          const cx = toX(s.timestamp);
-          const cy = toY(s.absLp);
-          const hov = hoveredIdx === i;
-          return (
-            <g key={i} transform={`translate(${cx.toFixed(1)},${cy.toFixed(1)})`}
-              onMouseEnter={() => setHoveredIdx(i)} onMouseLeave={() => setHoveredIdx(null)}>
-              <circle r="7" fill={lineColor} fillOpacity={hov ? 0.15 : 0}
-                style={{ transition: "fill-opacity 0.15s" }} />
-              <circle r={hov ? 3.5 : 2} fill={lineColor} stroke="white" strokeWidth="1.2"
-                style={{ transition: "r 0.15s" }} />
-            </g>
-          );
-        })}
-      </svg>
-      <div className="flex justify-between mt-0.5">
-        <span className="text-[9px] text-slate-400 dark:text-white/20">{dateLabel(minTs)}</span>
-        {hovered && <span className="text-[9px] text-slate-400 dark:text-white/20">{dateLabel(hovered.timestamp)}</span>}
-        <span className="text-[9px] text-slate-400 dark:text-white/20">Now</span>
-      </div>
-    </div>
-  );
-}
-
-function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked", region }) {
+function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked", region, lpHistory }) {
   const [iconFailed, setIconFailed] = useState(false);
   if (!profile) return null;
   const displayProfile = queueTab === "flex" && profile.flex
@@ -1263,12 +1203,14 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
           </div>
         </div>
       </div>
-      {lpHistory && lpHistory.length >= 2 ? (
-        <LpHistoryGraph history={lpHistory} />
-      ) : (
-        games && games.length > 0 && (
-          <LPGraph games={games} profile={displayProfile} puuid={puuid} cachePrefix={queueTab === "flex" ? "lp_flex" : "lp"} />
-        )
+      {games && games.length > 0 && (
+        <LPGraph 
+          games={games} 
+          profile={displayProfile} 
+          puuid={puuid} 
+          history={lpHistory}
+          cachePrefix={queueTab === "flex" ? "lp_flex" : "lp"} 
+        />
       )}
     </div>
   );
