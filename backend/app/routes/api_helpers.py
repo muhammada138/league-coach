@@ -3,7 +3,7 @@ from collections import Counter
 from fastapi import HTTPException
 import httpx
 import asyncio
-
+from ..state import match_ids_cache
 from ..services.riot import riot_get, _compute_perf_score, _compute_diffed_lane
 from ..services.groq import get_coaching_feedback
 
@@ -14,6 +14,12 @@ NUMERIC_STATS = [
 ]
 
 async def _fetch_recent_matches(client: httpx.AsyncClient, puuid: str, routing: str, count: int) -> Tuple[List[str], int, List[Any]]:
+    cache_key = f"{puuid}_{count}"
+    if cache_key in match_ids_cache:
+        cached_ids, cached_q = match_ids_cache[cache_key]
+        # We still need match_datas, but get_match_details in api.py handles its own cache
+        return cached_ids, cached_q, []
+
     queue_priorities = [420, 440, 400]
     id_tasks = [
         riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count={count}&queue={q}")
@@ -28,6 +34,10 @@ async def _fetch_recent_matches(client: httpx.AsyncClient, puuid: str, routing: 
             queue_used = q
             break
     if not match_ids: raise HTTPException(status_code=404, detail="No matches found")
+    
+    # Cache the result
+    match_ids_cache[cache_key] = (match_ids, queue_used)
+
     match_tasks = [riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/{mid}") for mid in match_ids]
     match_datas = await asyncio.gather(*match_tasks, return_exceptions=True)
     return match_ids, queue_used, match_datas

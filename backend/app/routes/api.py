@@ -82,42 +82,50 @@ async def get_summoner(game_name: str, tag_line: str, region: str = RIOT_REGION)
     return {"puuid": data["puuid"], "gameName": data["gameName"], "tagLine": data["tagLine"]}
 
 @router.get("/profile/{puuid}")
-async def get_profile(puuid: str, region: str = RIOT_REGION):
+async def get_profile(puuid: str, region: str = RIOT_REGION, force: bool = False):
+    if not force:
+        cached = db.get_enriched_profile(puuid)
+        if cached:
+            data, ts = cached
+            data["last_updated"] = ts
+            return data
+
+    from ..state import summoner_cache
     async with httpx.AsyncClient() as client:
         summoner, entries = await asyncio.gather(
             riot_get(client, f"https://{region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"),
             riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
         )
-    summoner_level = summoner.get("summonerLevel", 0)
+        summoner_level = summoner.get("summonerLevel", 0)
+        profile_icon_id = summoner.get("profileIconId", 0)
+        summoner_cache.set(puuid, (summoner_level, profile_icon_id))
+    
     ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
     flex   = next((e for e in entries if e.get("queueType") == "RANKED_FLEX_SR"),   None)
-    profile_icon_id = summoner.get("profileIconId", 0)
+    
     def entry_data(e):
         if e is None:
             return {"tier": "UNRANKED", "division": "", "lp": 0, "wins": 0, "losses": 0}
         return {"tier": e["tier"], "division": e["rank"], "lp": e["leaguePoints"], "wins": e["wins"], "losses": e["losses"]}
+    
     ranked_data = entry_data(ranked)
     flex_data   = entry_data(flex)
 
-    # Fire-and-forget LP snapshot & backfill — doesn't block the response
-    asyncio.create_task(db.record_lp_snapshot(
-        puuid,
-        ranked_data["tier"], ranked_data["division"],
-        ranked_data["lp"], ranked_data["wins"], ranked_data["losses"],
-        queue='RANKED_SOLO_5x5'
-    ))
-    asyncio.create_task(db.record_lp_snapshot(
-        puuid,
-        flex_data["tier"], flex_data["division"],
-        flex_data["lp"], flex_data["wins"], flex_data["losses"],
-        queue='RANKED_FLEX_SR'
-    ))
+    res = {
+        "summonerLevel": summoner_level,
+        "profileIconId": profile_icon_id,
+        **ranked_data,
+        "flex": flex_data,
+    }
     
-    asyncio.create_task(backfill_if_needed(
-        puuid,
-        ranked_data["tier"], ranked_data["division"],
-        ranked_data["lp"], ranked_data["wins"], ranked_data["losses"],
-    ))
+    # Save to persistent cache
+    db.save_enriched_profile(puuid, res)
+
+    asyncio.create_task(db.record_lp_snapshot(puuid, ranked_data["tier"], ranked_data["division"], ranked_data["lp"], ranked_data["wins"], ranked_data["losses"], queue='RANKED_SOLO_5x5'))
+    asyncio.create_task(db.record_lp_snapshot(puuid, flex_data["tier"], flex_data["division"], flex_data["lp"], flex_data["wins"], flex_data["losses"], queue='RANKED_FLEX_SR'))
+    asyncio.create_task(backfill_if_needed(puuid, ranked_data["tier"], ranked_data["division"], ranked_data["lp"], ranked_data["wins"], ranked_data["losses"]))
+    
+    return res
     return {
         "summonerLevel": summoner_level,
         "profileIconId": profile_icon_id,
@@ -131,7 +139,15 @@ async def lp_history(puuid: str, queue: str = 'RANKED_SOLO_5x5'):
 
 
 @router.get("/analyze/{puuid}")
-async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10, region: str = RIOT_REGION):
+async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10, region: str = RIOT_REGION, force: bool = False):
+    if not force:
+        cached = db.get_enriched_profile(puuid)
+        if cached:
+            # Check if this cached entry actually has match history (full analysis)
+            data, ts = cached
+            if "games" in data:
+                data["last_updated"] = ts
+                return data
     count = max(5, min(count, 30))
     routing = get_routing(region)
     # Versioned cache key to force logic updates
@@ -164,6 +180,7 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10, regi
         "coaching": coaching, "games": game_summaries, "champStats": stats.get("champ_stats", {}),
     }
     route_cache.set(cache_key, result)
+    db.save_enriched_profile(puuid, result)
     return result
 
 @router.get("/history/{puuid}")
@@ -295,15 +312,24 @@ async def live_enrich(body: LiveEnrichRequest):
     # match-detail fetches across ALL server requests.
 
     async def enrich_one(puuid: str):
-        # We need region here from body, but LiveEnrichRequest would need updating
-        # For now, we'll try to infer it or use default. 
-        # Actually, let's update LiveEnrichRequest to include region.
         region = getattr(body, 'region', RIOT_REGION)
         routing = get_routing(region)
         
+        # 1. Check Database Cache first (persistent across restarts/users)
+        if not body.force:
+            db_cached = db.get_enriched_profile(puuid)
+            if db_cached:
+                data, ts = db_cached
+                # We return it but add the timestamp so UI can show "2 hours ago"
+                data["last_updated"] = ts
+                return data
+
+        # 2. Memory cache check (fallback)
         cache_key = f"v7:{puuid}:{body.queue_id}:{region}"
-        cached = enriched_cache.get(cache_key)
-        if cached: return cached
+        if not body.force:
+            cached = enriched_cache.get(cache_key)
+            if cached:
+                return cached
 
         base = {
             "puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0,
@@ -313,13 +339,33 @@ async def live_enrich(body: LiveEnrichRequest):
         api_failed = False
         try:
             async with httpx.AsyncClient(timeout=25.0) as client:
-                entries, match_ids, mastery_data, summoner_data = await asyncio.gather(
+                from ..state import summoner_cache
+                cached_sum = summoner_cache.get(puuid)
+                
+                tasks = [
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
                     riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
                     riot_get(client, f"https://{region}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/{puuid}/top?count=20"),
-                    riot_get(client, f"https://{region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"),
-                    return_exceptions=True,
-                )
+                ]
+                
+                if not cached_sum:
+                    tasks.append(riot_get(client, f"https://{region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"))
+                
+                task_results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                entries = task_results[0]
+                match_ids = task_results[1]
+                mastery_data = task_results[2]
+                
+                if cached_sum:
+                    summoner_level, profile_icon_id = cached_sum
+                    summoner_data = {"summonerLevel": summoner_level, "profileIconId": profile_icon_id}
+                else:
+                    summoner_data = task_results[3]
+                    if not isinstance(summoner_data, Exception):
+                        summoner_level = summoner_data.get("summonerLevel", 0)
+                        profile_icon_id = summoner_data.get("profileIconId", 0)
+                        summoner_cache.set(puuid, (summoner_level, profile_icon_id))
 
                 if isinstance(entries, Exception) or isinstance(match_ids, Exception):
                     api_failed = True
@@ -445,6 +491,7 @@ async def live_enrich(body: LiveEnrichRequest):
             
         if not api_failed:
             enriched_cache.set(cache_key, base)
+            db.save_enriched_profile(puuid, base)
         return base
 
     results = await asyncio.gather(*[enrich_one(p) for p in body.puuids[:10]])

@@ -17,11 +17,11 @@ api.interceptors.response.use(
 export const getSummoner = (gameName, tagLine, region = "na1") =>
   api.get(`/summoner/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`, { params: { region } }).then((r) => r.data);
 
-export const getProfile = (puuid, region = "na1") =>
-  api.get(`/profile/${puuid}`, { params: { region } }).then((r) => r.data);
+export const getProfile = (puuid, region = "na1", force = false) =>
+  api.get(`/profile/${puuid}`, { params: { region, force } }).then((r) => r.data);
 
-export const analyzeSummoner = (puuid, gameName, count = 10, region = "na1") =>
-  api.get(`/analyze/${puuid}`, { params: { game_name: gameName, count, region } }).then((r) => r.data);
+export const analyzeSummoner = (puuid, gameName, count = 10, region = "na1", force = false) =>
+  api.get(`/analyze/${puuid}`, { params: { game_name: gameName, count, region, force } }).then((r) => r.data);
 
 export const getHistory = (puuid, start, count, queue = 420, region = "na1") =>
   api.get(`/history/${puuid}`, { params: { start, count, queue, region } }).then((r) => r.data);
@@ -35,8 +35,8 @@ export const askCoach = (question, context, history) =>
 export const getLiveGame = (puuid, region = "na1") =>
   api.get(`/live/${puuid}`, { params: { region } }).then((r) => r.data);
 
-export const getLiveEnrich = (puuids, queueId = 420, region = "na1") =>
-  api.post("/live-enrich", { puuids, queue_id: queueId, region }).then((r) => r.data);
+export const getLiveEnrich = (puuids, queueId = 420, region = "na1", force = false) =>
+  api.post("/live-enrich", { puuids, queue_id: queueId, region, force }).then((r) => r.data);
 
 export const getWinPredict = (participants, live_stats) =>
   api.post("/win-predict", { participants, live_stats }).then((r) => r.data);

@@ -74,6 +74,15 @@ def init_db() -> None:
             INSERT OR IGNORE INTO ingestion_status (id, processed_count, total_target, is_paused)
             VALUES (1, 0, 50000, 1)
         """)
+        # Persistent Profile Cache (shared across all users)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS enriched_profiles (
+                puuid        TEXT PRIMARY KEY,
+                data         TEXT,
+                last_updated INTEGER
+            )
+        """)
+
         conn.commit()
 
 
@@ -328,3 +337,20 @@ def get_v1_training_matches_sync() -> list[dict]:
             "SELECT blue_feats, red_feats, blue_won FROM training_matches_v1"
         ).fetchall()
     return [{"blue_feats": row[0], "red_feats": row[1], "blue_won": row[2]} for row in rows]
+
+def get_enriched_profile(puuid: str) -> tuple | None:
+    with sqlite3.connect(DB_PATH) as conn:
+        row = conn.execute("SELECT data, last_updated FROM enriched_profiles WHERE puuid = ?", (puuid,)).fetchone()
+        if row:
+            return json.loads(row[0]), row[1]
+    return None
+
+def save_enriched_profile(puuid: str, data: dict) -> None:
+    now = int(time.time())
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO enriched_profiles (puuid, data, last_updated) VALUES (?, ?, ?)",
+            (puuid, json.dumps(data), now)
+        )
+        conn.commit()
+
