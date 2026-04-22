@@ -226,7 +226,7 @@ async def _process_player(
     - Seed player's form computed from previous matches in batch (no leakage)
     Returns the number of new matches saved.
     """
-    status = db._get_ingestion_status_sync()
+    status = await db.get_ingestion_status()
     if status["is_paused"] or status["processed_count"] >= status["total_target"]:
         return 0
 
@@ -242,7 +242,7 @@ async def _process_player(
         return 0
 
     # Step 2: Fetch match details for all new matches — Parallelized (Semaphore 10)
-    status = db._get_ingestion_status_sync()
+    status = await db.get_ingestion_status()
     if status["is_paused"] or status["processed_count"] >= status["total_target"]:
         return 0
 
@@ -320,7 +320,7 @@ async def _process_player(
     # Step 6: Save training samples — seed player's form from older matches in batch
     saved = 0
     for i, mid in enumerate(ordered):
-        status = db._get_ingestion_status_sync()
+        status = await db.get_ingestion_status()
         if status["is_paused"] or status["processed_count"] >= status["total_target"]:
             break
 
@@ -414,7 +414,7 @@ async def ingestion_worker() -> None:
                 db.cleanup_stale_data()
                 last_cleanup = now
 
-            status = db._get_ingestion_status_sync()
+            status = await db.get_ingestion_status()
 
             if status["is_paused"]:
                 await asyncio.sleep(5)
@@ -463,7 +463,7 @@ async def ingestion_worker() -> None:
                 else:
                     _tier_page += 1
 
-                status = db._get_ingestion_status_sync()
+                status = await db.get_ingestion_status()
                 is_paused = status["is_paused"]
                 processed_count = status["processed_count"]
                 total_target = status["total_target"]
@@ -481,7 +481,7 @@ async def ingestion_worker() -> None:
                     if saved:
                         processed_count += saved
                         # Re-read pause state so a mid-loop toggle takes effect immediately
-                        _s = db._get_ingestion_status_sync()
+                        _s = await db.get_ingestion_status()
                         is_paused = _s["is_paused"]
                         logger.info(
                             "Ingestion +%d | %d / %d (%.1f%%)",

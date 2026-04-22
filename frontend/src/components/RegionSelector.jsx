@@ -85,7 +85,7 @@ export default function RegionSelector({ value, onChange, compact = false, pill 
           bg-white dark:bg-[#0d111a] 
           border border-slate-200 dark:border-white/[0.12]
           rounded-2xl shadow-2xl shadow-black/80
-          animate-fadeIn transform origin-top-left backdrop-blur-md`}
+          animate-dropdownFadeIn transform origin-top-left backdrop-blur-md`}
         >
           <div className="mb-2.5 px-1 flex items-center justify-between">
             <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-white/20">
@@ -118,15 +118,6 @@ export default function RegionSelector({ value, onChange, compact = false, pill 
           </div>
         </div>
       )}
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(-4px) scale(0.98); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .animate-fadeIn { animation: fadeIn 0.15s ease-out forwards; }
-        .current-shadow { box-shadow: 0 0 15px -3px var(--tw-shadow-color); }
-      `}} />
     </div>
   );
 }
