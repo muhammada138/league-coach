@@ -18,6 +18,10 @@ const TIER_COLORS = {
   UNRANKED: "text-slate-400",
 };
 
+const TIER_BASE_LP = { IRON: 0, BRONZE: 400, SILVER: 800, GOLD: 1200, PLATINUM: 1600, EMERALD: 2000, DIAMOND: 2400, MASTER: 2800, GRANDMASTER: 2800, CHALLENGER: 2800 };
+const DIV_BASE_LP = { I: 300, II: 200, III: 100, IV: 0 };
+const toAbsLP = (tier, div, lp) => (TIER_BASE_LP[tier] ?? 1200) + (DIV_BASE_LP[div] ?? 0) + (lp || 0);
+
 const SUMMONER_SPELLS = {
   1: "SummonerBoost", 3: "SummonerExhaust", 4: "SummonerFlash",
   6: "SummonerHaste", 7: "SummonerHeal", 11: "SummonerSmite",
@@ -1066,10 +1070,6 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
 }
 
 // ── Profile Card ───────────────────────────────────────────────────────────
-// ── Profile Card Support ────────────────────────────────────────────────────
-const TIER_BASE_LP = { IRON: 0, BRONZE: 400, SILVER: 800, GOLD: 1200, PLATINUM: 1600, EMERALD: 2000, DIAMOND: 2400, MASTER: 2800, GRANDMASTER: 2800, CHALLENGER: 2800 };
-const DIV_BASE_LP = { I: 300, II: 200, III: 100, IV: 0 };
-const toAbsLP = (tier, div, lp) => (TIER_BASE_LP[tier] ?? 1200) + (DIV_BASE_LP[div] ?? 0) + (lp || 0);
 
 function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked", region, lpHistory }) {
   const [iconFailed, setIconFailed] = useState(false);
