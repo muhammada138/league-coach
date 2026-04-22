@@ -563,7 +563,11 @@ async def win_predict(body: WinPredictRequest):
 
 @router.get("/ingest/status")
 async def ingest_status():
-    return await db.get_ingestion_status()
+    from ..state import is_rate_limited, get_rate_limit_remaining
+    status = await db.get_ingestion_status()
+    status["rate_limited"] = is_rate_limited()
+    status["rate_limit_remaining"] = get_rate_limit_remaining()
+    return status
 
 
 @router.post("/ingest/toggle")

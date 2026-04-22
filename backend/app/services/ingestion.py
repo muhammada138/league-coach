@@ -105,7 +105,11 @@ async def _riot_get(client: httpx.AsyncClient, url: str):
         _rl_update(response)
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 10))
-            logger.warning("Ingest 429 despite limiter – sleeping %ds (attempt %d)", retry_after + 2, attempt + 1)
+            from ..state import set_rate_limited
+            set_rate_limited(retry_after + 2)
+            
+            banner = "\n" + "!"*60 + "\n" + "!!! 🛑 RIOT RATE LIMIT (429) DETECTED !!!".center(60) + "\n" + f"!!! Sleeping {retry_after + 2}s (attempt {attempt + 1}) !!!".center(60) + "\n" + "!"*60
+            logger.warning(banner)
             await asyncio.sleep(retry_after + 2)
             continue
         if response.status_code != 200:
