@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 import httpx
 import asyncio
 import itertools
+import time
 from collections import Counter
 from ..services.riot import (
     riot_get, get_cached_rank, get_match_timeline, 
