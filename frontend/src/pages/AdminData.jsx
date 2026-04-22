@@ -248,7 +248,7 @@ export default function AdminData() {
           <div className="bg-white/[0.03] border border-white/[0.07] rounded-3xl p-6 backdrop-blur-sm shadow-xl flex flex-col justify-between">
             <div>
               <h2 className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mb-4">Data Ingestion</h2>
-              <div className="text-xl font-black mb-1 tracking-tighter capitalize">{data?.ingestion?.is_active ? "Running" : (data?.ingestion?.is_paused ? "Paused" : "Idle")}</div>
+              <div className="text-xl font-black mb-1 tracking-tighter capitalize">{data?.ingestion?.is_paused ? "Paused" : "Running"}</div>
               <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest">Background Worker</p>
             </div>
              <button
