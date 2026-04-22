@@ -81,22 +81,28 @@ async def backfill_if_needed(puuid: str, tier: str, division: str, lp: int, wins
 
 @router.get("/summoner/{game_name}/{tag_line}")
 async def get_summoner(game_name: str, tag_line: str, region: str = RIOT_REGION):
+    from ..state import account_cache
+    cache_key = f"account:{region}:{game_name.lower()}:{tag_line.lower()}"
+    cached = account_cache.get(cache_key)
+    if cached:
+        return cached
+
     routing = get_routing(region)
     url = f"https://{routing}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{game_name}/{tag_line}"
     async with httpx.AsyncClient() as client:
         data = await riot_get(client, url)
-    return {"puuid": data["puuid"], "gameName": data["gameName"], "tagLine": data["tagLine"]}
+    res = {"puuid": data["puuid"], "gameName": data["gameName"], "tagLine": data["tagLine"]}
+    account_cache.set(cache_key, res)
+    return res
 
 @router.get("/profile/{puuid}")
 async def get_profile(puuid: str, region: str = RIOT_REGION, force: bool = False):
-    PROFILE_TTL = 600  # 10 minutes — auto-refresh rank data on revisit
     if not force:
         cached = db.get_enriched_profile(puuid)
         if cached:
             data, ts = cached
-            age = int(time.time()) - ts
-            # Serve cache only if fresh AND complete (has profileIconId from a real fetch)
-            if age < PROFILE_TTL and data.get("profileIconId"):
+            # Serve cache only if complete (has profileIconId from a real fetch)
+            if data.get("profileIconId"):
                 data["last_updated"] = ts
                 return data
 
@@ -147,14 +153,12 @@ async def lp_history(puuid: str, queue: str = 'RANKED_SOLO_5x5'):
 
 @router.get("/analyze/{puuid}")
 async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10, region: str = RIOT_REGION, force: bool = False):
-    ANALYSIS_TTL = 1800  # 30 minutes — analysis is expensive, keep longer
     if not force:
         cached = db.get_enriched_profile(puuid)
         if cached:
             # Check if this cached entry actually has match history (full analysis)
             data, ts = cached
-            age = int(time.time()) - ts
-            if "games" in data and age < ANALYSIS_TTL:
+            if "games" in data:
                 data["last_updated"] = ts
                 return data
     count = max(5, min(count, 30))

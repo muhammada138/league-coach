@@ -98,6 +98,7 @@ enriched_cache = TTLCache(ttl_seconds=3600)  # 1 hour for enriched player stats
 match_cache = TTLCache(ttl_seconds=86400)  # 24 hours
 match_ids_cache = TTLCache(ttl_seconds=600)  # 10 minutes - IDs don't change that fast
 summoner_cache = TTLCache(ttl_seconds=86400) # 24 hours - Levels don't change fast
+account_cache = TTLCache(ttl_seconds=86400 * 30) # 30 days - Riot IDs rarely change
 
 # Global Sync Control (Persistent for the process life)
 sync_state = {
