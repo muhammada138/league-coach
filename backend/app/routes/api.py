@@ -161,8 +161,9 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10, regi
     routing = get_routing(region)
     # Versioned cache key to force logic updates
     cache_key = f"{CACHE_VERSION}:region:{region}:analyze:{puuid}:{count}"
-    cached = route_cache.get(cache_key)
-    if cached is not None: return cached
+    if not force:
+        cached = route_cache.get(cache_key)
+        if cached is not None: return cached
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         match_ids, queue_used, match_datas = await _fetch_recent_matches(client, puuid, routing, count)
