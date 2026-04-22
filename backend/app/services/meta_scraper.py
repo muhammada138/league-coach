@@ -440,7 +440,7 @@ async def sync_meta(mode="full"):
                 try:
                     import datetime
                     with open(DATA_DIR / ".last_full_sync", "w") as f:
-                        f.write(datetime.datetime.now().strftime("%Y-%m-%d"))
+                        f.write(datetime.datetime.utcnow().strftime("%Y-%m-%d"))
                 except: pass
 
             logger.info("Sync Process Finished.")

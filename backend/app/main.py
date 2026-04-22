@@ -50,17 +50,17 @@ async def _meta_scheduler():
     
     while True:
         await asyncio.sleep(60)
-        now = datetime.now()
+        now = datetime.utcnow()
         now_ts = time.time()
         today_str = now.strftime("%Y-%m-%d")
         
-        # 1. Daily Deep Sync Check (Target: 05:30 AM)
+        # 1. Daily Deep Sync Check (Target: 05:30 AM UTC)
         is_after_trigger_hour = (now.hour > 5 or (now.hour == 5 and now.minute >= 30))
         last_full_date_str = get_last_full_date()
         
         if is_after_trigger_hour and last_full_date_str != today_str:
             if not meta_scraper.is_sync_active():
-                logger.info("Scheduler: Starting daily full sync. (Target: 05:30, Current: %02d:%02d)", now.hour, now.minute)
+                logger.info("Scheduler: Starting daily full sync. (Target: 05:30 UTC, Current: %02d:%02d UTC)", now.hour, now.minute)
                 asyncio.create_task(meta_scraper.sync_meta(mode="full"))
                 continue 
 
