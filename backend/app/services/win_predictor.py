@@ -1,33 +1,32 @@
 """
-Win Predictor – XGBoost-based match outcome estimator.
+win_predictor.py - Win Probability Estimator
 
-Features per player (7-dim):
-  [rank_score, season_wr, form_score, recent_wr, champ_wr, mastery_score, streak_norm]
+This module implements an XGBoost-based match outcome estimator for League of Legends.
+It processes player-level features to predict the win probability of the Blue team.
 
-  - rank_score:    tier + division + LP bonus, normalised 0→1
-  - season_wr:     ranked wins/(wins+losses) confidence-weighted (full trust at 100 games)
-  - form_score:    avg perf score of last 10 games (0→1) — quality signal
-  - recent_wr:     actual W/L fraction of last 10 games (0→1) — outcome trend signal
-  - champ_wr:      win rate on the specific champion being played, from last 10 games,
-                   confidence-weighted toward 0.5 until 3+ games on that champ
-  - mastery_score: whether current champ appears in their top-3 most played (0→0.06)
-  - streak_norm:   current win/loss streak clamped ±5, normalised to [-1, 1]
+Feature Engineering (7 dimensions per player):
+1. rank_score:    Normalized Tier + Division + LP (0.0 to 1.0)
+2. season_wr:     Full-season win rate, confidence-weighted by games played.
+3. form_score:    Recent quality signal (avg performance score of last 10 games).
+4. recent_wr:     Recent outcome trend (W/L fraction of last 10 games).
+5. champ_wr:      Win rate on the specific champion being played (clamped to 0.5 for new picks).
+6. mastery_score: Edge gained by playing a top-mastery 'main' champion.
+7. streak_norm:   Current win/loss streak clamped at ±5 and normalized to [-1, 1].
 
-Model input (21-dim):  [blue_mean(7), red_mean(7), diff(7)]
-
-Trained on synthetic data that mirrors real LoL win-probability dynamics.
-Replace model/win_predictor.pkl with a model trained on real Riot API match
-history (see MEMORY.md future plans) for better accuracy.
+Model Architecture:
+- Input: 21-dimensional vector: [Blue_Team_Mean(7), Red_Team_Mean(7), Team_Diff(7)]
+- Kernel: XGBClassifier (Extreme Gradient Boosting)
 """
 
+import asyncio
 import json
 import logging
-import asyncio
-from pathlib import Path
 from collections import Counter
+from pathlib import Path
 
 import numpy as np
 
+# ML dependencies (soft-imports to allow fallback)
 try:
     import joblib
     import xgboost as xgb
@@ -39,10 +38,12 @@ except ImportError:
     xgb = None
     train_test_split = None
 
-from ..services.db import get_all_training_matches_sync, get_v1_training_matches_sync
+# Local services and state
+from ..services import db
 from .meta_scraper import get_meta_data
 from .role_identifier import assign_team_roles
 
+# --- Configuration & Setup ---
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -612,8 +613,8 @@ def retrain_on_real_data() -> dict:
         return {"ok": False, "error": "ML dependencies not installed"}
 
     try:
-        clean_rows = get_all_training_matches_sync()
-        v1_rows    = get_v1_training_matches_sync()
+        clean_rows = db.get_all_training_matches_sync()
+        v1_rows    = db.get_v1_training_matches_sync()
 
         if len(clean_rows) >= 500:
             real_rows = clean_rows

@@ -1,10 +1,11 @@
 """
-SQLite service for persisting LP snapshots over time.
+db.py - SQLite Persistence Layer
 
-Every time a player profile is viewed, the current LP / tier / division is
-written to lp_history (at most once per 5 minutes per player, and only when
-the rank has actually changed since the last snapshot).  This builds up a
-real 30-day LP history without any third-party data source.
+This service manages the internal database (league_coach.db) used for:
+1. LP Trend Mapping (30-day snapshots)
+2. ML Training Data (match features and outcomes)
+3. Profile Caching (shared enriched responses)
+4. Ingestion Worker Synchronization
 """
 
 import asyncio
@@ -13,15 +14,15 @@ import sqlite3
 import time
 import logging
 from pathlib import Path
+
 from ..state import DB_PATH
+
+# --- Configuration & Setup ---
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Schema init  (called once at startup)
-# ---------------------------------------------------------------------------
-
 def init_db() -> None:
+    """Initializes the database schema and performs required migrations."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""

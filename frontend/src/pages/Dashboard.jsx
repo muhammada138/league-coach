@@ -1,8 +1,23 @@
+/**
+ * Dashboard.jsx - Main Overview and Analysis View
+ * 
+ * This component provides a comprehensive player profile dashboard, 
+ * including rank history, match history, and AI-driven coaching insights.
+ */
+
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
-import { getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory, getMatchTimeline, getChampionMastery } from "../api/riot";
+
+// API and Custom Hooks
+import { 
+  getProfile, analyzeSummoner, getScoreboard, getHistory, getSummoner, 
+  askCoach, getLiveGame, getLiveEnrich, getWinPredict, getLpHistory, 
+  getMatchTimeline, getChampionMastery 
+} from "../api/riot";
 import useSearchHistory from "../hooks/useSearchHistory";
+
+// --- Constants & Configuration ---
 
 const TIER_COLORS = {
   IRON: "text-slate-400",
@@ -18,8 +33,17 @@ const TIER_COLORS = {
   UNRANKED: "text-slate-400",
 };
 
-const TIER_BASE_LP = { IRON: 0, BRONZE: 400, SILVER: 800, GOLD: 1200, PLATINUM: 1600, EMERALD: 2000, DIAMOND: 2400, MASTER: 2800, GRANDMASTER: 2800, CHALLENGER: 2800 };
+/** Base LP values for calculating absolute progress across Tiers */
+const TIER_BASE_LP = { 
+  IRON: 0, BRONZE: 400, SILVER: 800, GOLD: 1200, 
+  PLATINUM: 1600, EMERALD: 2000, DIAMOND: 2400, 
+  MASTER: 2800, GRANDMASTER: 2800, CHALLENGER: 2800 
+};
+
+/** Base LP values per division (IV to I) */
 const DIV_BASE_LP = { I: 300, II: 200, III: 100, IV: 0 };
+
+/** Calculates a flat LP value for a given rank for trend analysis */
 const toAbsLP = (tier, div, lp) => (TIER_BASE_LP[tier] ?? 1200) + (DIV_BASE_LP[div] ?? 0) + (lp || 0);
 
 const SUMMONER_SPELLS = {
@@ -36,6 +60,9 @@ const SUMMONER_SPELL_NAMES = {
   21: "Barrier", 32: "Mark", 39: "Mark"
 };
 
+// --- Helper Functions ---
+
+/** Converts timestamp difference to human-readable duration */
 function timeAgo(ms) {
   if (!ms) return "";
   const diff = Date.now() - ms;
@@ -43,15 +70,19 @@ function timeAgo(ms) {
   const hrs = Math.floor(mins / 60);
   const days = Math.floor(hrs / 24);
   const months = Math.floor(days / 30);
+
   if (months > 0) return `${months}mo ago`;
   if (days > 0) return `${days}d ago`;
   if (hrs > 0) return `${hrs}h ago`;
   return `${mins}m ago`;
 }
 
+// Runtime cache for Data Dragon runes
 let _runesMap = null;
 let _runesTreeNames = {};
 let _runesData = null;
+
+/** Fetches and maps rune metadata from Data Dragon */
 async function getRunesMap(ddVersion) {
   if (_runesMap) return _runesMap;
   try {

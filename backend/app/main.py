@@ -1,105 +1,117 @@
 import asyncio
-# Deployment trigger: UI rank labels fix
 import logging
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from .routes import api
-from .state import ALLOWED_ORIGINS
-from .services import win_predictor
-from .services.db import init_db
-from .services import ingestion
-from .services import meta_scraper
 
-logging.basicConfig(level=logging.INFO)
+from .routes import api
+from .state import ALLOWED_ORIGINS, DATA_DIR
+from .services import win_predictor, ingestion, meta_scraper
+from .services.db import init_db, get_ingestion_status, resume_ingestion
+
+# --- Logging Configuration ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
 async def _meta_scheduler():
-    """Tierlist refresh every 4 h; full deep sync daily at 5:30 AM server time."""
-    await asyncio.sleep(10)  # let uvicorn finish startup
+    """
+    Background scheduler for metadata maintenance:
+    - Tierlist refresh: Every 4 hours.
+    - Deep sync: Daily at 5:30 AM server time.
+    - Ingestion: Auto-resume orphans after 30 minutes.
+    """
+    await asyncio.sleep(10)  # Initial wait for server stabilization
 
-    # If meta data is missing or stale, do an immediate tierlist sync
+    # Initial boot check: trigger tierlist sync if data is missing or stale
     meta = meta_scraper.get_meta_data()
     last_tierlist_ts = meta.get("updated_at", 0)
+    
     if time.time() - last_tierlist_ts > 4 * 3600:
-        logger.info("Scheduler: stale meta on startup — triggering tierlist sync")
+        logger.info("Scheduler: Stale metadata detected on startup. Triggering tierlist sync...")
         asyncio.create_task(meta_scraper.sync_meta(mode="tierlist"))
         last_tierlist_ts = time.time()
 
-    # Persistent tracker for the daily full sync
-    from .state import DATA_DIR
     sync_marker_path = DATA_DIR / ".last_full_sync"
+    
     def get_last_full_date():
         try:
-            with open(sync_marker_path, "r") as f:
-                return f.read().strip()
-        except: return None
+            return sync_marker_path.read_text().strip()
+        except: 
+            return None
     
     while True:
         await asyncio.sleep(60)
         now = datetime.now()
         now_ts = time.time()
         today_str = now.strftime("%Y-%m-%d")
-        last_full_date_str = get_last_full_date()
-
-        # 1. Full Deep Sync Priority (Any time after 5:30 AM that hasn't run today)
-        is_after_trigger = (now.hour > 5 or (now.hour == 5 and now.minute >= 30))
         
-        if is_after_trigger and last_full_date_str != today_str:
+        # 1. Daily Deep Sync Check (Target: 05:30 AM)
+        is_after_trigger_hour = (now.hour > 5 or (now.hour == 5 and now.minute >= 30))
+        last_full_date_str = get_last_full_date()
+        
+        if is_after_trigger_hour and last_full_date_str != today_str:
             if not meta_scraper.is_sync_active():
-                logger.info("Scheduler: starting daily full sync (Target: 5:30 AM, Actual: %02d:%02d)", now.hour, now.minute)
-                # Use mode="full" to ensure both tierlist and matchups are refreshed together daily
+                logger.info("Scheduler: Starting daily full sync. (Target: 05:30, Current: %02d:%02d)", now.hour, now.minute)
                 asyncio.create_task(meta_scraper.sync_meta(mode="full"))
-                continue  # Skip tierlist check during this trigger minute
+                continue 
 
-        # 2. Regular Tierlist Refresh (every 4 hours)
-        # Skip if any sync is already active
+        # 2. Periodic Tierlist Refresh (Every 4 hours)
         elif not meta_scraper.is_sync_active():
             if now_ts - last_tierlist_ts >= 4 * 3600:
                 last_tierlist_ts = now_ts
-                logger.info("Scheduler: starting 4-hour tierlist refresh")
+                logger.info("Scheduler: Starting periodic 4-hour tierlist refresh.")
                 asyncio.create_task(meta_scraper.sync_meta(mode="tierlist"))
 
-        # 3. Ingestion Auto-Resume (Resume after 30 mins pause)
+        # 3. Ingestion Safety: Auto-Resume orphaned/paused workers (>30 mins)
         try:
-            from .services.db import get_ingestion_status, resume_ingestion
             status = await get_ingestion_status()
             if status.get("is_paused") and status.get("paused_at", 0) > 0:
-                elapsed_paused = now_ts - status["paused_at"]
-                if elapsed_paused >= 30 * 60:
-                    logger.info("Scheduler: Ingestion has been paused for >30 mins — auto-resuming.")
+                if now_ts - status["paused_at"] >= 30 * 60:
+                    logger.info("Scheduler: Ingestion worker paused for >30m. Auto-resuming to prevent data gaps.")
                     await resume_ingestion()
         except Exception as e:
-            logger.error("Scheduler: Auto-resume check failed: %s", e)
+            logger.error("Scheduler: Maintenance check encountered an error: %s", e)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Lifecycle events for startup and graceful shutdown."""
     init_db()
     win_predictor.load_or_train_model()
     await meta_scraper._ensure_champ_ids()
+    
+    # Initialize background workers
     worker_task = asyncio.create_task(ingestion.ingestion_worker())
     scheduler_task = asyncio.create_task(_meta_scheduler())
+    
     yield
+    
+    # Graceful shutdown of workers
+    logger.info("Application shutting down. Cleaning up background tasks...")
     worker_task.cancel()
     scheduler_task.cancel()
-    for t in (worker_task, scheduler_task):
-        try:
-            await t
-        except asyncio.CancelledError:
-            pass
+    
+    await asyncio.gather(worker_task, scheduler_task, return_exceptions=True)
 
 
-app = FastAPI(title="League Coach API", lifespan=lifespan)
+app = FastAPI(
+    title="League Coach API",
+    description="Backend services for Rift IQ AI analysis and profile enrichment.",
+    lifespan=lifespan
+)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.error("422 on %s %s — errors: %s", request.method, request.url.path, exc.errors())
+    logger.error("Validation error on %s %s: %s", request.method, request.url.path, exc.errors())
     return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 app.add_middleware(
@@ -114,4 +126,9 @@ app.include_router(api.router)
 
 @app.get("/")
 async def health_check():
-    return {"status": "ok", "app": "Rift IQ Backend"}
+    """Simple health check endpoint for monitoring."""
+    return {
+        "status": "healthy",
+        "service": "Rift IQ Backend",
+        "timestamp": datetime.now().isoformat()
+    }
