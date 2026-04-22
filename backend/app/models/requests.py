@@ -5,6 +5,7 @@ class LiveEnrichRequest(BaseModel):
     puuids: List[str]
     queue_id: int = 420  # live game queueId — determines which match history queue to pull
     region: str = "na1"
+    force: bool = False
 
 class WinPredictParticipant(BaseModel):
     puuid: Optional[str] = ""

@@ -83,9 +83,24 @@ _RANK_TTL = 3600  # 1 hour — rank changes rarely during a session
 
 
 def _rank_cache_get(puuid: str) -> tuple[bool, dict | None]:
+    # 1. Check in-memory cache
     item = _rank_cache.get(puuid)
     if item and (_time.time() - item[1]) < _RANK_TTL:
         return True, item[0]
+    
+    # 2. Check persistent database cache
+    db_cached = db.get_enriched_profile(puuid)
+    if db_cached:
+        data, ts = db_cached
+        # Only use if reasonably fresh (24h)
+        if (_time.time() - ts) < 86400:
+            # Map database keys to ingestion keys (rank <-> division)
+            if "division" in data and "rank" not in data:
+                data["rank"] = data["division"]
+            if "lp" in data and "leaguePoints" not in data:
+                data["leaguePoints"] = data["lp"]
+            return True, data
+
     return False, None
 
 
@@ -276,6 +291,12 @@ async def _process_player(
                 entries = await _riot_get(client, f"https://{RIOT_REGION}.api.riotgames.com/lol/league/v4/entries/by-puuid/{target_puuid}")
                 entry = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
                 _rank_cache_set(target_puuid, entry)
+                # Also save to persistent DB so search users benefit from crawler data
+                if entry:
+                    db.save_enriched_profile(target_puuid, {
+                        "tier": entry["tier"], "division": entry["rank"], "lp": entry["leaguePoints"],
+                        "wins": entry["wins"], "losses": entry["losses"], "summonerLevel": 300 # proxy
+                    })
                 return target_puuid, entry
             except: 
                 return target_puuid, None
@@ -284,6 +305,14 @@ async def _process_player(
         rank_results = await asyncio.gather(*[_fetch_rank(u) for u in uncached_puuids])
         for target_puuid, entry in rank_results:
             rank_cache[target_puuid] = entry
+            # Record LP snapshot for the graph
+            if entry:
+                asyncio.create_task(db.record_lp_snapshot(
+                    target_puuid, 
+                    entry["tier"], entry["rank"], entry["leaguePoints"], 
+                    entry["wins"], entry["losses"], 
+                    queue="RANKED_SOLO_5x5"
+                ))
 
     # Step 5: Build ordered list of new match IDs (newest → oldest, API order)
     ordered = [mid for mid in match_ids if mid in match_details]

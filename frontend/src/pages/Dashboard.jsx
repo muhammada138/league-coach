@@ -1226,7 +1226,26 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
               </div>
             )}
           </div>
-          <p className="text-xs text-slate-400 dark:text-white/30 mb-2">Level {profile.summonerLevel}</p>
+          <div className="flex items-center gap-3 mb-2">
+            <p className="text-xs text-slate-400 dark:text-white/30">Level {profile.summonerLevel}</p>
+            <div className="h-3 w-px bg-slate-200 dark:bg-white/10" />
+            <button
+              onClick={() => handleRefresh()}
+              disabled={refreshing}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold transition-all
+                ${refreshing ? "opacity-50 cursor-wait" : ""}`}
+            >
+              <svg className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {refreshing ? "Updating..." : "Update"}
+            </button>
+            {profile.last_updated && (
+              <span className="text-[10px] text-slate-500 dark:text-white/20 whitespace-nowrap">
+                Last updated: {timeAgo(profile.last_updated * 1000)}
+              </span>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className={`text-sm font-bold ${tierColor}`}>
               {rankLabel}
@@ -1244,7 +1263,13 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
           </div>
         </div>
       </div>
-      {games && games.length > 0 && <LPGraph games={games} profile={displayProfile} puuid={puuid} cachePrefix={queueTab === "flex" ? "lp_flex" : "lp"} />}
+      {lpHistory && lpHistory.length >= 2 ? (
+        <LpHistoryGraph history={lpHistory} />
+      ) : (
+        games && games.length > 0 && (
+          <LPGraph games={games} profile={displayProfile} puuid={puuid} cachePrefix={queueTab === "flex" ? "lp_flex" : "lp"} />
+        )
+      )}
     </div>
   );
 }
@@ -2320,7 +2345,7 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-3.5 text-xs font-semibold tracking-wide transition-colors duration-150
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-3.5 text-xs font-semibold tracking-wide transition-colors duration-150 whitespace-nowrap
               ${tab === id
                 ? "text-slate-900 dark:text-white border-b-2 border-[#c89b3c] -mb-px"
                 : "text-slate-400 dark:text-white/30 hover:text-slate-600 dark:hover:text-white/50"
@@ -2529,7 +2554,7 @@ export default function Dashboard() {
   const [tabLoadingMore, setTabLoadingMore] = useState(false);
 
   // Phase 1: resolve PUUID + fetch profile (fast, ~300ms)
-  const doFetch = async (puuidHint) => {
+  const doFetch = async (puuidHint, force = false) => {
     const [versions, puuidResolved] = await Promise.all([
       fetch("https://ddragon.leagueoflegends.com/api/versions.json")
         .then((r) => r.json())
@@ -2541,7 +2566,7 @@ export default function Dashboard() {
     setDdVersion(versions[0]);
     getRunesMap(versions[0]).then(setRunesMap);
     setResolvedPuuid(puuidResolved);
-    const prof = await getProfile(puuidResolved, region);
+    const prof = await getProfile(puuidResolved, region, force);
     setProfile(prof);
 
     // Enrich the local history entry with the newly fetched rank/icon/puuid
@@ -2612,8 +2637,12 @@ export default function Dashboard() {
     setAnalysis(null);
     setExpandedMatchId(null);
     setScoreboard(null);
-    doFetch(resolvedPuuid)
-      .then((puuid) => analyzeSummoner(puuid, gameName, gameCount, region))
+    doFetch(resolvedPuuid, true) 
+      .then((puuid) => {
+        const qm = { ranked: 'RANKED_SOLO_5x5', flex: 'RANKED_FLEX_SR' };
+        getLpHistory(puuid, qm[queueTab] || 'RANKED_SOLO_5x5', region).then(setLpHistory).catch(() => {});
+        return analyzeSummoner(puuid, gameName, gameCount, region, true);
+      })
       .then((anal) => {
         setAnalysis(anal);
         setAnalysisLoading(false);
