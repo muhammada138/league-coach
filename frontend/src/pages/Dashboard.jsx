@@ -1071,7 +1071,7 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
 
 // ── Profile Card ───────────────────────────────────────────────────────────
 
-function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked", region, lpHistory }) {
+function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLiveCheck, liveStatus = 'idle', queueTab = "ranked", region, lpHistory, handleRefresh, refreshing }) {
   const [iconFailed, setIconFailed] = useState(false);
   if (!profile) return null;
   const displayProfile = queueTab === "flex" && profile.flex
@@ -2735,6 +2735,8 @@ export default function Dashboard() {
                 ? (tabGames.flex ?? [])
                 : (analysis ? [...analysis.games, ...extraGames] : [])}
               lpHistory={lpHistory}
+              handleRefresh={handleRefresh}
+              refreshing={refreshing}
               ddVersion={ddVersion}
               onLiveCheck={handleLiveCheck}
               liveStatus={liveStatus}
