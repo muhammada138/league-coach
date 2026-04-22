@@ -4,7 +4,9 @@ import time
 from collections import Counter
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Security
+from fastapi.security.api_key import APIKeyHeader
+from starlette.status import HTTP_403_FORBIDDEN
 
 # Local services and utilities
 from ..services import db, win_predictor
@@ -15,7 +17,7 @@ from ..services.riot import (
 from ..services.groq import get_coaching_feedback, ask_coach_question
 from ..state import (
     RIOT_REGION, RIOT_ROUTING, route_cache, enriched_cache, 
-    CACHE_VERSION, get_routing, MATCH_FETCH_SEM
+    CACHE_VERSION, get_routing, MATCH_FETCH_SEM, ADMIN_API_KEY
 )
 from ..models.requests import LiveEnrichRequest, AskRequest, WinPredictRequest
 from .api_helpers import (
@@ -24,6 +26,14 @@ from .api_helpers import (
 )
 
 router = APIRouter(tags=["Main API"])
+
+api_key_header = APIKeyHeader(name="X-Admin-Token", auto_error=False)
+
+async def verify_admin(api_key: str = Security(api_key_header)):
+    if not api_key or not ADMIN_API_KEY or api_key != ADMIN_API_KEY:
+        raise HTTPException(
+            status_code=HTTP_403_FORBIDDEN, detail="Could not validate credentials"
+        )
 
 async def backfill_if_needed(puuid: str, tier: str, division: str, lp: int, wins: int, losses: int):
     if await db.has_history(puuid):
@@ -636,13 +646,13 @@ async def ingest_toggle():
     return await db.toggle_ingestion()
 
 
-@router.post("/admin/retrain")
+@router.post("/admin/retrain", dependencies=[Depends(verify_admin)])
 async def admin_retrain():
     """Trigger ML model retraining and return accuracy stats."""
     return win_predictor.retrain_on_real_data()
 
 
-@router.get("/admin/data-summary")
+@router.get("/admin/data-summary", dependencies=[Depends(verify_admin)])
 async def admin_data_summary():
     from ..services.meta_scraper import get_meta_data, _CHAMP_ID_MAP, is_sync_active, is_sync_paused, get_sync_mode
     from ..services.db import get_ingestion_status
@@ -688,19 +698,19 @@ async def admin_data_summary():
         }
     }
 
-@router.post("/admin/sync-meta")
+@router.post("/admin/sync-meta", dependencies=[Depends(verify_admin)])
 async def admin_sync_meta(mode: str = "full"):
     from ..services.meta_scraper import sync_meta
     asyncio.create_task(sync_meta(mode))
     return {"ok": True, "message": f"Meta sync ({mode}) started in background"}
 
-@router.post("/admin/cancel-sync")
+@router.post("/admin/cancel-sync", dependencies=[Depends(verify_admin)])
 async def admin_cancel_sync():
     from ..services.meta_scraper import cancel_sync
     success = cancel_sync()
     return {"ok": success, "message": "Cancel requested" if success else "No active sync"}
 
-@router.get("/admin/sync-status")
+@router.get("/admin/sync-status", dependencies=[Depends(verify_admin)])
 async def admin_sync_status():
     from ..services.meta_scraper import is_sync_active, is_sync_paused
     return {
@@ -708,14 +718,14 @@ async def admin_sync_status():
         "paused": is_sync_paused()
     }
 
-@router.post("/admin/toggle-sync-pause")
+@router.post("/admin/toggle-sync-pause", dependencies=[Depends(verify_admin)])
 async def admin_toggle_sync_pause():
     from ..services.meta_scraper import toggle_pause
     new_state = toggle_pause()
     return {"ok": True, "paused": new_state}
 
 
-@router.post("/admin/cleanup")
+@router.post("/admin/cleanup", dependencies=[Depends(verify_admin)])
 async def admin_cleanup():
     from ..services.db import cleanup_stale_data
     counts = cleanup_stale_data()
