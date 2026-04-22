@@ -90,18 +90,21 @@ async def get_profile(puuid: str, region: str = RIOT_REGION, force: bool = False
             data["last_updated"] = ts
             return data
 
-    from ..state import summoner_cache
     async with httpx.AsyncClient() as client:
+        # Resolve platform region to ensure we hit the correct host for entries
         summoner, entries = await asyncio.gather(
             riot_get(client, f"https://{region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"),
             riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
         )
         summoner_level = summoner.get("summonerLevel", 0)
         profile_icon_id = summoner.get("profileIconId", 0)
-        summoner_cache.set(puuid, (summoner_level, profile_icon_id))
     
+    # Try Solo, then Flex, then anything ranked
     ranked = next((e for e in entries if e.get("queueType") == "RANKED_SOLO_5x5"), None)
-    flex   = next((e for e in entries if e.get("queueType") == "RANKED_FLEX_SR"),   None)
+    if not ranked:
+        ranked = next((e for e in entries if "RANKED" in e.get("queueType", "")), None)
+        
+    flex = next((e for e in entries if e.get("queueType") == "RANKED_FLEX_SR"), None)
     
     def entry_data(e):
         if e is None:
@@ -120,19 +123,13 @@ async def get_profile(puuid: str, region: str = RIOT_REGION, force: bool = False
     
     # Save to persistent cache
     db.save_enriched_profile(puuid, res)
+    res["last_updated"] = int(time.time())
 
     asyncio.create_task(db.record_lp_snapshot(puuid, ranked_data["tier"], ranked_data["division"], ranked_data["lp"], ranked_data["wins"], ranked_data["losses"], queue='RANKED_SOLO_5x5'))
     asyncio.create_task(db.record_lp_snapshot(puuid, flex_data["tier"], flex_data["division"], flex_data["lp"], flex_data["wins"], flex_data["losses"], queue='RANKED_FLEX_SR'))
     asyncio.create_task(backfill_if_needed(puuid, ranked_data["tier"], ranked_data["division"], ranked_data["lp"], ranked_data["wins"], ranked_data["losses"]))
     
     return res
-    return {
-        "summonerLevel": summoner_level,
-        "profileIconId": profile_icon_id,
-        **ranked_data,
-        "flex": flex_data,
-    }
-
 @router.get("/lp-history/{puuid}")
 async def lp_history(puuid: str, queue: str = 'RANKED_SOLO_5x5'):
     return await db.get_lp_history(puuid, queue=queue, days=30)
