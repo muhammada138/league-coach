@@ -43,7 +43,7 @@ def test_init_db(tmp_path, mocker):
         assert row == (0, 50000, 1)
 
 def test_init_db_migration(tmp_path, mocker):
-    temp_db_path = tmp_path / "test_league_coach.db"
+    temp_db_path = tmp_path / "migration_test.db"
     mocker.patch("app.services.db.DB_PATH", temp_db_path)
 
     # Pre-create the database with the old schema (missing 'queue' column)
