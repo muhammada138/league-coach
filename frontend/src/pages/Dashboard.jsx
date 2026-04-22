@@ -412,13 +412,17 @@ function ErrorScreen({ message, onRetry }) {
 function LPGraph({ games, profile, puuid, cachePrefix = "lp", history }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const uid = useId().replace(/:/g, "");
-  const currentLP = profile?.lp ?? 0;
-  const rankLabel = profile?.tier === "UNRANKED" ? "Unranked" : `${profile?.tier} ${profile?.division}`;
+  const currentLP = profile?.lp ?? profile?.leaguePoints ?? 0;
+  const getRankLabel = (p) => {
+    if (!p || p.tier === "UNRANKED" || !p.tier) return "Unranked";
+    return `${p.tier} ${p.division || p.rank || ""}`;
+  };
+  const rankLabel = getRankLabel(profile);
   
   // Use persistent server history if possible, otherwise fallback to calculated last 10
   const series = useMemo(() => {
     if (history && history.length >= 2) {
-      return history.map(h => toAbsLP(h.tier, h.division, h.lp));
+      return history.map(h => toAbsLP(h.tier, h.division || h.rank, h.lp || h.leaguePoints));
     }
     if (!games || games.length === 0) return [currentLP];
     return computeLPSeries(games, currentLP);
@@ -449,7 +453,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp", history }) {
         <span className={`text-xs font-bold ${TIER_COLORS[profile?.tier] ?? "text-slate-700 dark:text-white/80"} transition-colors duration-200`}>
           {hoveredIdx !== null ? (
             history && history[hoveredIdx] 
-              ? `${history[hoveredIdx].tier} ${history[hoveredIdx].division} · ${history[hoveredIdx].lp} LP`
+              ? getRankLabel(history[hoveredIdx])
               : `${rankLabel} · ${series[hoveredIdx]} LP`
           ) : `${rankLabel} · ${currentLP} LP`}
         </span>
@@ -1080,8 +1084,9 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
   const totalGames = displayProfile.wins + displayProfile.losses;
   const wr = totalGames > 0 ? ((displayProfile.wins / totalGames) * 100).toFixed(1) : "-";
   const tierColor = TIER_COLORS[displayProfile.tier] ?? "text-slate-400";
-  const rankLabel =
-    displayProfile.tier === "UNRANKED" ? "Unranked" : `${displayProfile.tier} ${displayProfile.division}`;
+  const rankLabel = (!displayProfile.tier || displayProfile.tier === "UNRANKED") 
+    ? "Unranked" 
+    : `${displayProfile.tier} ${displayProfile.division || displayProfile.rank || ""}`;
   const emblemUrl = displayProfile.tier && displayProfile.tier !== "UNRANKED"
     ? `https://opgg-static.akamaized.net/images/medals_new/${displayProfile.tier.toLowerCase()}.png`
     : null;
