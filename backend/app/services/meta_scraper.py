@@ -90,6 +90,10 @@ _TIER_LABELS = {
 _CHAMP_ID_MAP = {}
 _ID_CHAMP_MAP = {} # CID string -> {id, name, slug}
 
+# In-memory cache for meta data to avoid expensive synchronous I/O
+_META_CACHE = None
+_META_LAST_MOD = 0
+
 async def _ensure_champ_ids():
     """Fetch champion name -> id mapping from the latest Data Dragon."""
     global _CHAMP_ID_MAP, _ID_CHAMP_MAP
@@ -461,13 +465,35 @@ async def sync_meta(mode="full"):
     return True
 
 def save_meta_data(data_dict: dict):
+    global _META_CACHE, _META_LAST_MOD
     tmp_path = str(META_FILE_PATH) + ".tmp"
     with open(tmp_path, "w") as f:
         json.dump(data_dict, f, indent=2)
     os.replace(tmp_path, META_FILE_PATH)
 
-def get_meta_data() -> dict:
-    if not META_FILE_PATH.exists(): return {}
+    # Update cache immediately to maintain consistency
+    _META_CACHE = data_dict
     try:
-        with open(META_FILE_PATH, "r") as f: return json.load(f)
-    except: return {}
+        _META_LAST_MOD = os.path.getmtime(META_FILE_PATH)
+    except Exception:
+        _META_LAST_MOD = time.time()
+
+def get_meta_data() -> dict:
+    global _META_CACHE, _META_LAST_MOD
+    if not META_FILE_PATH.exists():
+        return {}
+
+    try:
+        # Check modification time to see if we can use the cache
+        mtime = os.path.getmtime(META_FILE_PATH)
+        if _META_CACHE is not None and mtime <= _META_LAST_MOD:
+            return _META_CACHE
+
+        with open(META_FILE_PATH, "r") as f:
+            data = json.load(f)
+            _META_CACHE = data
+            _META_LAST_MOD = mtime
+            return data
+    except Exception as e:
+        logger.error("Failed to load meta data: %s", e)
+        return _META_CACHE if _META_CACHE is not None else {}
