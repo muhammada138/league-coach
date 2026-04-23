@@ -104,6 +104,7 @@ async def live_enrich(body: LiveEnrichRequest):
             db_cached = db.get_enriched_profile(puuid)
             if db_cached:
                 data, ts = db_cached
+                data["puuid"] = puuid
                 data["last_updated"] = ts
                 return data
 
