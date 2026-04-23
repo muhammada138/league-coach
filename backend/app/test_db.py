@@ -40,7 +40,7 @@ def test_init_db(tmp_path, mocker):
         # Check ingestion_status singleton row
         row = conn.execute("SELECT processed_count, total_target, is_paused FROM ingestion_status WHERE id = 1").fetchone()
         assert row is not None
-        assert row == (0, 50000, 1)
+        assert row == (0, 200000, 1)
 
 def test_init_db_migration(tmp_path, mocker):
     temp_db_path = tmp_path / "migration_test.db"
