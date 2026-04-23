@@ -171,6 +171,7 @@ export default function SearchInput({
         <button
           type="submit"
           disabled={loading}
+          aria-label="Search"
           className={`flex items-center justify-center transition-all
             ${navbar ? "w-10 text-slate-400 hover:text-[#c89b3c]" : "px-6 text-[#c89b3c] hover:bg-[#c89b3c]/5"}
             disabled:opacity-50`}
@@ -301,6 +302,7 @@ export default function SearchInput({
                           ? "bg-[#c89b3c]/10 text-[#c89b3c] shadow-sm shadow-[#c89b3c]/5"
                           : "text-slate-400 dark:text-white/20 hover:text-[#c89b3c] hover:bg-[#c89b3c]/10"}`}
                       title={s.isSaved ? "Remove Favorite" : "Favorite Profile"}
+                      aria-label={s.isSaved ? "Remove Favorite" : "Favorite Profile"}
                     >
                       <svg className={`w-3.5 h-3.5 ${s.isSaved ? "fill-current" : ""}`} viewBox="0 0 16 16" fill="currentColor">
                         <path d="M8 1.5l1.75 3.55 3.92.57-2.84 2.77.67 3.9L8 10.35l-3.5 1.84.67-3.9L2.33 5.62l3.92-.57L8 1.5z" />
@@ -324,6 +326,7 @@ export default function SearchInput({
                       }}
                       className="w-7 h-7 rounded-lg flex items-center justify-center text-red-500/30 hover:text-red-500 hover:bg-red-500/10 transition-all focus:outline-none focus:ring-1 focus:ring-red-500/50"
                       title={s.type === 'saved' ? "Remove Favorite" : "Remove from Recent"}
+                      aria-label={s.type === 'saved' ? "Remove Favorite" : "Remove from Recent"}
                     >
                       <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8">
                         <path d="M9 3l-6 6M3 3l6 6" strokeLinecap="round" />
