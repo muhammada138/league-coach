@@ -126,8 +126,8 @@ function getSkillMaxOrder(skillOrder) {
   return order;
 }
 
-function computePerformanceScore(player, allPlayers) {
-  if (!player || !allPlayers) return "0.00";
+function computePerformanceScore(player, oppMap) {
+  if (!player) return "0.00";
   const ch = player.challenges || {};
   const lane = player.teamPosition || "MIDDLE";
 
@@ -156,9 +156,9 @@ function computePerformanceScore(player, allPlayers) {
   // Lane Performance (vs lane opponent)
   let laneScore = 0.0;
   if (lane && lane !== "UNKNOWN") {
-    const opp = allPlayers.find(
-      (p) => p && p.teamPosition === lane && p.teamId !== player.teamId
-    );
+    const oppTeamId = player.teamId === 100 ? "200" : "100";
+    const opp = oppMap ? oppMap[oppTeamId + lane] : null;
+
     if (opp) {
       const goldDiff = (player.goldEarned ?? 0) - (opp.goldEarned ?? 0);
       const xpDiff = (player.champExperience ?? 0) - (opp.champExperience ?? 0);
@@ -624,7 +624,7 @@ const RankDetail = ({ data }) => (
 
 const WRDetail = ({ data }) => {
   const wr = data.wr || 0.5;
-  const games = data.total ?? ((data.wins || 0) + (data.losses || 0)) || 0;
+  const games = (data.total ?? ((data.wins || 0) + (data.losses || 0))) || 0;
   return (
     <div className="flex flex-col items-end leading-none">
       <span className={`text-[11px] font-bold ${wr >= 0.55 ? 'text-emerald-400' : wr >= 0.45 ? 'text-white/70' : 'text-red-400'}`}>
@@ -1448,9 +1448,19 @@ function TeamScoreRows({ players, isWin, teamLabel, gameName, isRemake, ddVersio
 function ExpandedScoreboard({ scoreboard, loading, gameName, isRemake, ddVersion, runesMap, region }) {
   const withScores = useMemo(() => {
     const participants = scoreboard?.participants || [];
+
+    // Precompute opponent map for O(1) lookups in performance scoring, reducing complexity from O(N^2) to O(N)
+    const oppMap = {};
+    for (let i = 0; i < participants.length; i++) {
+        const p = participants[i];
+        if (p && p.teamPosition && p.teamPosition !== "UNKNOWN") {
+            oppMap[p.teamId + p.teamPosition] = p;
+        }
+    }
+
     return participants.filter(Boolean).map((p) => ({
       ...p,
-      score: p.score ?? computePerformanceScore(p, participants),
+      score: p.score ?? computePerformanceScore(p, oppMap),
     }));
   }, [scoreboard]);
 
