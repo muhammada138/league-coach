@@ -93,7 +93,7 @@ def _process_match(match_id: str, match_data: dict, puuid: str) -> Dict[str, Any
     lobby_cspm = lobby_avgs["totalMinionsKilled"] / minutes if minutes > 0 else 0
     all_player_scores = [(p, _compute_perf_score(p, participants, None, game_duration)) for p in participants]
     game_score = next(s for p, s in all_player_scores if p.get("puuid") == puuid)
-    game_diffed_lane = _compute_diffed_lane(participants, None, game_duration)
+    game_diffed_lane = _compute_diffed_lane(participants, all_player_scores, None, game_duration)
     winning_scores = [(p, s) for p, s in all_player_scores if p.get("win")]
     losing_scores  = [(p, s) for p, s in all_player_scores if not p.get("win")]
     mvp_puuid_g = max(winning_scores, key=lambda x: x[1])[0].get("puuid") if winning_scores else None

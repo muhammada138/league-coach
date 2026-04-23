@@ -174,17 +174,32 @@ def _compute_perf_score(player: dict, all_players: list, timeline: dict = None, 
     total = base + global_score + lane_score + obj_score + team_score + kda_score + role_specific + win_loss
     return round(max(0.0, min(100.0, float(total))), 2)
 
-def _compute_diffed_lane(all_players: list, timeline: dict = None, game_duration: int = 0):
+def _compute_diffed_lane(all_players: list, all_ps: list = None, timeline: dict = None, game_duration: int = 0):
+    scores_by_id = None
+    if all_ps:
+        scores_by_id = {id(p): s for p, s in all_ps}
+
     by_pos = {}
     for p in all_players:
         pos = p.get("teamPosition", "")
         if pos and pos != "UNKNOWN":
             by_pos.setdefault(pos, []).append(p)
+
     max_diff, diffed = -1, None
     for pos, players in by_pos.items():
         if len(players) != 2: continue
-        s1 = _compute_perf_score(players[0], all_players, timeline, game_duration)
-        s2 = _compute_perf_score(players[1], all_players, timeline, game_duration)
+
+        if scores_by_id is not None:
+            s1 = scores_by_id.get(id(players[0]))
+            if s1 is None:
+                s1 = _compute_perf_score(players[0], all_players, timeline, game_duration)
+            s2 = scores_by_id.get(id(players[1]))
+            if s2 is None:
+                s2 = _compute_perf_score(players[1], all_players, timeline, game_duration)
+        else:
+            s1 = _compute_perf_score(players[0], all_players, timeline, game_duration)
+            s2 = _compute_perf_score(players[1], all_players, timeline, game_duration)
+
         diff = abs(s1 - s2)
         if diff > max_diff:
             max_diff, diffed = diff, pos
