@@ -104,9 +104,12 @@ async def live_enrich(body: LiveEnrichRequest):
             db_cached = db.get_enriched_profile(puuid)
             if db_cached:
                 data, ts = db_cached
-                data["puuid"] = puuid
-                data["last_updated"] = ts
-                return data
+                # Only use DB cache if it has full enrichment data (last5, avg_score).
+                # Basic profiles saved by /profile only have rank/LP and lack match history.
+                if data.get("last5") and len(data["last5"]) > 0:
+                    data["puuid"] = puuid
+                    data["last_updated"] = ts
+                    return data
 
         cache_key = f"v7:{puuid}:{body.queue_id}:{region}"
         if not body.force:
