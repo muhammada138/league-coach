@@ -23,6 +23,21 @@ export default function AdminData() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedRank, setSelectedRank] = useState(searchParams.get("rank") || "emerald");
   const [selectedRole, setSelectedRole] = useState(searchParams.get("role") || "all");
+  const [isAdmin, setIsAdmin] = useState(!!localStorage.getItem("admin_token"));
+
+  const handleLogin = () => {
+    const pass = prompt("Enter Admin API Key:");
+    if (pass) {
+      localStorage.setItem("admin_token", pass);
+      setIsAdmin(true);
+      fetchData();
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("admin_token");
+    setIsAdmin(false);
+  };
   const [search, setSearch] = useState("");
   const [selectedChamp, setSelectedChamp] = useState(searchParams.get("champ") || null);
 
@@ -296,7 +311,19 @@ export default function AdminData() {
                     <button onClick={() => setSelectedChamp(null)} className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all flex items-center gap-2"><span className="text-[#c89b3c]">←</span> Back to Tierlist</button>
                   )}
                   <div>
-                    <h2 className="text-2xl font-black uppercase italic tracking-tighter">{selectedChamp ? selectedChampName : "Meta Explorer"}</h2>
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-2xl font-black uppercase italic tracking-tighter">{selectedChamp ? selectedChampName : "Meta Explorer"}</h2>
+                      <button 
+                        onClick={isAdmin ? handleLogout : handleLogin}
+                        className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full border transition-all ${
+                          isAdmin 
+                            ? "border-emerald-500/30 text-emerald-500 bg-emerald-500/5 hover:bg-rose-500/10 hover:border-rose-500/30 hover:text-rose-500" 
+                            : "border-[#c89b3c]/30 text-[#c89b3c] bg-[#c89b3c]/5 hover:bg-[#c89b3c]/20"
+                        }`}
+                      >
+                        {isAdmin ? "Logged In" : "Unlock Admin"}
+                      </button>
+                    </div>
                     <p className="text-white/20 text-xs font-bold uppercase tracking-widest mt-1">{selectedChamp ? "Specific Lane Matchups" : "Global performance across tiers"}</p>
                   </div>
                 </div>
