@@ -174,7 +174,7 @@ def _compute_perf_score(player: dict, all_players: list, timeline: dict = None, 
     total = base + global_score + lane_score + obj_score + team_score + kda_score + role_specific + win_loss
     return round(max(0.0, min(100.0, float(total))), 2)
 
-def _compute_diffed_lane(all_players: list, timeline: dict = None, game_duration: int = 0):
+def _compute_diffed_lane(all_players: list, timeline: dict = None, game_duration: int = 0, precomputed_scores: dict = None):
     by_pos = {}
     for p in all_players:
         pos = p.get("teamPosition", "")
@@ -183,8 +183,14 @@ def _compute_diffed_lane(all_players: list, timeline: dict = None, game_duration
     max_diff, diffed = -1, None
     for pos, players in by_pos.items():
         if len(players) != 2: continue
-        s1 = _compute_perf_score(players[0], all_players, timeline, game_duration)
-        s2 = _compute_perf_score(players[1], all_players, timeline, game_duration)
+        
+        if precomputed_scores:
+            s1 = precomputed_scores.get(players[0].get("puuid"), 0)
+            s2 = precomputed_scores.get(players[1].get("puuid"), 0)
+        else:
+            s1 = _compute_perf_score(players[0], all_players, timeline, game_duration)
+            s2 = _compute_perf_score(players[1], all_players, timeline, game_duration)
+            
         diff = abs(s1 - s2)
         if diff > max_diff:
             max_diff, diffed = diff, pos

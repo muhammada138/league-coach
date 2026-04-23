@@ -66,14 +66,15 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS ingestion_status (
                 id              INTEGER PRIMARY KEY,
                 processed_count INTEGER NOT NULL DEFAULT 0,
-                total_target    INTEGER NOT NULL DEFAULT 50000,
-                is_paused       INTEGER NOT NULL DEFAULT 1
+                total_target    INTEGER NOT NULL DEFAULT 200000,
+                is_paused       INTEGER NOT NULL DEFAULT 1,
+                paused_at       INTEGER NOT NULL DEFAULT 0
             )
         """)
         # Ensure singleton status row exists
         conn.execute("""
-            INSERT OR IGNORE INTO ingestion_status (id, processed_count, total_target, is_paused)
-            VALUES (1, 0, 50000, 1)
+            INSERT OR IGNORE INTO ingestion_status (id, processed_count, total_target, is_paused, paused_at)
+            VALUES (1, 0, 200000, 1, 0)
         """)
         # Persistent Profile Cache (shared across all users)
         conn.execute("""
@@ -220,7 +221,7 @@ def _get_ingestion_status_sync() -> dict:
             "SELECT processed_count, total_target, is_paused, paused_at FROM ingestion_status WHERE id = 1"
         ).fetchone()
     if row is None:
-        return {"processed_count": 0, "total_target": 50000, "is_paused": True, "paused_at": 0}
+        return {"processed_count": 0, "total_target": 200000, "is_paused": True, "paused_at": 0}
     return {
         "processed_count": row[0], 
         "total_target": row[1], 
