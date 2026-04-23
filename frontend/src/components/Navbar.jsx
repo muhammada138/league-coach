@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ThemeToggle from "./ThemeToggle";
 import { getSummoner } from "../api/riot";
@@ -20,8 +20,25 @@ const TIER_COLORS = {
 };
 
 // ── Profile avatar ───────────────────────────────────────────────────────────
+let _ddVersion = null;
+async function getDDVersion() {
+  if (_ddVersion) return _ddVersion;
+  try {
+    const res = await fetch("https://ddragon.leagueoflegends.com/api/versions.json");
+    const versions = await res.json();
+    _ddVersion = versions[0];
+  } catch {
+    _ddVersion = "15.8.1";
+  }
+  return _ddVersion;
+}
+
 function ProfileAvatar({ profile }) {
   const [failed, setFailed] = useState(false);
+  const [ver, setVer] = useState(_ddVersion || "15.8.1");
+
+  useEffect(() => { getDDVersion().then(setVer); }, []);
+
   if (!profile.profileIconId || failed) {
     return (
       <span className="w-6 h-6 rounded-md bg-[#c89b3c]/10 border border-[#c89b3c]/20 text-[#c89b3c] text-[10px] font-black flex items-center justify-center flex-shrink-0">
@@ -31,7 +48,7 @@ function ProfileAvatar({ profile }) {
   }
   return (
     <img
-      src={`https://ddragon.leagueoflegends.com/cdn/14.24.1/img/profileicon/${profile.profileIconId}.png`}
+      src={`https://ddragon.leagueoflegends.com/cdn/${ver}/img/profileicon/${profile.profileIconId}.png`}
       alt=""
       className="w-6 h-6 rounded-md object-cover flex-shrink-0"
       onError={() => setFailed(true)}
