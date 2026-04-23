@@ -58,3 +58,10 @@ test_qwik.py
 qwik.json
 *.csv
 matches_export.csv
+
+# AI & Planning
+.agents/
+.claude/
+.github/
+.pytest_cache/
+*.md

@@ -15,7 +15,7 @@ def test_read_main():
 
 @pytest.mark.asyncio
 async def test_get_summoner_mock(mocker):
-    mock_riot_get = mocker.patch("app.routes.api.riot_get", new_callable=mocker.AsyncMock)
+    mock_riot_get = mocker.patch("app.routes.player.riot_get", new_callable=mocker.AsyncMock)
     mock_riot_get.return_value = {"puuid": "mock-puuid", "gameName": "MockPlayer", "tagLine": "NA1"}
     
     response = client.get("/summoner/MockPlayer/NA1?region=na1")
@@ -26,13 +26,13 @@ async def test_get_summoner_mock(mocker):
 
 @pytest.mark.asyncio
 async def test_get_profile_mock(mocker):
-    mock_riot_get = mocker.patch("app.routes.api.riot_get", new_callable=mocker.AsyncMock)
+    mock_riot_get = mocker.patch("app.routes.player.riot_get", new_callable=mocker.AsyncMock)
     mock_riot_get.side_effect = [
         {"summonerLevel": 100, "profileIconId": 1}, # summoner
         [{"queueType": "RANKED_SOLO_5x5", "tier": "GOLD", "rank": "I", "leaguePoints": 50, "wins": 10, "losses": 5}] # entries
     ]
-    mocker.patch("app.routes.api.db.record_lp_snapshot", new_callable=mocker.AsyncMock)
-    mocker.patch("app.routes.api.backfill_if_needed", new_callable=mocker.AsyncMock)
+    mocker.patch("app.routes.player.db.record_lp_snapshot", new_callable=mocker.AsyncMock)
+    mocker.patch("app.routes.player.backfill_if_needed", new_callable=mocker.AsyncMock)
 
     response = client.get("/profile/mock-puuid?region=na1")
     assert response.status_code == 200
@@ -42,10 +42,10 @@ async def test_get_profile_mock(mocker):
 
 @pytest.mark.asyncio
 async def test_analyze_summoner_mock(mocker):
-    mock_fetch = mocker.patch("app.routes.api._fetch_recent_matches", new_callable=mocker.AsyncMock)
+    mock_fetch = mocker.patch("app.routes.analysis._fetch_recent_matches", new_callable=mocker.AsyncMock)
     mock_fetch.return_value = (["m1"], 420, [{"info": {"gameDuration": 1500, "participants": [{"puuid": "p1", "win": True}]}}])
     
-    mocker.patch("app.routes.api._process_match", return_value={
+    mocker.patch("app.routes.analysis._process_match", return_value={
         "matchId": "m1",
         "gameEndTimestamp": 123456789,
         "win": True, "score": 70, "position": "MID", "kda": 3.0, "cspm": 8.0, 
@@ -64,7 +64,7 @@ async def test_analyze_summoner_mock(mocker):
         },
         "stats": {}
     })
-    mocker.patch("app.routes.api._generate_coaching", new_callable=mocker.AsyncMock, return_value="Good job.")
+    mocker.patch("app.routes.analysis._generate_coaching", new_callable=mocker.AsyncMock, return_value="Good job.")
     
     response = client.get("/analyze/p1?game_name=P1&count=1&region=na1")
     assert response.status_code == 200
@@ -73,13 +73,13 @@ async def test_analyze_summoner_mock(mocker):
 
 @pytest.mark.asyncio
 async def test_get_history_mock(mocker):
-    mock_riot_get = mocker.patch("app.routes.api.riot_get", new_callable=mocker.AsyncMock)
+    mock_riot_get = mocker.patch("app.routes.player.riot_get", new_callable=mocker.AsyncMock)
     mock_riot_get.side_effect = [
         ["m1"], # match IDs
         {"info": {"gameDuration": 1500, "participants": [{"puuid": "p1", "win": True, "championName": "Lux", "kills": 5, "deaths": 1, "assists": 10, "visionScore": 20}]}} # match detail
     ]
-    mocker.patch("app.routes.api._compute_perf_score", return_value=80.0)
-    mocker.patch("app.routes.api._compute_diffed_lane", return_value="MIDDLE")
+    mocker.patch("app.routes.player._compute_perf_score", return_value=80.0)
+    mocker.patch("app.routes.player._compute_diffed_lane", return_value="MIDDLE")
 
     response = client.get("/history/p1?start=0&count=1&region=na1")
     assert response.status_code == 200
@@ -89,7 +89,7 @@ async def test_get_history_mock(mocker):
 
 @pytest.mark.asyncio
 async def test_get_live_game_mock(mocker):
-    mock_riot_get = mocker.patch("app.routes.api.riot_get", new_callable=mocker.AsyncMock)
+    mock_riot_get = mocker.patch("app.routes.live.riot_get", new_callable=mocker.AsyncMock)
     mock_riot_get.return_value = {
         "gameId": 123, "gameMode": "CLASSIC", "gameLength": 100, "gameQueueConfigId": 420,
         "participants": [{"puuid": "p1", "championId": 1, "teamId": 100}]
@@ -105,16 +105,16 @@ async def test_get_live_game_mock(mocker):
 @pytest.mark.asyncio
 async def test_live_enrich_mock(mocker):
     # This is complex to mock fully, but we can verify the structure
-    mock_riot_get = mocker.patch("app.routes.api.riot_get", new_callable=mocker.AsyncMock)
+    mock_riot_get = mocker.patch("app.routes.live.riot_get", new_callable=mocker.AsyncMock)
     mock_riot_get.side_effect = [
         [], # entries
         ["m1"], # match IDs
     ]
-    mocker.patch("app.routes.api.get_match_details", new_callable=mocker.AsyncMock, return_value={
+    mocker.patch("app.routes.live.get_match_details", new_callable=mocker.AsyncMock, return_value={
         "metadata": {"matchId": "m1"},
         "info": {"gameDuration": 1200, "participants": [{"puuid": "p1", "win": True, "championId": 1}]}
     })
-    mocker.patch("app.routes.api._compute_perf_score", return_value=75.0)
+    mocker.patch("app.routes.live._compute_perf_score", return_value=75.0)
 
     payload = {"puuids": ["p1"], "queue_id": 420}
     response = client.post("/live-enrich", json=payload)
@@ -152,7 +152,7 @@ def test_win_predict_empty_participants():
 
 @pytest.mark.asyncio
 async def test_ask_coach_mock(mocker):
-    mock_ask = mocker.patch("app.routes.api.ask_coach_question", new_callable=mocker.AsyncMock)
+    mock_ask = mocker.patch("app.routes.ai.ask_coach_question", new_callable=mocker.AsyncMock)
     mock_ask.return_value = "Keep farming."
 
     payload = {"question": "How do I win?", "context": "Player is 0/10."}
