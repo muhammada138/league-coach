@@ -4,6 +4,12 @@ import logging
 from fastapi import HTTPException
 from ..state import RIOT_HEADERS, rank_cache, timeline_cache, match_cache, RIOT_REGION, RIOT_ROUTING
 
+# Configuration Constants
+RETRY_DELAY_BUFFER_SEC = 1
+MAX_RETRIES = 3
+MIN_GAME_DURATION_SEC = 210
+PERF_SCORE_BASE = 15.0
+
 async def get_match_details(client: httpx.AsyncClient, match_id: str, routing: str = RIOT_ROUTING) -> dict:
     if match_id in match_cache:
         return match_cache[match_id]
@@ -20,14 +26,14 @@ from .rate_limiter import acquire as _rl_acquire, update_from_response as _rl_up
 logger = logging.getLogger(__name__)
 
 async def riot_get(client: httpx.AsyncClient, url: str) -> dict:
-    for attempt in range(3):
+    for attempt in range(MAX_RETRIES):
         await _rl_acquire()
         response = await client.get(url, headers=RIOT_HEADERS)
         _rl_update(response)
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", 1))
             logger.warning("Riot API 429 despite limiter (attempt %d) — sleeping %ds", attempt + 1, retry_after)
-            await asyncio.sleep(retry_after + 1)
+            await asyncio.sleep(retry_after + RETRY_DELAY_BUFFER_SEC)
             continue
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=response.text)
@@ -62,13 +68,12 @@ async def get_match_timeline(client: httpx.AsyncClient, match_id: str, routing: 
     return None
 
 def _compute_perf_score(player: dict, all_players: list, timeline: dict = None, game_duration: int = 0) -> float:
-    if 0 < game_duration < 210:
+    if 0 < game_duration < MIN_GAME_DURATION_SEC:
         return 0.0
 
     ch   = player.get("challenges") or {}
     lane = player.get("teamPosition") or "MIDDLE"
-
-    base = 15.0
+    base = PERF_SCORE_BASE
     gpm  = ch.get("goldPerMinute", 0) or 0.0
     dpm  = ch.get("damagePerMinute", 0) or 0.0
     vspm = ch.get("visionScorePerMinute", 0) or 0.0

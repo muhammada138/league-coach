@@ -15,7 +15,15 @@ from ..state import META_FILE_PATH, sync_state, DATA_DIR
 logger = logging.getLogger(__name__)
 _CACHED_FULL_VERSION = None
 _VERSION_CACHE_TIME = 0
+
+# Configuration Constants
 VERSION_CACHE_DURATION = 12 * 3600  # 12 hours
+TIERLIST_REFRESH_THRESHOLD = 43200  # 12 hours
+MATCHUP_STALE_THRESHOLD = 86400      # 24 hours
+SCRAPE_DELAY_LANE_SEC = 0.05
+SCRAPE_DELAY_MATCHUP_SEC = 0.35
+SYNC_PAUSE_POLL_SEC = 1.0
+SAVE_PROBABILITY = 0.03
 
 async def _get_latest_version_full() -> str:
     """Fetch the latest full LoL version from Data Dragon with caching."""
@@ -311,7 +319,7 @@ async def fetch_rank_meta(rank: str, patch: str = None) -> dict:
                     logger.error("Failed to parse Qwik JSON: %s", je)
 
                 # Brief delay between lane requests
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(SCRAPE_DELAY_LANE_SEC)
 
             except Exception as e:
                 logger.error("Error in fetch_rank_meta lane %s for %s: %s", lane, rank, e)
@@ -350,7 +358,7 @@ async def sync_meta(mode="full"):
         
         # Ensure we have tierlist data before doing matchups
         needs_tierlist = not full_meta or mode in ("full", "tierlist")
-        if mode == "full" and full_meta and (int(time.time()) - existing.get("tierlist_updated", 0)) < 43200:
+        if mode == "full" and full_meta and (int(time.time()) - existing.get("tierlist_updated", 0)) < TIERLIST_REFRESH_THRESHOLD:
             logger.info("Tierlist fetched recently (<12h). Skipping Phase 1.")
             needs_tierlist = False
 
@@ -358,7 +366,7 @@ async def sync_meta(mode="full"):
         if needs_tierlist:
             for rank in RANKS:
                 if sync_state["cancel_requested"]: break
-                while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(1.0)
+                while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(SYNC_PAUSE_POLL_SEC)
                 
                 logger.info("Syncing tierlist: %s (Patch %s)", rank, current_patch)
                 rank_data = await fetch_rank_meta(rank, patch=current_patch)
@@ -394,10 +402,10 @@ async def sync_meta(mode="full"):
             async def crawl_one(rank, cid_str, cdata):
                 async with sem:
                     if sync_state["cancel_requested"]: return
-                    while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(1.0)
+                    while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(SYNC_PAUSE_POLL_SEC)
                     
                     # Force re-crawl on explicit matchups mode; otherwise skip if fresh (<24h)
-                    stale = (now_ts - cdata.get("last_checked", 0)) > 86400
+                    stale = (now_ts - cdata.get("last_checked", 0)) > MATCHUP_STALE_THRESHOLD
                     name, lane = cdata["name"], cdata["lane"]
                     
                     if lane == "all": return # Skip "all" lane to save massive time; we only need specific lane matchups
@@ -413,9 +421,9 @@ async def sync_meta(mode="full"):
                                 full_meta[rank]["champions"][cid_str]["matchups"] = matchups
                             
                             # 0.35s delay + HTTP time natively hits ~1-1.5 total hours
-                            await asyncio.sleep(0.35)
+                            await asyncio.sleep(SCRAPE_DELAY_MATCHUP_SEC)
                             
-                            if random.random() < 0.03: # 3% chance to save to reduce disk thrashing
+                            if random.random() < SAVE_PROBABILITY: # 3% chance to save to reduce disk thrashing
                                 save_meta_data({"tierlist_updated": existing.get("tierlist_updated", 0), "updated_at": time.time(), "data": full_meta, "is_partial": True})
                         except Exception as e:
                             logger.error("  -> Failed to crawl %s (%s) in %s: %s", name, lane, rank, e)

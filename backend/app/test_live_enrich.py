@@ -14,8 +14,8 @@ def clear_caches():
 @pytest.mark.asyncio
 async def test_live_enrich_duo_detection(mocker):
     # Mock riot_get and get_match_details
-    mock_riot_get = mocker.patch("app.routes.api.riot_get")
-    mock_get_match = mocker.patch("app.routes.api.get_match_details")
+    mock_riot_get = mocker.patch("app.routes.live.riot_get")
+    mock_get_match = mocker.patch("app.routes.live.get_match_details")
     
     p1_puuid = "p1-puuid"
     p2_puuid = "p2-puuid"
@@ -47,7 +47,7 @@ async def test_live_enrich_duo_detection(mocker):
     mock_get_match.side_effect = mock_get_match_impl
     
     # Mock compute_perf_score
-    mocker.patch("app.routes.api._compute_perf_score", return_value=75.0)
+    mocker.patch("app.routes.live._compute_perf_score", return_value=75.0)
 
     payload = {
         "puuids": [p1_puuid, p2_puuid],
@@ -71,8 +71,8 @@ async def test_live_enrich_duo_detection(mocker):
 
 @pytest.mark.asyncio
 async def test_live_enrich_synergy_found(mocker):
-    mock_riot_get = mocker.patch("app.routes.api.riot_get")
-    mock_get_match = mocker.patch("app.routes.api.get_match_details")
+    mock_riot_get = mocker.patch("app.routes.live.riot_get")
+    mock_get_match = mocker.patch("app.routes.live.get_match_details")
     p1_puuid = "p1-puuid"
     p2_puuid = "p2-puuid"
     m1, m2, m3, m4, m5 = "m1", "m2", "m3", "m4", "m5"
@@ -100,7 +100,7 @@ async def test_live_enrich_synergy_found(mocker):
 
     mock_riot_get.side_effect = mock_riot_get_impl
     mock_get_match.side_effect = mock_get_match_impl
-    mocker.patch("app.routes.api._compute_perf_score", return_value=75.0)
+    mocker.patch("app.routes.live._compute_perf_score", return_value=75.0)
 
     payload = {"puuids": [p1_puuid, p2_puuid], "queue_id": 420}
     response = client.post("/live-enrich", json=payload)
@@ -111,8 +111,8 @@ async def test_live_enrich_synergy_found(mocker):
 
 @pytest.mark.asyncio
 async def test_live_enrich_learning_phase(mocker):
-    mock_riot_get = mocker.patch("app.routes.api.riot_get")
-    mock_get_match = mocker.patch("app.routes.api.get_match_details")
+    mock_riot_get = mocker.patch("app.routes.live.riot_get")
+    mock_get_match = mocker.patch("app.routes.live.get_match_details")
     p1_puuid = "p1-puuid"
     p2_puuid = "p2-puuid"
     m1, m2, m3 = "m1", "m2", "m3"
@@ -140,7 +140,7 @@ async def test_live_enrich_learning_phase(mocker):
 
     mock_riot_get.side_effect = mock_riot_get_impl
     mock_get_match.side_effect = mock_get_match_impl
-    mocker.patch("app.routes.api._compute_perf_score", return_value=75.0)
+    mocker.patch("app.routes.live._compute_perf_score", return_value=75.0)
 
     payload = {"puuids": [p1_puuid, p2_puuid], "queue_id": 420}
     response = client.post("/live-enrich", json=payload)
