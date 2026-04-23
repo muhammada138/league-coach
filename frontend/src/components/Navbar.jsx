@@ -189,9 +189,17 @@ function SavedDropdown() {
 
                   <button
                     onClick={(e) => { e.stopPropagation(); toggleSaved(p); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleSaved(p);
+                      }
+                    }}
                     className="relative z-10 flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center
                       text-red-400/40 hover:text-red-500 hover:bg-red-500/10
-                      opacity-0 group-hover:opacity-100 transition-all"
+                      opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all focus:outline-none focus:ring-1 focus:ring-red-500/50"
+                    aria-label={`Remove ${p.gameName} from saved`}
                   >
                     <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <path d="M12 4L4 12M4 4l8 8" strokeLinecap="round" />
