@@ -62,7 +62,6 @@ matches_export.csv
 # AI & Planning
 .agents/
 .claude/
-.github/
 .pytest_cache/
 *.md
 !README.md
