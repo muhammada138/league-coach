@@ -91,11 +91,12 @@ def _process_match(match_id: str, match_data: dict, puuid: str) -> Dict[str, Any
     minutes = game_duration / 60
     player_cspm = player_stats["totalMinionsKilled"] / minutes if minutes > 0 else 0
     lobby_cspm = lobby_avgs["totalMinionsKilled"] / minutes if minutes > 0 else 0
-    all_player_scores = [(p, _compute_perf_score(p, participants, None, game_duration)) for p in participants]
-    game_score = next(s for p, s in all_player_scores if p.get("puuid") == puuid)
-    game_diffed_lane = _compute_diffed_lane(participants, None, game_duration)
-    winning_scores = [(p, s) for p, s in all_player_scores if p.get("win")]
-    losing_scores  = [(p, s) for p, s in all_player_scores if not p.get("win")]
+    all_player_scores = {p.get("puuid"): _compute_perf_score(p, participants, None, game_duration) for p in participants}
+    game_score = all_player_scores.get(puuid, 0)
+    game_diffed_lane = _compute_diffed_lane(participants, None, game_duration, precomputed_scores=all_player_scores)
+    
+    winning_scores = [(p, all_player_scores.get(p.get("puuid"), 0)) for p in participants if p.get("win")]
+    losing_scores  = [(p, all_player_scores.get(p.get("puuid"), 0)) for p in participants if not p.get("win")]
     mvp_puuid_g = max(winning_scores, key=lambda x: x[1])[0].get("puuid") if winning_scores else None
     ace_puuid_g = max(losing_scores,  key=lambda x: x[1])[0].get("puuid") if losing_scores  else None
     mvp_ace = "MVP" if puuid == mvp_puuid_g else ("ACE" if puuid == ace_puuid_g else None)

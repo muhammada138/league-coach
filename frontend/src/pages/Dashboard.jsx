@@ -2600,19 +2600,22 @@ export default function Dashboard() {
   useEffect(() => {
     if (!gameName || !tagLine) { navigate("/"); return; }
     window.scrollTo(0, 0);
-    setLoading(true);
-    setAnalysisLoading(true);
-    setProfile(null);
-    setAnalysis(null);
-    setLpHistory([]);
+    
+    // Only show full-screen skeleton if we have NO profile data at all
+    if (!profile) setLoading(true);
+    
+    // Only show analysis skeleton if we have NO analysis data at all
+    if (!analysis) setAnalysisLoading(true);
+
     setError("");
     setExpandedMatchId(null);
     setScoreboard(null);
-    setLiveGame(null);
-    setLiveStatus('idle');
+    // Don't clear live game on every tiny change, but maybe keep it hidden until check
+    
     doFetch(state?.puuid)
       .then((puuid) => {
         setLoading(false); // profile card renders immediately
+        // background fetch the analysis
         return analyzeSummoner(puuid, gameName, gameCount, region);
       })
       .then((anal) => {
@@ -2623,10 +2626,13 @@ export default function Dashboard() {
       .catch((err) => {
         setLoading(false);
         setAnalysisLoading(false);
-        setError(err.message || "Failed to load data. Check that the backend is running.");
+        // Only show error if we have no data to show at all
+        if (!profile && !analysis) {
+           setError(err.message || "Failed to load data. Check that the backend is running.");
+        }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameName, tagLine]);
+  }, [gameName, tagLine, region]);
 
   const handleRefresh = () => {
     if (refreshing) return;

@@ -56,7 +56,18 @@ export default function IngestDashboard() {
     }
   };
 
-  const [history, setHistory] = useState([]); // Store {processed, time} for delta calc
+  const [history, setHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem("ingest_history");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Filter out old entries (> 5 mins) immediately
+        const now = Date.now();
+        return parsed.filter(h => now - h.time < 300000);
+      }
+    } catch (e) {}
+    return [];
+  });
 
   const processed   = status?.processed_count ?? 0;
   const target      = status?.total_target    ?? 50000;
@@ -69,9 +80,17 @@ export default function IngestDashboard() {
     if (processed > 0) {
       setHistory(prev => {
         const now = Date.now();
-        // Keep last 5 minutes of history for a stable moving average
+        // If the last entry is the same as current processed count and 
+        // it was less than 5 seconds ago, don't add to avoid spamming history
+        const last = prev[prev.length - 1];
+        if (last && last.processed === processed && now - last.time < 5000) {
+          return prev;
+        }
+
         const filtered = prev.filter(h => now - h.time < 300000);
-        return [...filtered, { processed, time: now }];
+        const next = [...filtered, { processed, time: now }];
+        localStorage.setItem("ingest_history", JSON.stringify(next));
+        return next;
       });
     }
   }, [processed]);
@@ -87,21 +106,28 @@ export default function IngestDashboard() {
     const deltaMatches = last.processed - first.processed;
     const deltaMins    = (last.time - first.time) / 60000;
 
-    if (deltaMins < 0.16) { // wait at least 10s for first calculation
+    // Wait for at least 15s of data for a meaningful trend
+    if (deltaMins < 0.25) { 
       return { matchesPerMin: 0, etaText: isPaused ? null : "Calculating speed..." };
     }
 
+    // If matches haven't moved, but we have recent history, keep showing the old speed
+    // unless we've been stalled for a really long time (e.g. 5 minutes)
+    const mpm = deltaMatches / deltaMins;
+    
     if (deltaMatches <= 0) {
-      const totalTrackingTime = (last.time - first.time) / 1000;
-      return { matchesPerMin: 0, etaText: totalTrackingTime > 30 ? "Ingestion Stalled" : "Calculating speed..." };
+      const lastMovementTime = last.time - first.time;
+      if (lastMovementTime > 300000) { // 5 mins of zero progress
+        return { matchesPerMin: 0, etaText: "Ingestion Idle" };
+      }
     }
 
-    const mpm = deltaMatches / deltaMins;
     const remaining = target - processed;
-    const minsLeft  = Math.round(remaining / mpm);
+    const minsLeft  = mpm > 0 ? Math.round(remaining / mpm) : Infinity;
 
     let text = "";
-    if (minsLeft > 1440) text = `~${(minsLeft / 1440).toFixed(1)}d remaining`;
+    if (minsLeft === Infinity) text = "Pending...";
+    else if (minsLeft > 1440) text = `~${(minsLeft / 1440).toFixed(1)}d remaining`;
     else if (minsLeft > 60) text = `~${(minsLeft / 60).toFixed(1)}h remaining`;
     else text = `~${minsLeft}m remaining`;
 
