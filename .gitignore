@@ -65,3 +65,4 @@ matches_export.csv
 .github/
 .pytest_cache/
 *.md
+!README.md
