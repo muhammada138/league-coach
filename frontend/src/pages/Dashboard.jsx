@@ -2015,50 +2015,58 @@ function StatsContent({ playerAverages, lobbyAverages, deltas }) {
 
 // ── Summary Strip ───────────────────────────────────────────────────────────
 function SummaryStrip({ analysis, games }) {
-  const allGames = games || analysis?.games || [];
+  // ⚡ Bolt Optimization:
+  // Memoize `allGames` and the heavy stats calculations (reduce/filter) so they don't block
+  // the main thread on every re-render (e.g. during frequent interactions).
+  // Impact: Reduces time spent in render mapping arrays significantly.
+  const allGames = useMemo(() => games || analysis?.games || [], [games, analysis]);
   const n = allGames.length || 1;
 
-  const wins = allGames.filter((g) => g.win && g.gameDuration >= 210).length;
-  const losses = allGames.filter((g) => !g.win && g.gameDuration >= 210).length;
-  const totalValid = wins + losses || 1;
-  const winRate = ((wins / totalValid) * 100).toFixed(1);
+  const stats = useMemo(() => {
+    const wins = allGames.filter((g) => g.win && g.gameDuration >= 210).length;
+    const losses = allGames.filter((g) => !g.win && g.gameDuration >= 210).length;
+    const totalValid = wins + losses || 1;
+    const winRate = ((wins / totalValid) * 100).toFixed(1);
 
-  const tk = allGames.reduce((sum, g) => sum + g.kills, 0);
-  const td = allGames.reduce((sum, g) => sum + g.deaths, 0);
-  const ta = allGames.reduce((sum, g) => sum + g.assists, 0);
-  const avgKda = (tk + ta) / Math.max(td, 1);
+    const tk = allGames.reduce((sum, g) => sum + g.kills, 0);
+    const td = allGames.reduce((sum, g) => sum + g.deaths, 0);
+    const ta = allGames.reduce((sum, g) => sum + g.assists, 0);
+    const avgKda = (tk + ta) / Math.max(td, 1);
 
-  let totalMins = 0;
-  let totalCS = 0;
-  let totalVision = 0;
-  let totalScore = 0;
-  let validScoreCount = 0;
+    let totalMins = 0;
+    let totalCS = 0;
+    let totalVision = 0;
+    let totalScore = 0;
+    let validScoreCount = 0;
 
-  allGames.forEach((g) => {
-    const mins = g.gameDuration / 60;
-    totalMins += mins;
-    totalCS += g.cspm * mins;
-    totalVision += g.visionScore;
-    if (g.gameDuration >= 210) {
-      totalScore += g.score ?? 0;
-      validScoreCount++;
-    }
-  });
+    allGames.forEach((g) => {
+      const mins = g.gameDuration / 60;
+      totalMins += mins;
+      totalCS += g.cspm * mins;
+      totalVision += g.visionScore;
+      if (g.gameDuration >= 210) {
+        totalScore += g.score ?? 0;
+        validScoreCount++;
+      }
+    });
 
-  const avgCspm = totalMins > 0 ? totalCS / totalMins : 0;
-  const avgVision = totalVision / n;
-  const avgScore = validScoreCount > 0 ? totalScore / validScoreCount : 0;
+    const avgCspm = totalMins > 0 ? totalCS / totalMins : 0;
+    const avgVision = totalVision / n;
+    const avgScore = validScoreCount > 0 ? totalScore / validScoreCount : 0;
+
+    return { wins, losses, winRate, avgKda, avgCspm, avgVision, avgScore, validScoreCount };
+  }, [allGames, n]);
 
   const lKda = analysis.lobbyAverages.kda;
   const lCspm = analysis.lobbyAverages.cspm;
   const lVis = analysis.lobbyAverages.visionScore;
 
   const items = [
-    { label: "Win Rate", value: `${winRate}%`, sub: `${wins}W · ${losses}L`, positive: Number(winRate) >= 50 },
-    { label: "Avg KDA", value: avgKda.toFixed(2), sub: `Lobby ${lKda.toFixed(2)}`, positive: avgKda >= lKda },
-    { label: "CS / min", value: avgCspm.toFixed(2), sub: `Lobby ${lCspm.toFixed(2)}`, positive: avgCspm >= lCspm },
-    { label: "Vision", value: avgVision.toFixed(1), sub: `Lobby ${lVis.toFixed(1)}`, positive: avgVision >= lVis },
-    { label: "Avg Score", value: avgScore.toFixed(0), sub: `Last ${validScoreCount} games`, positive: avgScore >= 60 },
+    { label: "Win Rate", value: `${stats.winRate}%`, sub: `${stats.wins}W · ${stats.losses}L`, positive: Number(stats.winRate) >= 50 },
+    { label: "Avg KDA", value: stats.avgKda.toFixed(2), sub: `Lobby ${lKda.toFixed(2)}`, positive: stats.avgKda >= lKda },
+    { label: "CS / min", value: stats.avgCspm.toFixed(2), sub: `Lobby ${lCspm.toFixed(2)}`, positive: stats.avgCspm >= lCspm },
+    { label: "Vision", value: stats.avgVision.toFixed(1), sub: `Lobby ${lVis.toFixed(1)}`, positive: stats.avgVision >= lVis },
+    { label: "Avg Score", value: stats.avgScore.toFixed(0), sub: `Last ${stats.validScoreCount} games`, positive: stats.avgScore >= 60 },
   ];
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -2077,7 +2085,9 @@ function SummaryStrip({ analysis, games }) {
 function TeammatesContent({ games, region }) {
   const [tab, setTab] = useState("with");
 
-  const rows = aggregateTeammates(games, tab).filter((r) => r.games >= 2);
+  // ⚡ Bolt Optimization:
+  // Memoize `aggregateTeammates` so we don't re-calculate aggregations over arrays on every render.
+  const rows = useMemo(() => aggregateTeammates(games, tab).filter((r) => r.games >= 2), [games, tab]);
 
   return (
     <div className="flex flex-col h-full">
@@ -2484,10 +2494,15 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
 const APP_VERSION = "1.1";
 
 export default function Dashboard() {
+  const { state } = useLocation();
   const { region: urlRegion, gameName: rawGameName, tagLine: rawTagLine } = useParams();
   const gameName = rawGameName ? decodeURIComponent(rawGameName) : "";
   const tagLine = rawTagLine ? decodeURIComponent(rawTagLine) : "";
-  const region = urlRegion || state?.region || localStorage.getItem("lastRegion") || "na1";
+
+  // ⚡ Bolt Optimization:
+  // Memoize the `region` fallback resolution so we only access localStorage.getItem() (synchronous I/O)
+  // when necessary, rather than blocking the main thread on every component render.
+  const region = useMemo(() => urlRegion || state?.region || localStorage.getItem("lastRegion") || "na1", [urlRegion, state?.region]);
 
   const { saveToHistory } = useSearchHistory();
 
