@@ -276,8 +276,11 @@ async def live_enrich(body: LiveEnrichRequest):
     pair_match_sets = {}  
     match_outcomes = {}   
     for r in results:
-        p_puuid = r["puuid"]
-        if not p_puuid: continue
+        if not r or not isinstance(r, dict):
+            continue
+        p_puuid = r.get("puuid")
+        if not p_puuid:
+            continue
         for g in r.get("last5_details", []):
             match_participants = g.get("participants", [])
             match_id = g.get("matchId", "")
@@ -356,6 +359,8 @@ async def live_enrich(body: LiveEnrichRequest):
                 next_gid += 1
             
     for r in results:
+        if not r or not isinstance(r, dict) or "puuid" not in r:
+            continue
         info = duo_groups.get(r["puuid"])
         if info:
             r["duo_group"] = info["gid"]
@@ -364,4 +369,4 @@ async def live_enrich(body: LiveEnrichRequest):
         else:
             r["duo_group"] = 0
 
-    return {r["puuid"]: r for r in results}
+    return {r["puuid"]: r for r in results if r and isinstance(r, dict) and "puuid" in r}
