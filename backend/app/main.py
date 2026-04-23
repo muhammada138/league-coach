@@ -130,5 +130,6 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "Rift IQ Backend",
+        "version": "1.2.0-perf-opt",
         "timestamp": datetime.now().isoformat()
     }

@@ -76,6 +76,10 @@ def init_db() -> None:
             INSERT OR IGNORE INTO ingestion_status (id, processed_count, total_target, is_paused, paused_at)
             VALUES (1, 0, 200000, 1, 0)
         """)
+        # Force update old default (50k) to new target (200k)
+        # This fixes the issue where existing databases were stuck on the old limit.
+        conn.execute("UPDATE ingestion_status SET total_target = 200000 WHERE id = 1 AND total_target <= 50000")
+        conn.commit()
         # Persistent Profile Cache (shared across all users)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS enriched_profiles (
