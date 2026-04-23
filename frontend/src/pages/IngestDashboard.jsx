@@ -11,6 +11,21 @@ export default function IngestDashboard() {
   const [toggling, setToggling] = useState(false);
   const [error, setError]     = useState("");
   const intervalRef = useRef(null);
+  const [isAdmin, setIsAdmin] = useState(!!localStorage.getItem("admin_token"));
+
+  const handleLogin = () => {
+    const pass = prompt("Enter Admin API Key:");
+    if (pass) {
+      localStorage.setItem("admin_token", pass);
+      setIsAdmin(true);
+      fetchStatus();
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("admin_token");
+    setIsAdmin(false);
+  };
 
   const fetchStatus = async () => {
     try {
@@ -146,11 +161,18 @@ export default function IngestDashboard() {
 
         {/* Header */}
         <div className="mb-10 text-center">
-          <span className="inline-flex items-center gap-2 text-[11px] font-bold tracking-widest uppercase
-            text-[#c89b3c] border border-[#c89b3c]/25 bg-[#c89b3c]/[0.06] px-4 py-1.5 rounded-full mb-5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#c89b3c]" />
-            Admin
-          </span>
+          <button 
+            onClick={isAdmin ? handleLogout : handleLogin}
+            className={`inline-flex items-center gap-2 text-[11px] font-bold tracking-widest uppercase
+            px-4 py-1.5 rounded-full mb-5 border transition-all ${
+              isAdmin 
+                ? "text-emerald-400 border-emerald-400/25 bg-emerald-400/[0.06] hover:bg-rose-500/10 hover:border-rose-500/30 hover:text-rose-500" 
+                : "text-[#c89b3c] border-[#c89b3c]/25 bg-[#c89b3c]/[0.06] hover:bg-[#c89b3c]/20"
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${isAdmin ? "bg-emerald-400" : "bg-[#c89b3c]"}`} />
+            {isAdmin ? "Logged In" : "Unlock Admin"}
+          </button>
           <h1 className="text-2xl font-extrabold tracking-tight text-white mt-3">
             ML Training Ingestion
           </h1>
