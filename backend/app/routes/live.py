@@ -358,15 +358,29 @@ async def live_enrich(body: LiveEnrichRequest):
                     }
                 next_gid += 1
             
-    for r in results:
-        if not r or not isinstance(r, dict) or "puuid" not in r:
-            continue
-        info = duo_groups.get(r["puuid"])
+    final_results = {}
+    for i, puuid in enumerate(body.puuids[:10]):
+        # Prefer the enriched result if it exists and has the right PUUID
+        res = results[i] if i < len(results) else None
+        if res and isinstance(res, dict) and res.get("puuid") == puuid:
+            r = res
+        else:
+            # Fallback for failed/skipped enrichment
+            r = {
+                "puuid": puuid, "tier": "UNRANKED", "division": "", "lp": 0,
+                "wins": 0, "losses": 0, "last5": [], "avg_score": 50,
+                "recent_wr": 0.5, "champ_wr_map": {}, "main_champs": [], "streak": 0
+            }
+        
+        # Add duo info if present
+        info = duo_groups.get(puuid)
         if info:
             r["duo_group"] = info["gid"]
             r["duo_wr"] = info["wr"]
             r["duo_label"] = info["label"]
         else:
             r["duo_group"] = 0
+            
+        final_results[puuid] = r
 
-    return {r["puuid"]: r for r in results if r and isinstance(r, dict) and "puuid" in r}
+    return final_results
