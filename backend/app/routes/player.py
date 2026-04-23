@@ -102,6 +102,7 @@ async def get_profile(puuid: str, region: str = RIOT_REGION, force: bool = False
     flex_data   = entry_data(flex)
 
     res = {
+        "puuid": puuid,
         "summonerLevel": summoner_level,
         "profileIconId": profile_icon_id,
         **ranked_data,
