@@ -34,7 +34,7 @@ async def ingest_toggle():
 async def admin_retrain():
     return win_predictor.retrain_on_real_data()
 
-@router.get("/admin/data-summary", dependencies=[Depends(verify_admin)])
+@router.get("/admin/data-summary")
 async def admin_data_summary():
     from ..services.meta_scraper import _ensure_champ_ids
     await _ensure_champ_ids()
