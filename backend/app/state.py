@@ -49,6 +49,8 @@ def get_routing(region: str) -> str:
 
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY")
+
 ALLOWED_ORIGINS = [
     o.strip()
     for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")

@@ -1,0 +1,4 @@
+## 2026-04-22 - Missing Authentication on Admin Endpoints
+**Vulnerability:** The admin API endpoints (`/admin/retrain`, `/admin/data-summary`, `/admin/sync-meta`, etc.) lacked authentication, presenting a CRITICAL security gap where any user could trigger expensive backend processes (like ML model retraining or data metadata synchronizations) or wipe data.
+**Learning:** This architectural gap left the system vulnerable to unauthorized access and Denial of Service (DoS) attacks by unauthenticated clients issuing resource-intensive commands.
+**Prevention:** Always secure administrative routes by implementing a FastAPI `Depends` verification system (e.g., using `APIKeyHeader` and `Security` with an explicit `ADMIN_API_KEY`) and applying the dependency to all sensitive `@router` declarations to ensure proper authentication validation prior to route execution.
