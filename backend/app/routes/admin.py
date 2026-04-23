@@ -85,7 +85,7 @@ async def admin_cancel_sync():
     success = cancel_sync()
     return {"ok": success, "message": "Cancel requested" if success else "No active sync"}
 
-@router.get("/admin/sync-status", dependencies=[Depends(verify_admin)])
+@router.get("/admin/sync-status")
 async def admin_sync_status():
     return {
         "active": is_sync_active(),
