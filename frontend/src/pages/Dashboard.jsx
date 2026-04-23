@@ -2519,7 +2519,6 @@ export default function Dashboard() {
     }
   }, []);
 
-  const { state } = useLocation();
   const navigate = useNavigate();
   const gameCount = 10; // Reduced from 20 to fix rate limiting issues
 
