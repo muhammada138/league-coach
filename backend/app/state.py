@@ -20,7 +20,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 RIOT_API_KEY = os.getenv("RIOT_API_KEY")
 RIOT_REGION = os.getenv("RIOT_REGION", "na1")
 RIOT_ROUTING = os.getenv("RIOT_ROUTING", "americas")
-ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "dev-secret-key-123")
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY")
 
 # Mapping of platform sub-regions to their respective routing clusters
 REGION_TO_ROUTING = {
