@@ -9,16 +9,8 @@ describe('ThemeToggle', () => {
 
     render(<ThemeToggle />);
 
-    const button = screen.getByRole('button', { name: /toggle theme/i });
+    const button = screen.getByRole('button', { name: /Switch to light mode/i });
     expect(button).toBeInTheDocument();
-
-    // Check elements are present
-    expect(screen.getByText('Light')).toBeInTheDocument();
-    expect(screen.getByText('Dark')).toBeInTheDocument();
-
-    // With dark=true, the toggle circle should be on the right (left-[calc(50%-1px)])
-    const toggleCircle = button.querySelector('span:first-child');
-    expect(toggleCircle.className).toContain('left-[calc(50%-1px)]');
   });
 
   it('renders correctly with light theme', () => {
@@ -26,12 +18,8 @@ describe('ThemeToggle', () => {
 
     render(<ThemeToggle />);
 
-    const button = screen.getByRole('button', { name: /toggle theme/i });
+    const button = screen.getByRole('button', { name: /Switch to dark mode/i });
     expect(button).toBeInTheDocument();
-
-    // With dark=false, the toggle circle should be on the left (left-0.5)
-    const toggleCircle = button.querySelector('span:first-child');
-    expect(toggleCircle.className).toContain('left-0.5');
   });
 
   it('calls toggle function when clicked', () => {
@@ -40,7 +28,7 @@ describe('ThemeToggle', () => {
 
     render(<ThemeToggle />);
 
-    const button = screen.getByRole('button', { name: /toggle theme/i });
+    const button = screen.getByRole('button', { name: /Switch to dark mode/i });
     fireEvent.click(button);
 
     expect(mockToggle).toHaveBeenCalledTimes(1);

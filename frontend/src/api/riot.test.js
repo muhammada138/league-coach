@@ -13,6 +13,7 @@ vi.mock('axios', () => {
         get: mockGet,
         post: mockPost,
         interceptors: {
+          request: { use: vi.fn() },
           response: { use: vi.fn() }
         }
       }))
@@ -35,7 +36,7 @@ describe('Riot API Wrappers', () => {
       const result = await analyzeSummoner(puuid, gameName);
 
       expect(mockGet).toHaveBeenCalledWith(`/analyze/${puuid}`, {
-        params: { game_name: gameName, count: 10, region: 'na1' }
+        params: { game_name: gameName, count: 10, region: 'na1', force: false }
       });
       expect(result).toEqual(mockData);
     });
@@ -49,7 +50,7 @@ describe('Riot API Wrappers', () => {
       const result = await analyzeSummoner(puuid, gameName, 5, 'euw1');
 
       expect(mockGet).toHaveBeenCalledWith(`/analyze/${puuid}`, {
-        params: { game_name: gameName, count: 5, region: 'euw1' }
+        params: { game_name: gameName, count: 5, region: 'euw1', force: false }
       });
       expect(result).toEqual(mockData);
     });
@@ -74,6 +75,7 @@ describe('Riot API Wrappers', () => {
         puuids,
         queue_id: 420,
         region: 'na1',
+        force: false,
       });
       expect(result).toEqual(mockData);
     });
@@ -89,6 +91,7 @@ describe('Riot API Wrappers', () => {
         puuids,
         queue_id: 440,
         region: 'euw1',
+        force: false,
       });
       expect(result).toEqual(mockData);
     });
@@ -157,7 +160,7 @@ describe('Riot API Wrappers', () => {
       const result = await getProfile('test-puuid');
 
       expect(mockGet).toHaveBeenCalledWith('/profile/test-puuid', {
-        params: { region: 'na1' }
+        params: { region: 'na1', force: false }
       });
       expect(result).toEqual(mockData);
     });
@@ -169,7 +172,7 @@ describe('Riot API Wrappers', () => {
       const result = await getProfile('test-puuid-eu', 'euw1');
 
       expect(mockGet).toHaveBeenCalledWith('/profile/test-puuid-eu', {
-        params: { region: 'euw1' }
+        params: { region: 'euw1', force: false }
       });
       expect(result).toEqual(mockData);
     });
