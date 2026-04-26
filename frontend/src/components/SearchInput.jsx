@@ -171,6 +171,7 @@ export default function SearchInput({
         <button
           type="submit"
           disabled={loading}
+          aria-label="Search"
           className={`flex items-center justify-center transition-all
             ${navbar ? "w-10 text-slate-400 hover:text-[#c89b3c]" : "px-6 text-[#c89b3c] hover:bg-[#c89b3c]/5"}
             disabled:opacity-50`}
@@ -281,7 +282,7 @@ export default function SearchInput({
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-all duration-200">
                     <button
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
