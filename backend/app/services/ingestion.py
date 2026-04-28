@@ -319,9 +319,16 @@ async def _process_player(
 
     # Step 6: Save training samples — seed player's form from older matches in batch
     saved = 0
+
+    # Pre-fetch status before the loop to prevent N+1 queries.
+    # We update `processed_count` locally as we save matches.
+    current_status = await db.get_ingestion_status()
+    local_processed_count = current_status["processed_count"]
+    target = current_status["total_target"]
+    is_paused = current_status["is_paused"]
+
     for i, mid in enumerate(ordered):
-        status = await db.get_ingestion_status()
-        if status["is_paused"] or status["processed_count"] >= status["total_target"]:
+        if is_paused or local_processed_count >= target:
             break
 
         try:
@@ -377,6 +384,7 @@ async def _process_player(
 
             await db.save_training_match(mid, blue_feats, red_feats, blue_won)
             saved += 1
+            local_processed_count += 1
 
         except Exception as exc:
             logger.error("Feature extraction failed for %s: %s", mid, exc, exc_info=True)
