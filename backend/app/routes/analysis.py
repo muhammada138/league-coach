@@ -34,7 +34,7 @@ async def analyze(puuid: str, game_name: str = "Summoner", count: int = 10, regi
             data, ts = cached_db
             # Use DB cache if it contains games and is less than 30 mins old
             # OR if it's exactly the same count requested
-            if "games" in data and (time.time() - ts < 1800):
+            if "games" in data:
                 # Only return if it actually has the number of games we need
                 if len(data.get("games", [])) >= count:
                     data["last_updated"] = ts
