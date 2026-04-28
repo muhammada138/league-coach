@@ -17,8 +17,9 @@ async def _fetch_recent_matches(client: httpx.AsyncClient, puuid: str, routing: 
     cache_key = f"{puuid}_{count}"
     if cache_key in match_ids_cache:
         cached_ids, cached_q = match_ids_cache[cache_key]
-        # We still need match_datas, but get_match_details in api.py handles its own cache
-        return cached_ids, cached_q, []
+        match_tasks = [riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/{mid}") for mid in cached_ids]
+        match_datas = await asyncio.gather(*match_tasks, return_exceptions=True)
+        return cached_ids, cached_q, match_datas
 
     queue_priorities = [420, 440, 400]
     id_tasks = [
