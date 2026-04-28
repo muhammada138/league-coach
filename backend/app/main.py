@@ -71,15 +71,8 @@ async def _meta_scheduler():
                 logger.info("Scheduler: Starting periodic 4-hour tierlist refresh.")
                 asyncio.create_task(meta_scraper.sync_meta(mode="tierlist"))
 
-        # 3. Ingestion Safety: Auto-Resume orphaned/paused workers (>30 mins)
-        try:
-            status = await get_ingestion_status()
-            if status.get("is_paused") and status.get("paused_at", 0) > 0:
-                if now_ts - status["paused_at"] >= 30 * 60:
-                    logger.info("Scheduler: Ingestion worker paused for >30m. Auto-resuming to prevent data gaps.")
-                    await resume_ingestion()
-        except Exception as e:
-            logger.error("Scheduler: Maintenance check encountered an error: %s", e)
+        # Ingestion auto-resume disabled per user request
+        pass
 
 
 @asynccontextmanager
