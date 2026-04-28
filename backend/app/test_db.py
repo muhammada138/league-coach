@@ -71,3 +71,43 @@ def test_init_db_migration(tmp_path, mocker):
         # Check that default value is set to 'RANKED_SOLO_5x5'
         # PRAGMA table_info returns default value in column 4 (dflt_value)
         assert columns["queue"] == "'RANKED_SOLO_5x5'"
+
+def test_cleanup_stale_data_success(tmp_path, mocker):
+    temp_db_path = tmp_path / "test_cleanup.db"
+    mocker.patch("app.services.db.DB_PATH", temp_db_path)
+    db.init_db()
+
+    import time
+    now = int(time.time())
+    old_ts = now - (40 * 86400) # 40 days ago
+    recent_ts = now - (10 * 86400) # 10 days ago
+
+    with sqlite3.connect(temp_db_path) as conn:
+        conn.execute(
+            "INSERT INTO lp_history (puuid, tier, division, lp, wins, losses, timestamp, queue) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("user1", "GOLD", "I", 50, 10, 5, old_ts, "RANKED_SOLO_5x5")
+        )
+        conn.execute(
+            "INSERT INTO lp_history (puuid, tier, division, lp, wins, losses, timestamp, queue) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("user1", "GOLD", "I", 60, 11, 5, recent_ts, "RANKED_SOLO_5x5")
+        )
+        conn.commit()
+
+    counts = db.cleanup_stale_data()
+    assert counts["lp_history"] == 1
+
+    with sqlite3.connect(temp_db_path) as conn:
+        rows = conn.execute("SELECT count(*) FROM lp_history").fetchone()
+        assert rows[0] == 1
+        remaining_ts = conn.execute("SELECT timestamp FROM lp_history").fetchone()[0]
+        assert remaining_ts == recent_ts
+
+def test_cleanup_stale_data_error(mocker):
+    # Mocking sqlite3.connect to raise an error
+    mocker.patch("sqlite3.connect", side_effect=sqlite3.OperationalError("Mocked DB Error"))
+
+    # This should not raise an exception because of the try-except block in cleanup_stale_data
+    counts = db.cleanup_stale_data()
+
+    assert counts["lp_history"] == 0
+    assert counts["training_matches"] == 0
