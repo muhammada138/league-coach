@@ -237,13 +237,14 @@ async def _enrich_player(puuid: str, body: LiveEnrichRequest, rank_type: str, is
                     is_smurf = False
                     smurf_reason = ""
 
-                    if lvl < 80:
-                        if overall_wr > 0.62:
+                    if lvl < 60:
+                        if overall_wr >= 0.60:
                             is_smurf = True
-                            smurf_reason = "Low level / High WR"
-                        elif avg_score > 70:
+                            smurf_reason = "Fresh Account / High WR"
+                    elif lvl < 100:
+                        if overall_wr >= 0.65:
                             is_smurf = True
-                            smurf_reason = "Low level / Dominant Form"
+                            smurf_reason = "Low Level / Elite WR"
 
                     base.update({
                         "last5": ui_last5,
