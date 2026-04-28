@@ -283,28 +283,15 @@ def _team_vector(player_feat_list: list) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Public inference function
 # ---------------------------------------------------------------------------
-async def predict(participants: list[dict], live_stats: dict) -> dict:
-    """
-    Estimate win probability for both teams.
-    """
-    if not participants:
-        return {"error": "No participants provided."}
 
-    # Identify roles for lane-specific features (matchup advantage)
-    blue_raw = [p for p in participants if p.get("teamId") == 100]
-    red_raw  = [p for p in participants if p.get("teamId") == 200]
+def _calculate_lobby_rank_scores(participants: list[dict], live_stats: dict) -> tuple[str, float]:
+    """Calculate the most common tier and the mean rank score of known players."""
+    known_tiers = [
+        live_stats.get(p.get("puuid"), {}).get("tier")
+        for p in participants
+        if live_stats.get(p.get("puuid"), {}).get("tier") and live_stats.get(p.get("puuid"), {}).get("tier") != "UNRANKED"
+    ]
     
-    blue_roles, red_roles = await asyncio.gather(
-        assign_team_roles([{"championId": p.get("championId", 0), "spells": [p.get("spell1Id") or 0, p.get("spell2Id") or 0]} for p in blue_raw]),
-        assign_team_roles([{"championId": p.get("championId", 0), "spells": [p.get("spell1Id") or 0, p.get("spell2Id") or 0]} for p in red_raw])
-    )
-    
-    # Map role -> championId for matchup lookup
-    blue_role_map = {role: cid for cid, role in blue_roles.items()}
-    red_role_map  = {role: cid for cid, role in red_roles.items()}
-
-    # Determine lobby average rank
-    known_tiers = [live_stats.get(p.get("puuid"), {}).get("tier") for p in participants if live_stats.get(p.get("puuid"), {}).get("tier") and live_stats.get(p.get("puuid"), {}).get("tier") != "UNRANKED"]
     lobby_rank = "EMERALD"
     if known_tiers:
         # Pick the most common tier as the anchor for meta stats
@@ -328,108 +315,92 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
                 known_rank_scores.append(min((t_val + d_val + lp_b) / MAX_RANK, 0.70))
                 
     lobby_mean_rank_score = float(np.mean(known_rank_scores)) if known_rank_scores else 0.5
+    return lobby_rank, lobby_mean_rank_score
 
-    # Load meta data once per prediction
-    meta = get_meta_data()
-    rank_key = _RANK_TO_META.get(lobby_rank.lower(), "emerald")
-    champ_dict = meta.get("data", {}).get(rank_key, {}).get("champions", {})
 
-    def get_feats(team_players, roles, opp_role_map):
-        feats_with_roles = []
-        for p in team_players:
-            cid = p.get("championId", 0)
-            role = roles.get(cid, "UNKNOWN")
-            opp_cid = opp_role_map.get(role, 0)
-            res = _player_features(live_stats.get(p.get("puuid", ""), {}), cid, champ_dict, opp_cid, role)
-            if res:
-                f, d = res
-                d["puuid"] = p.get("puuid")
-                # OVERRIDE: Rank is now a Delta against the lobby mean. 0.5 means EXACTLY lobby average.
-                # Lower rank (smurf) = HIGHER delta score.
-                # Higher rank (hardstuck) = LOWER delta score.
-                raw_rank = f[0]
-                smurf_delta = 0.5 + ((lobby_mean_rank_score - raw_rank) * 2.0)
-                f[0] = max(0.0, min(1.0, smurf_delta))
-                
-                d["summonerName"] = p.get("summonerName", "Unknown")
-                d["championName"] = p.get("championName", "Unknown")
-                d["role"] = role
-                feats_with_roles.append((f, d))
-            else:
-                feats_with_roles.append((None, None))
-        
-        # Sort by role priority: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY, UNKNOWN
-        role_order = {"TOP": 0, "JUNGLE": 1, "MIDDLE": 2, "BOTTOM": 3, "UTILITY": 4, "UNKNOWN": 5}
-        feats_with_roles.sort(key=lambda x: role_order.get(x[1].get("role", "UNKNOWN") if x[1] else "UNKNOWN", 99))
-        
-        return [x[0] for x in feats_with_roles], [x[1] for x in feats_with_roles]
 
-    blue_feats, blue_details = get_feats(blue_raw, blue_roles, red_role_map)
-    red_feats, red_details  = get_feats(red_raw, red_roles, blue_role_map)
+def _get_team_features(team_players: list[dict], roles: dict, opp_role_map: dict, live_stats: dict, champ_dict: dict, lobby_mean_rank_score: float) -> tuple[list, list]:
+    feats_with_roles = []
+    for p in team_players:
+        cid = p.get("championId", 0)
+        role = roles.get(cid, "UNKNOWN")
+        opp_cid = opp_role_map.get(role, 0)
+        res = _player_features(live_stats.get(p.get("puuid", ""), {}), cid, champ_dict, opp_cid, role)
+        if res:
+            f, d = res
+            d["puuid"] = p.get("puuid")
+            # OVERRIDE: Rank is now a Delta against the lobby mean. 0.5 means EXACTLY lobby average.
+            # Lower rank (smurf) = HIGHER delta score.
+            # Higher rank (hardstuck) = LOWER delta score.
+            raw_rank = f[0]
+            smurf_delta = 0.5 + ((lobby_mean_rank_score - raw_rank) * 2.0)
+            f[0] = max(0.0, min(1.0, smurf_delta))
 
-    # --- HEURISTIC IMPUTATION ---
+            d["summonerName"] = p.get("summonerName", "Unknown")
+            d["championName"] = p.get("championName", "Unknown")
+            d["role"] = role
+            feats_with_roles.append((f, d))
+        else:
+            feats_with_roles.append((None, None))
+
+    # Sort by role priority: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY, UNKNOWN
+    role_order = {"TOP": 0, "JUNGLE": 1, "MIDDLE": 2, "BOTTOM": 3, "UTILITY": 4, "UNKNOWN": 5}
+    feats_with_roles.sort(key=lambda x: role_order.get(x[1].get("role", "UNKNOWN") if x[1] else "UNKNOWN", 99))
+
+    return [x[0] for x in feats_with_roles], [x[1] for x in feats_with_roles]
+
+
+def _impute_team_hidden_players(feats: list, details: list) -> None:
     # Instead of hardcoded 0.5 neutral, hidden players inherit mean of known teammates.
-    def impute_team(feats, details):
-        known_indices = [i for i, d in enumerate(details) if not d.get("is_hidden", False)]
-        if not known_indices:
-            return  # Entire team hidden; keep neutral 0.5 fallback
-        
-        # Calculate mean of all features from known players
-        # Note: We exclude index 8 (matchup_adv) from imputation as it is champion-specific
-        # and already resolved for hidden players via meta-data proxies.
-        known_vecs = [feats[i] for i in known_indices]
-        team_mean = np.mean(known_vecs, axis=0)
-        
-        for i, d in enumerate(details):
-            if d.get("is_hidden", False):
-                # Update feature vector (indices 0-7: Rank, WR, Form, Recent, Champ, Mastery, Streak, Meta)
-                # We now explicitly include Index 6 (Streak) for fairness
-                feats[i][:8] = team_mean[:8]
-                
-                # Update details for the "Math" UI to be transparent
-                d["rank"]["score"] = round(float(feats[i][0]), 3)
-                d["rank"]["tier"] = "Hidden (Estimated)"
-                
-                # Season WR
-                d["season_wr"]["wr"] = round(float(feats[i][1]), 3)
-                d["season_wr"]["label"] = f"{int(feats[i][1]*100)}% (Estimated)"
-                
-                d["form"]["avg_score"] = int(feats[i][2] * 100)
-                d["form"]["label"] = "Estimated"
-                
-                # Recent WR & Last 5 Visualization
-                recent_wr = round(float(feats[i][3]), 3)
-                d["recent_wr"]["wr"] = recent_wr
-                d["recent_wr"]["label"] = "(Estimated)"
-                # Generate a representative [True, True, False, ...] list based on WR
-                wins_to_show = int(recent_wr * 5)
-                d["recent_wr"]["last5"] = [True] * wins_to_show + [False] * (5 - wins_to_show)
-                
-                # Champ WR
-                d["champ_wr"]["wr"] = round(float(feats[i][4]), 3)
-                d["champ_wr"]["label"] = "(Estimated)"
-                
-                # Streak
-                d["streak"]["value"] = round(float(feats[i][6] * 5), 1)
-                d["streak"]["label"] = "(Estimated)"
-                
-                d["meta_wr"]["wr"] = round(float(feats[i][7]), 3)
-                d["meta_wr"]["label"] = "(Estimated)"
+    known_indices = [i for i, d in enumerate(details) if not d.get("is_hidden", False)]
+    if not known_indices:
+        return  # Entire team hidden; keep neutral 0.5 fallback
 
-    impute_team(blue_feats, blue_details)
-    impute_team(red_feats, red_details)
+    # Calculate mean of all features from known players
+    # Note: We exclude index 8 (matchup_adv) from imputation as it is champion-specific
+    # and already resolved for hidden players via meta-data proxies.
+    known_vecs = [feats[i] for i in known_indices]
+    team_mean = np.mean(known_vecs, axis=0)
 
-    # All players now have a representative vector.
-    confidence = (sum(not d.get("is_hidden", False) for d in blue_details) + 
-                  sum(not d.get("is_hidden", False) for d in red_details)) / len(participants) if participants else 0.0
+    for i, d in enumerate(details):
+        if d.get("is_hidden", False):
+            # Update feature vector (indices 0-7: Rank, WR, Form, Recent, Champ, Mastery, Streak, Meta)
+            # We now explicitly include Index 6 (Streak) for fairness
+            feats[i][:8] = team_mean[:8]
 
-    blue_team_mean = np.mean(blue_feats, axis=0) if blue_feats else _NEUTRAL.copy()
-    red_team_mean  = np.mean(red_feats, axis=0) if red_feats else _NEUTRAL.copy()
+            # Update details for the "Math" UI to be transparent
+            d["rank"]["score"] = round(float(feats[i][0]), 3)
+            d["rank"]["tier"] = "Hidden (Estimated)"
 
-    blue_vec = blue_team_mean
-    red_vec  = red_team_mean
-    diff_vec = blue_vec - red_vec
+            # Season WR
+            d["season_wr"]["wr"] = round(float(feats[i][1]), 3)
+            d["season_wr"]["label"] = f"{int(feats[i][1]*100)}% (Estimated)"
 
+            d["form"]["avg_score"] = int(feats[i][2] * 100)
+            d["form"]["label"] = "Estimated"
+
+            # Recent WR & Last 5 Visualization
+            recent_wr = round(float(feats[i][3]), 3)
+            d["recent_wr"]["wr"] = recent_wr
+            d["recent_wr"]["label"] = "(Estimated)"
+            # Generate a representative [True, True, False, ...] list based on WR
+            wins_to_show = int(recent_wr * 5)
+            d["recent_wr"]["last5"] = [True] * wins_to_show + [False] * (5 - wins_to_show)
+
+            # Champ WR
+            d["champ_wr"]["wr"] = round(float(feats[i][4]), 3)
+            d["champ_wr"]["label"] = "(Estimated)"
+
+            # Streak
+            d["streak"]["value"] = round(float(feats[i][6] * 5), 1)
+            d["streak"]["label"] = "(Estimated)"
+
+            d["meta_wr"]["wr"] = round(float(feats[i][7]), 3)
+            d["meta_wr"]["label"] = "(Estimated)"
+
+
+
+def _predict_probability(blue_vec: np.ndarray, red_vec: np.ndarray, diff_vec: np.ndarray) -> float:
     X = np.concatenate([blue_vec, red_vec, diff_vec]).reshape(1, -1)
 
     if _model is not None:
@@ -449,51 +420,49 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
         w = np.array([0.30, 0.10, 0.25, 0.20, 0.08, 0.04, 0.03, 0.15, 0.10])
         diff_val = float(np.dot(blue_vec - red_vec, w))
         prob = 1.0 / (1.0 + np.exp(-diff_val * 25.0))
-
-    # --- DUO SYNERGY ADJUSTMENT ---
-    # Synergistic duos give massive real-game advantages through coordination.
-    def get_synergy(team_details):
-        groups = {}
-        for d in team_details:
-            if not d: continue
-            puuid = d.get("puuid")
-            stats = live_stats.get(puuid, {})
-            gid = stats.get("duo_group", 0)
-            if gid != 0:
-                groups.setdefault(gid, []).append(d.get("role", "UNKNOWN"))
         
-        score = 0.0
-        for gid, roles in groups.items():
-            if len(roles) >= 2:
-                score += 1.0 # base duo bonus
-                roles_set = set(roles)
-                if {"BOTTOM", "UTILITY"}.issubset(roles_set):
-                    score += 0.7 # High synergy: Bot lane
-                elif {"MIDDLE", "JUNGLE"}.issubset(roles_set):
-                    score += 0.5 # High synergy: Mid/Jg
-                elif {"TOP", "JUNGLE"}.issubset(roles_set):
-                    score += 0.4 # High synergy: Top/Jg
-        return min(score, 3.0)
+    return prob
 
-    blue_synergy = get_synergy(blue_details)
-    red_synergy = get_synergy(red_details)
 
-    # --- SMURF ADJUSTMENT ---
+def _get_team_synergy(team_details: list[dict], live_stats: dict) -> float:
+    # Synergistic duos give massive real-game advantages through coordination.
+    groups = {}
+    for d in team_details:
+        if not d: continue
+        puuid = d.get("puuid")
+        stats = live_stats.get(puuid, {})
+        gid = stats.get("duo_group", 0)
+        if gid != 0:
+            groups.setdefault(gid, []).append(d.get("role", "UNKNOWN"))
+
+    score = 0.0
+    for gid, roles in groups.items():
+        if len(roles) >= 2:
+            score += 1.0 # base duo bonus
+            roles_set = set(roles)
+            if {"BOTTOM", "UTILITY"}.issubset(roles_set):
+                score += 0.7 # High synergy: Bot lane
+            elif {"MIDDLE", "JUNGLE"}.issubset(roles_set):
+                score += 0.5 # High synergy: Mid/Jg
+            elif {"TOP", "JUNGLE"}.issubset(roles_set):
+                score += 0.4 # High synergy: Top/Jg
+    return min(score, 3.0)
+
+def _get_team_smurf_bonus(team_details: list[dict], live_stats: dict) -> float:
     # Smurfs possess significantly higher individual skill than their current rank suggests.
-    def get_smurf_bonus(team_details):
-        bonus = 0.0
-        for d in team_details:
-            if not d: continue
-            puuid = d.get("puuid")
-            stats = live_stats.get(puuid, {})
-            if stats.get("is_smurf"):
-                # A single smurf is a massive threat (+2.5% odds)
-                bonus += 1.0 
-        return min(bonus, 2.5) # Cap at 2.5 smurfs worth of impact
+    bonus = 0.0
+    for d in team_details:
+        if not d: continue
+        puuid = d.get("puuid")
+        stats = live_stats.get(puuid, {})
+        if stats.get("is_smurf"):
+            # A single smurf is a massive threat (+2.5% odds)
+            bonus += 1.0
+    return min(bonus, 2.5) # Cap at 2.5 smurfs worth of impact
 
-    blue_smurf = get_smurf_bonus(blue_details)
-    red_smurf = get_smurf_bonus(red_details)
 
+
+def _apply_heuristics(prob: float, blue_synergy: float, red_synergy: float, blue_smurf: float, red_smurf: float) -> float:
     # Convert probability to logit, add precision adjustments, and convert back.
     # 0.08 logit translates to roughly +2% flat win odds at 50%.
     prob = max(1e-9, min(1.0 - 1e-9, prob))
@@ -503,7 +472,62 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
     logit += (blue_synergy - red_synergy) * 0.08
     logit += (blue_smurf - red_smurf) * 0.12 # Smurfs have higher individual agency than duos
     
-    prob = 1.0 / (1.0 + np.exp(-logit))
+    return 1.0 / (1.0 + np.exp(-logit))
+
+
+async def predict(participants: list[dict], live_stats: dict) -> dict:
+    """
+    Estimate win probability for both teams.
+    """
+    if not participants:
+        return {"error": "No participants provided."}
+
+    # Identify roles for lane-specific features (matchup advantage)
+    blue_raw = [p for p in participants if p.get("teamId") == 100]
+    red_raw  = [p for p in participants if p.get("teamId") == 200]
+
+    blue_roles, red_roles = await asyncio.gather(
+        assign_team_roles([{"championId": p.get("championId", 0), "spells": [p.get("spell1Id") or 0, p.get("spell2Id") or 0]} for p in blue_raw]),
+        assign_team_roles([{"championId": p.get("championId", 0), "spells": [p.get("spell1Id") or 0, p.get("spell2Id") or 0]} for p in red_raw])
+    )
+
+    # Map role -> championId for matchup lookup
+    blue_role_map = {role: cid for cid, role in blue_roles.items()}
+    red_role_map  = {role: cid for cid, role in red_roles.items()}
+
+    lobby_rank, lobby_mean_rank_score = _calculate_lobby_rank_scores(participants, live_stats)
+
+    # Load meta data once per prediction
+    meta = get_meta_data()
+    rank_key = _RANK_TO_META.get(lobby_rank.lower(), "emerald")
+    champ_dict = meta.get("data", {}).get(rank_key, {}).get("champions", {})
+
+    blue_feats, blue_details = _get_team_features(blue_raw, blue_roles, red_role_map, live_stats, champ_dict, lobby_mean_rank_score)
+    red_feats, red_details  = _get_team_features(red_raw, red_roles, blue_role_map, live_stats, champ_dict, lobby_mean_rank_score)
+
+    _impute_team_hidden_players(blue_feats, blue_details)
+    _impute_team_hidden_players(red_feats, red_details)
+
+    # All players now have a representative vector.
+    confidence = (sum(not d.get("is_hidden", False) for d in blue_details) +
+                  sum(not d.get("is_hidden", False) for d in red_details)) / len(participants) if participants else 0.0
+
+    blue_team_mean = np.mean(blue_feats, axis=0) if blue_feats else _NEUTRAL.copy()
+    red_team_mean  = np.mean(red_feats, axis=0) if red_feats else _NEUTRAL.copy()
+
+    blue_vec = blue_team_mean
+    red_vec  = red_team_mean
+    diff_vec = blue_vec - red_vec
+
+    prob = _predict_probability(blue_vec, red_vec, diff_vec)
+
+    blue_synergy = _get_team_synergy(blue_details, live_stats)
+    red_synergy = _get_team_synergy(red_details, live_stats)
+
+    blue_smurf = _get_team_smurf_bonus(blue_details, live_stats)
+    red_smurf = _get_team_smurf_bonus(red_details, live_stats)
+
+    prob = _apply_heuristics(prob, blue_synergy, red_synergy, blue_smurf, red_smurf)
 
     _FEAT = ["rank", "season_wr", "form", "recent_wr", "champ_wr", "mastery", "streak", "meta_wr", "matchup"]
     features = {
