@@ -114,7 +114,7 @@ async def get_profile(puuid: str, region: str = RIOT_REGION, force: bool = False
 
     asyncio.create_task(db.record_lp_snapshot(puuid, ranked_data["tier"], ranked_data["division"], ranked_data["lp"], ranked_data["wins"], ranked_data["losses"], queue='RANKED_SOLO_5x5'))
     asyncio.create_task(db.record_lp_snapshot(puuid, flex_data["tier"], flex_data["division"], flex_data["lp"], flex_data["wins"], flex_data["losses"], queue='RANKED_FLEX_SR'))
-    asyncio.create_task(backfill_if_needed(puuid, ranked_data["tier"], ranked_data["division"], ranked_data["lp"], ranked_data["wins"], ranked_data["losses"]))
+    # asyncio.create_task(backfill_if_needed(puuid, ranked_data["tier"], ranked_data["division"], ranked_data["lp"], ranked_data["wins"], ranked_data["losses"]))
     
     return res
 
