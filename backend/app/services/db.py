@@ -183,6 +183,7 @@ def _history_sync(puuid: str, queue: str, days: int) -> list[dict]:
             "SELECT tier, division, lp, wins, losses, timestamp "
             "FROM lp_history "
             "WHERE puuid = ? AND queue = ? AND timestamp >= ? "
+            "GROUP BY timestamp "
             "ORDER BY timestamp ASC",
             (puuid, queue, since),
         ).fetchall()
