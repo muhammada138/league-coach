@@ -2062,9 +2062,9 @@ function StatsContent({ playerAverages, lobbyAverages, deltas, games = [] }) {
                       <span className={winRate >= 50 ? "text-emerald-500" : "text-red-400"}>{winRate.toFixed(0)}% WR</span> <span className="opacity-50">•</span> {data.count} games
                     </span>
                   </div>
-                  <div className="h-1.5 w-full bg-slate-100 dark:bg-white/[0.05] rounded-full overflow-hidden flex">
+                  <div className="h-1.5 w-full bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-gradient-to-r from-[#c89b3c] to-yellow-300 transition-all duration-1000 ease-out" 
+                      className="h-full bg-[#c89b3c]" 
                       style={{ width: `${playRate}%` }} 
                     />
                   </div>
