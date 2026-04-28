@@ -484,7 +484,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp", history }) {
         <span className={`text-xs font-bold ${TIER_COLORS[profile?.tier] ?? "text-slate-700 dark:text-white/80"} transition-colors duration-200`}>
           {hoveredIdx !== null ? (
             history && history[hoveredIdx] 
-              ? getRankLabel(history[hoveredIdx])
+              ? `${getRankLabel(history[hoveredIdx])} · ${history[hoveredIdx].lp ?? history[hoveredIdx].leaguePoints ?? 0} LP`
               : `${rankLabel} · ${series[hoveredIdx]} LP`
           ) : `${rankLabel} · ${currentLP} LP`}
         </span>
@@ -537,9 +537,10 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp", history }) {
         {hoveredIdx !== null && (() => {
           const lp = series[hoveredIdx];
           const histEntry = history && history[hoveredIdx];
+          const displayLp = histEntry ? (histEntry.lp ?? histEntry.leaguePoints ?? 0) : lp;
           const label = histEntry 
-            ? `${histEntry.tier} ${histEntry.division} · ${lp} LP`
-            : `${rankLabel} · ${lp} LP`;
+            ? `${histEntry.tier} ${histEntry.division || ""} · ${displayLp} LP`.replace("  ·", " ·")
+            : `${rankLabel} · ${displayLp} LP`;
           
           const cx = toX(hoveredIdx);
           const cy = toY(lp);

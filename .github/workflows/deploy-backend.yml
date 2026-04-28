@@ -44,5 +44,5 @@ jobs:
             source venv/bin/activate
             pip install -r backend/requirements.txt
             # Ensure any new frontend build is handled if needed
-            # cd frontend && npm install && npm run build
+            cd frontend && npm install && npm run build
             sudo systemctl restart riftiq
