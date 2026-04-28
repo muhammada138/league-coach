@@ -13,7 +13,7 @@ from ..state import (
 router = APIRouter(tags=["Player"])
 
 async def backfill_if_needed(puuid: str, tier: str, division: str, lp: int, wins: int, losses: int):
-    if await db.has_history(puuid):
+    if await db.get_history_count(puuid) > 2:
         return
     
     routing = RIOT_ROUTING 
@@ -75,9 +75,7 @@ async def get_profile(puuid: str, region: str = RIOT_REGION, force: bool = False
         cached = db.get_enriched_profile(puuid)
         if cached:
             data, ts = cached
-            now = int(time.time())
-            # Automatic refresh if cache is older than 1 hour (3600s)
-            if data.get("profileIconId") and (now - ts) < 3600:
+            if data.get("profileIconId"):
                 data["last_updated"] = ts
                 return data
 

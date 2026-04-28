@@ -195,17 +195,17 @@ async def get_lp_history(puuid: str, queue: str = 'RANKED_SOLO_5x5', days: int =
     return await asyncio.to_thread(_history_sync, puuid, queue, days)
 
 
-def _has_history_sync(puuid: str) -> bool:
+def _get_history_count_sync(puuid: str) -> int:
     with sqlite3.connect(DB_PATH) as conn:
         row = conn.execute(
-            "SELECT 1 FROM lp_history WHERE puuid = ? LIMIT 1",
+            "SELECT COUNT(*) FROM lp_history WHERE puuid = ?",
             (puuid,),
         ).fetchone()
-    return row is not None
+    return row[0] if row else 0
 
 
-async def has_history(puuid: str) -> bool:
-    return await asyncio.to_thread(_has_history_sync, puuid)
+async def get_history_count(puuid: str) -> int:
+    return await asyncio.to_thread(_get_history_count_sync, puuid)
 
 
 # ---------------------------------------------------------------------------
