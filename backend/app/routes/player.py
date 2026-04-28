@@ -47,7 +47,7 @@ async def backfill_if_needed(puuid: str, tier: str, division: str, lp: int, wins
                     curr_losses -= 1
                 
                 if curr_lp < 0: curr_lp = 0
-                if curr_lp > 100: curr_lp = 100
+                # Removed the >100 cap which was breaking Master+ graphs
             
             await db.record_many_lp_snapshots(snapshots)
         except Exception as e:

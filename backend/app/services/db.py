@@ -35,7 +35,8 @@ def init_db() -> None:
                 wins      INTEGER NOT NULL,
                 losses    INTEGER NOT NULL,
                 timestamp INTEGER NOT NULL,
-                queue     TEXT    NOT NULL DEFAULT 'RANKED_SOLO_5x5'
+                queue     TEXT    NOT NULL DEFAULT 'RANKED_SOLO_5x5',
+                UNIQUE(puuid, queue, timestamp) ON CONFLICT IGNORE
             )
         """)
 
