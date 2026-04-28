@@ -140,7 +140,8 @@ def _rank_score_from_entry(entry: dict | None) -> tuple[float, float]:
     tier_val   = TIER_SCORE.get(entry.get("tier", "SILVER"), 3.5)
     div_val    = DIV_BONUS.get(entry.get("rank", ""), 0.0)
     lp_bonus   = (entry.get("leaguePoints", 0) / 100.0) * 0.25
-    rank_score = min((tier_val + div_val + lp_bonus) / MAX_RANK, 1.0)
+    # Removed the 1.0 hardcap to allow unbounded scaling for Apex tiers
+    rank_score = (tier_val + div_val + lp_bonus) / MAX_RANK
 
     w = entry.get("wins", 0)
     l = entry.get("losses", 0)

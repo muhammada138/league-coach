@@ -201,7 +201,8 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
             # 0.70 is the floor (Master 0 LP). 0.30 is the remaining dynamic range.
             # Divisor 5600 = 1600 (Challenger start) + 4000 (Peak LP).
             rank_score = 0.70 + (effective_lp / 5600.0) * 0.30
-            rank_score = min(rank_score, 1.0) # Absolute ceiling at 4k LP Challenger
+            # Removed the 4k LP Challenger hardcap
+            # rank_score = min(rank_score, 1.0)
         else:
             div_val  = DIV_BONUS.get(division, 0.0)
             lp_bonus = (lp_val / 100.0) * 0.25
@@ -307,7 +308,7 @@ def _calculate_lobby_rank_scores(participants: list[dict], live_stats: dict) -> 
              lp = live_stats.get(p.get("puuid"), {}).get("lp", 0)
              if tier in ["MASTER", "GRANDMASTER", "CHALLENGER"]:
                 effective_lp = max(0, lp + {"MASTER": 0, "GRANDMASTER": 800, "CHALLENGER": 1600}.get(tier, 0))
-                known_rank_scores.append(min(0.70 + (effective_lp / 5600.0) * 0.30, 1.0))
+                known_rank_scores.append(0.70 + (effective_lp / 5600.0) * 0.30)
              else:
                 t_val = TIER_SCORE.get(tier, 3.5)
                 d_val = DIV_BONUS.get(div, 0.0)
