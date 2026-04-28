@@ -1989,37 +1989,91 @@ const STAT_ROWS = [
   { key: "deaths", label: "Deaths", fmt: (v) => v.toFixed(1), invertDelta: true },
 ];
 
-function StatsContent({ playerAverages, lobbyAverages, deltas }) {
+function StatsContent({ playerAverages, lobbyAverages, deltas, games = [] }) {
+  const roleMap = {
+    TOP: "Top",
+    JUNGLE: "Jungle",
+    MIDDLE: "Mid",
+    BOTTOM: "ADC",
+    UTILITY: "Support",
+  };
+
+  const roleStats = games.reduce((acc, g) => {
+    if (g.isRemake) return acc;
+    const roleKey = g.teamPosition || "UNKNOWN";
+    const name = roleMap[roleKey] || roleKey;
+    if (!acc[name]) acc[name] = { count: 0, wins: 0 };
+    acc[name].count++;
+    if (g.win) acc[name].wins++;
+    return acc;
+  }, {});
+
+  const totalGames = Object.values(roleStats).reduce((sum, r) => sum + r.count, 0);
+  
+  const sortedRoles = Object.entries(roleStats)
+    .filter(([name]) => name !== "UNKNOWN" && name !== "")
+    .sort((a, b) => b[1].count - a[1].count);
+
   return (
-    <div className="divide-y divide-slate-100 dark:divide-white/[0.04]">
-      <div className="grid grid-cols-4 px-5 py-2">
-        {["Stat", "You", "Lobby", "Δ"].map((h) => (
-          <span key={h} className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">{h}</span>
-        ))}
+    <div className="flex flex-col h-full">
+      <div className="divide-y divide-slate-100 dark:divide-white/[0.04] shrink-0">
+        <div className="grid grid-cols-4 px-5 py-2">
+          {["Stat", "You", "Lobby", "Δ"].map((h) => (
+            <span key={h} className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">{h}</span>
+          ))}
+        </div>
+        {STAT_ROWS.map(({ key, label, fmt, invertDelta }) => {
+          const pVal = playerAverages[key];
+          const lVal = lobbyAverages[key];
+          const dVal = deltas[key];
+          if (pVal == null) return null;
+          const isPositive = invertDelta ? dVal < 0 : dVal > 0;
+          const deltaColor =
+            Math.abs(dVal) < 0.05
+              ? "text-slate-400 dark:text-white/30"
+              : isPositive
+                ? "text-emerald-500 dark:text-emerald-400"
+                : "text-red-500 dark:text-red-400";
+          return (
+            <div key={key} className="grid grid-cols-4 px-5 py-2.5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+              <span className="text-xs text-slate-600 dark:text-white/60 font-medium">{label}</span>
+              <span className="text-xs font-semibold text-slate-900 dark:text-white">{fmt(pVal)}</span>
+              <span className="text-xs text-slate-400 dark:text-white/30">{fmt(lVal)}</span>
+              <span className={`text-xs font-semibold ${deltaColor}`}>
+                {dVal > 0 ? "+" : ""}{typeof dVal === "number" ? dVal.toFixed(2) : "-"}
+              </span>
+            </div>
+          );
+        })}
       </div>
-      {STAT_ROWS.map(({ key, label, fmt, invertDelta }) => {
-        const pVal = playerAverages[key];
-        const lVal = lobbyAverages[key];
-        const dVal = deltas[key];
-        if (pVal == null) return null;
-        const isPositive = invertDelta ? dVal < 0 : dVal > 0;
-        const deltaColor =
-          Math.abs(dVal) < 0.05
-            ? "text-slate-400 dark:text-white/30"
-            : isPositive
-              ? "text-emerald-500 dark:text-emerald-400"
-              : "text-red-500 dark:text-red-400";
-        return (
-          <div key={key} className="grid grid-cols-4 px-5 py-2.5 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
-            <span className="text-xs text-slate-600 dark:text-white/60 font-medium">{label}</span>
-            <span className="text-xs font-semibold text-slate-900 dark:text-white">{fmt(pVal)}</span>
-            <span className="text-xs text-slate-400 dark:text-white/30">{fmt(lVal)}</span>
-            <span className={`text-xs font-semibold ${deltaColor}`}>
-              {dVal > 0 ? "+" : ""}{typeof dVal === "number" ? dVal.toFixed(2) : "-"}
-            </span>
+
+      {sortedRoles.length > 0 && (
+        <div className="mt-6 px-5 pb-5 shrink-0">
+          <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-4">Role Preferences</h3>
+          <div className="space-y-4">
+            {sortedRoles.map(([role, data]) => {
+              const playRate = (data.count / totalGames) * 100;
+              const winRate = (data.wins / data.count) * 100;
+              return (
+                <div key={role} className="group">
+                  <div className="flex justify-between items-end mb-1.5">
+                    <span className="text-xs font-bold text-slate-700 dark:text-white/80 group-hover:text-[#c89b3c] transition-colors">{role}</span>
+                    <span className="text-[10px] font-medium text-slate-500 dark:text-white/50">
+                      <span className={winRate >= 50 ? "text-emerald-500" : "text-red-400"}>{winRate.toFixed(0)}% WR</span> <span className="opacity-50">•</span> {data.count} games
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-slate-100 dark:bg-white/[0.05] rounded-full overflow-hidden flex">
+                    <div 
+                      className="h-full bg-gradient-to-r from-[#c89b3c] to-yellow-300 transition-all duration-1000 ease-out" 
+                      style={{ width: `${playRate}%` }} 
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        );
-      })}
+        </div>
+      )}
     </div>
   );
 }
@@ -2476,6 +2530,7 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
               playerAverages={playerAverages}
               lobbyAverages={lobbyAverages}
               deltas={deltas}
+              games={games}
             />
           </div>
         ) : tab === "teams" ? (
