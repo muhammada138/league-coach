@@ -13,6 +13,7 @@ vi.mock('axios', () => {
         get: mockGet,
         post: mockPost,
         interceptors: {
+          request: { use: vi.fn() },
           response: { use: vi.fn() }
         }
       }))
@@ -74,7 +75,7 @@ describe('Riot API Wrappers', () => {
         puuids,
         queue_id: 420,
         region: 'na1',
-        force: false
+        force: false,
       });
       expect(result).toEqual(mockData);
     });
@@ -90,7 +91,7 @@ describe('Riot API Wrappers', () => {
         puuids,
         queue_id: 440,
         region: 'euw1',
-        force: false
+        force: false,
       });
       expect(result).toEqual(mockData);
     });
