@@ -50,9 +50,6 @@ def init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_lp_puuid_q_ts ON lp_history(puuid, queue, timestamp)"
         )
-        
-        # Automatic Migration: Purge corrupted LP data (bug fix for 6k LP anomaly)
-        conn.execute("DELETE FROM lp_history WHERE lp > 3500")
 
         # --- ML training data tables ---
 
