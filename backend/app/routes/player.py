@@ -13,7 +13,7 @@ from ..state import (
 router = APIRouter(tags=["Player"])
 
 async def backfill_if_needed(puuid: str, tier: str, division: str, lp: int, wins: int, losses: int):
-    if await db.get_history_count(puuid) > 2:
+    if await db.get_history_count(puuid) > 15:
         return
     
     routing = RIOT_ROUTING 

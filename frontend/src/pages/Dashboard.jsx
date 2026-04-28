@@ -452,7 +452,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp", history }) {
   
   // Use persistent server history if possible, otherwise fallback to calculated last 10
   const series = useMemo(() => {
-    if (history && history.length >= 2) {
+    if (history && history.length >= 10) {
       return history.map(h => toAbsLP(h.tier, h.division || h.rank, h.lp || h.leaguePoints));
     }
     if (!games || games.length === 0) return [currentLP];
@@ -479,11 +479,11 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp", history }) {
     <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/[0.06]">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-white/25">
-          LP Trend · {history && history.length >= 2 ? "30d History" : `Last ${games?.length ?? 0}`}
+          LP Trend · {history && history.length >= 10 ? "30d History" : `Last ${games?.length ?? 0}`}
         </span>
         <span className={`text-xs font-bold ${TIER_COLORS[profile?.tier] ?? "text-slate-700 dark:text-white/80"} transition-colors duration-200`}>
           {hoveredIdx !== null ? (
-            history && history[hoveredIdx] 
+            history && history.length >= 10 && history[hoveredIdx] 
               ? `${getRankLabel(history[hoveredIdx])} · ${history[hoveredIdx].lp ?? history[hoveredIdx].leaguePoints ?? 0} LP`
               : `${rankLabel} · ${series[hoveredIdx]} LP`
           ) : `${rankLabel} · ${currentLP} LP`}
@@ -504,7 +504,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp", history }) {
           
           let dotColor = "#475569";
           if (i > 0) {
-            if (history && history.length >= 2) {
+            if (history && history.length >= 10) {
               const prev = history[i-1];
               const curr = history[i];
               const won = toAbsLP(curr.tier, curr.division, curr.lp) >= toAbsLP(prev.tier, prev.division, prev.lp);
@@ -536,7 +536,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp", history }) {
         })}
         {hoveredIdx !== null && (() => {
           const lp = series[hoveredIdx];
-          const histEntry = history && history[hoveredIdx];
+          const histEntry = (history && history.length >= 10) ? history[hoveredIdx] : null;
           const displayLp = histEntry ? (histEntry.lp ?? histEntry.leaguePoints ?? 0) : lp;
           const label = histEntry 
             ? `${histEntry.tier} ${histEntry.division || ""} · ${displayLp} LP`.replace("  ·", " ·")
@@ -560,7 +560,7 @@ function LPGraph({ games, profile, puuid, cachePrefix = "lp", history }) {
         })()}
       </svg>
       <div className="flex justify-between text-[10px] text-slate-400 dark:text-white/20 mt-0.5">
-        <span>{history && history.length >= 2 ? new Date(history[0].timestamp * 1000).toLocaleDateString() : `${games?.length ?? 0} games ago`}</span>
+        <span>{history && history.length >= 10 ? new Date(history[0].timestamp * 1000).toLocaleDateString() : `${games?.length ?? 0} games ago`}</span>
         <span>Now · {currentLP} LP</span>
       </div>
     </div>
