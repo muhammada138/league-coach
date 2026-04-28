@@ -180,17 +180,18 @@ def _compute_diffed_lane(all_players: list, timeline: dict = None, game_duration
         pos = p.get("teamPosition", "")
         if pos and pos != "UNKNOWN":
             by_pos.setdefault(pos, []).append(p)
+
     max_diff, diffed = -1, None
     for pos, players in by_pos.items():
         if len(players) != 2: continue
-        
+
         if precomputed_scores:
             s1 = precomputed_scores.get(players[0].get("puuid"), 0)
             s2 = precomputed_scores.get(players[1].get("puuid"), 0)
         else:
             s1 = _compute_perf_score(players[0], all_players, timeline, game_duration)
             s2 = _compute_perf_score(players[1], all_players, timeline, game_duration)
-            
+
         diff = abs(s1 - s2)
         if diff > max_diff:
             max_diff, diffed = diff, pos
