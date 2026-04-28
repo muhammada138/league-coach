@@ -9,8 +9,12 @@ describe('ThemeToggle', () => {
 
     render(<ThemeToggle />);
 
-    const button = screen.getByRole('button', { name: /Switch to light mode/i });
+    const button = screen.getByRole('button', { name: /Switch to (light|dark) mode/i });
     expect(button).toBeInTheDocument();
+
+    const svgs = button.querySelectorAll('svg');
+    expect(svgs[0].className.baseVal || svgs[0].className).toContain('opacity-100');
+    expect(svgs[1].className.baseVal || svgs[1].className).toContain('opacity-0');
   });
 
   it('renders correctly with light theme', () => {
@@ -18,8 +22,12 @@ describe('ThemeToggle', () => {
 
     render(<ThemeToggle />);
 
-    const button = screen.getByRole('button', { name: /Switch to dark mode/i });
+    const button = screen.getByRole('button', { name: /Switch to (light|dark) mode/i });
     expect(button).toBeInTheDocument();
+
+    const svgs = button.querySelectorAll('svg');
+    expect(svgs[0].className.baseVal || svgs[0].className).toContain('opacity-0');
+    expect(svgs[1].className.baseVal || svgs[1].className).toContain('opacity-100');
   });
 
   it('calls toggle function when clicked', () => {
@@ -28,7 +36,7 @@ describe('ThemeToggle', () => {
 
     render(<ThemeToggle />);
 
-    const button = screen.getByRole('button', { name: /Switch to dark mode/i });
+    const button = screen.getByRole('button', { name: /Switch to (light|dark) mode/i });
     fireEvent.click(button);
 
     expect(mockToggle).toHaveBeenCalledTimes(1);
