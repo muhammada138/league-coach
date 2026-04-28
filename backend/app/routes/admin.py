@@ -18,7 +18,7 @@ async def verify_admin(api_key: str = Security(api_key_header)):
             status_code=HTTP_403_FORBIDDEN, detail="Could not validate credentials"
         )
 
-@router.get("/ingest/status")
+@router.get("/ingest/status", dependencies=[Depends(verify_admin)])
 async def ingest_status():
     from ..state import is_rate_limited, get_rate_limit_remaining
     status = await db.get_ingestion_status()
@@ -34,7 +34,7 @@ async def ingest_toggle():
 async def admin_retrain():
     return win_predictor.retrain_on_real_data()
 
-@router.get("/admin/data-summary")
+@router.get("/admin/data-summary", dependencies=[Depends(verify_admin)])
 async def admin_data_summary():
     from ..services.meta_scraper import _ensure_champ_ids
     await _ensure_champ_ids()
@@ -85,7 +85,7 @@ async def admin_cancel_sync():
     success = cancel_sync()
     return {"ok": success, "message": "Cancel requested" if success else "No active sync"}
 
-@router.get("/admin/sync-status")
+@router.get("/admin/sync-status", dependencies=[Depends(verify_admin)])
 async def admin_sync_status():
     return {
         "active": is_sync_active(),
