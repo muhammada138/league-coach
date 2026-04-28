@@ -22,11 +22,15 @@ from app.services.meta_scraper import (
 
 @pytest.fixture(autouse=True)
 def reset_sync_state():
-    """Reset the global sync state before each test."""
+    """Reset the global sync state and cache before each test."""
     sync_state["active"] = False
     sync_state["paused"] = False
     sync_state["cancel_requested"] = False
     sync_state["mode"] = "idle"
+    
+    import app.services.meta_scraper as ms
+    ms._META_CACHE = None
+    ms._META_LAST_MOD = 0
     yield
 
 def test_sync_state_functions():
@@ -48,6 +52,7 @@ def test_get_meta_data_exists(mocker):
     # Patch the Path instance itself, not the class attribute
     mock_path = mocker.Mock(spec=Path)
     mock_path.exists.return_value = True
+    mock_path.stat.return_value.st_mtime = 100
     mocker.patch("app.services.meta_scraper.META_FILE_PATH", mock_path)
     mocker.patch("builtins.open", mock_open(read_data=json.dumps(test_data)))
     assert get_meta_data() == test_data
@@ -61,6 +66,7 @@ def test_get_meta_data_missing(mocker):
 def test_get_meta_data_corrupt(mocker):
     mock_path = mocker.Mock(spec=Path)
     mock_path.exists.return_value = True
+    mock_path.stat.return_value.st_mtime = 100
     mocker.patch("app.services.meta_scraper.META_FILE_PATH", mock_path)
     mocker.patch("builtins.open", mock_open(read_data="invalid json"))
     assert get_meta_data() == {}

@@ -485,7 +485,7 @@ def get_meta_data() -> dict:
 
     try:
         # Check modification time to see if we can use the cache
-        mtime = os.path.getmtime(META_FILE_PATH)
+        mtime = META_FILE_PATH.stat().st_mtime
         if _META_CACHE is not None and mtime <= _META_LAST_MOD:
             return _META_CACHE
 
