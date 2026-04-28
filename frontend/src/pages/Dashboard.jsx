@@ -2611,11 +2611,11 @@ export default function Dashboard() {
     if (!gameName || !tagLine) { navigate("/"); return; }
     window.scrollTo(0, 0);
     
-    // Only show full-screen skeleton if we have NO profile data at all
-    if (!profile) setLoading(true);
-    
-    // Only show analysis skeleton if we have NO analysis data at all
-    if (!analysis) setAnalysisLoading(true);
+    // Clear stale state immediately when switching players
+    setProfile(null);
+    setAnalysis(null);
+    setLoading(true);
+    setAnalysisLoading(true);
 
     setError("");
     setExpandedMatchId(null);
