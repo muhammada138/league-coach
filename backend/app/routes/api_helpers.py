@@ -185,7 +185,7 @@ async def _generate_coaching(game_name: str, stats: Dict[str, Any], games: List[
         "- Each tip: 1-2 sentences. Lead with a strategic insight, end with a concrete macro fix.\n"
         "- Bold (**) every stat number and every key concept/mechanic.\n"
         "- CRITICAL: If you reference a specific match from their history, YOU MUST ONLY give advice for the Champion they played IN THAT SPECIFIC MATCH. Never mention their 'Main Champion's' abilities when analyzing a game where they played a completely different champion.\n"
-        "- CRITICAL: Reference abilities accurately for the champion in question (e.g. Ornn's W, Malphite's Q) and keep it contextually tied to the match.\n"
+        "- CRITICAL LORE NAMES: NEVER use lore names for abilities (e.g. do not say 'Dominus', 'Riposte', or 'Spirit Form'). ONLY use standard Q/W/E/R hotkey notations (e.g. say 'Renekton R', 'Fiora W', 'Yone E'). Players do not know lore names.\n"
         "FORMATTING: 3-4 numbered tips. No intro/outro text."
     )
     user_prompt = (
