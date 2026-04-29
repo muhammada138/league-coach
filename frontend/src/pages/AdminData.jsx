@@ -92,20 +92,22 @@ export default function AdminData() {
   const [savedPatches, setSavedPatches] = useState([]);
   const [tierlistPatch, setTierlistPatch] = useState("");
   const [matchupPatch, setMatchupPatch] = useState("");
+  const [viewPatch, setViewPatch] = useState(searchParams.get("patch") || "");
 
   useEffect(() => {
     const p = {};
     if (selectedRank !== "emerald") p.rank = selectedRank;
     if (selectedRole !== "all") p.role = selectedRole;
     if (selectedChamp) p.champ = selectedChamp;
+    if (viewPatch) p.patch = viewPatch;
     setSearchParams(p, { replace: true });
-  }, [selectedRank, selectedRole, selectedChamp]);
+  }, [selectedRank, selectedRole, selectedChamp, viewPatch]);
 
   const [sortConfig, setSortConfig] = useState({ key: 'rank_num', direction: 'asc' });
 
   const fetchData = async () => {
     try {
-      const s = await getAdminDataSummary();
+      const s = await getAdminDataSummary(viewPatch || null);
       setData(s); setError("");
       setSyncing(s?.meta?.active || false);
       setPaused(s?.meta?.paused || false);
@@ -119,12 +121,15 @@ export default function AdminData() {
     getAvailablePatches().then(res => {
       const p = (res.ddragon || []).slice(0, 2);
       setAvailablePatches(p); setSavedPatches(res.saved || []);
-      if (p.length >= 2) { setTierlistPatch(p[0]); setMatchupPatch(p[1]); }
-      else if (p.length === 1) { setTierlistPatch(p[0]); setMatchupPatch(p[0]); }
+      if (p.length >= 2) { setTierlistPatch(p[0]); setMatchupPatch(p[1]); if (!viewPatch) setViewPatch(p[0]); }
+      else if (p.length === 1) { setTierlistPatch(p[0]); setMatchupPatch(p[0]); if (!viewPatch) setViewPatch(p[0]); }
     }).catch(() => {});
+  }, [viewPatch]); // Re-fetch when viewPatch changes
+
+  useEffect(() => {
     const iv = setInterval(fetchData, 5000);
     return () => clearInterval(iv);
-  }, []);
+  }, [viewPatch]);
 
   const handleLogin = () => { const p = prompt("Enter Admin API Key:"); if (p) { localStorage.setItem("admin_token", p); setIsAdmin(true); fetchData(); } };
   const handleLogout = () => { localStorage.removeItem("admin_token"); setIsAdmin(false); };
@@ -185,17 +190,19 @@ export default function AdminData() {
   const selectedChampName = selectedChampData?.name || data?.champ_names?.[selectedChampData?.cid || selectedChamp] || "Champion";
   const matchupData = useMemo(() => {
     if (!selectedChampData?.matchups) return [];
-    return Object.entries(selectedChampData.matchups).map(([cid, raw]) => {
+    let list = Object.entries(selectedChampData.matchups).map(([cid, raw]) => {
       const wr = typeof raw === "object" ? raw.wr : raw;
       const games = typeof raw === "object" ? raw.games : null;
       return { id: cid, name: data?.champ_names?.[cid] || "Unknown", wr, games, delta: wr - 50.0 };
-    }).sort((a, b) => {
+    });
+    if (search) { const s = search.toLowerCase(); list = list.filter(c => c.name.toLowerCase().includes(s)); }
+    return list.sort((a, b) => {
       const k = ['wr', 'name', 'games', 'delta'].includes(sortConfig.key) ? sortConfig.key : 'wr';
       let aV = a[k] ?? 0, bV = b[k] ?? 0;
       if (typeof aV === 'string') { aV = aV.toLowerCase(); bV = (bV + '').toLowerCase(); }
       return aV < bV ? (sortConfig.direction === 'asc' ? -1 : 1) : aV > bV ? (sortConfig.direction === 'asc' ? 1 : -1) : 0;
     });
-  }, [selectedChampData, data, sortConfig]);
+  }, [selectedChampData, data, sortConfig, search]);
 
   const patchOpts = availablePatches.map(p => ({ value: p, label: p + (savedPatches.includes(p) ? ' ✓' : '') }));
   const rankOpts = (data?.meta?.ranks || []).map(r => ({ value: r, label: r.charAt(0).toUpperCase() + r.slice(1) }));
@@ -292,8 +299,7 @@ export default function AdminData() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Dropdown label="Tierlist" value={tierlistPatch} options={patchOpts} onChange={setTierlistPatch} />
-                <Dropdown label="Matchup" value={matchupPatch} options={patchOpts} onChange={setMatchupPatch} />
+                <Dropdown label="View Patch" value={viewPatch || "Live"} options={[{label: "Live", value: ""}].concat(patchOpts)} onChange={setViewPatch} />
                 <div className="relative">
                   <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
                     className="bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/10 rounded px-3 py-1.5 text-xs text-slate-800 dark:text-white placeholder:text-slate-300 dark:placeholder:text-white/15 focus:outline-none focus:border-blue-500/50 w-40 transition-all" />

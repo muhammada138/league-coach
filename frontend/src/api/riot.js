@@ -122,8 +122,8 @@ export const askCoach = (question, context, history) =>
 /**
  * Gets a summary of cached data and training points.
  */
-export const getAdminDataSummary = () =>
-  api.get("/admin/data-summary").then((r) => r.data);
+export const getAdminDataSummary = (patch = null) =>
+  api.get("/admin/data-summary", { params: { patch } }).then((r) => r.data);
 
 /**
  * Triggers a manual metadata sync from public sources.

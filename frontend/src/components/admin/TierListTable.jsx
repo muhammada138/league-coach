@@ -54,8 +54,7 @@ export default function TierListTable({ processedChamps, sortConfig, requestSort
         <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-white/30 border-b border-slate-200 dark:border-white/[0.06] bg-slate-50/50 dark:bg-white/[0.015]">
           <th className="pl-5 pr-2 py-3.5 w-[60px] cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('rank_num')}>Rank<Arrow col="rank_num" /></th>
           <th className="px-2 py-3.5 w-[44px] text-center">Role</th>
-          <th className="w-[44px] py-3.5"></th>
-          <th className="pl-2 pr-4 py-3.5 cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('name')}>Champion<Arrow col="name" /></th>
+          <th className="px-4 py-3.5 cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('name')}>Champion<Arrow col="name" /></th>
           <th className="px-4 py-3.5 w-[56px] text-center cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('tier_val')}>Tier<Arrow col="tier_val" /></th>
           <th className="px-4 py-3.5 w-[100px] cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('wr')}>Win Rate<Arrow col="wr" /></th>
           <th className="px-4 py-3.5 w-[90px] cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('games')}>Matches<Arrow col="games" /></th>
@@ -76,15 +75,15 @@ export default function TierListTable({ processedChamps, sortConfig, requestSort
             <tr key={i} className="group border-b border-slate-100 dark:border-white/[0.025] hover:bg-blue-50/40 dark:hover:bg-[#141c33]/60 transition-all duration-150">
               <td className="pl-5 pr-2 py-2.5 tabular-nums text-slate-300 dark:text-white/15 font-black text-xs">{c.rank_num === 999 ? '—' : c.rank_num}</td>
               <td className="px-2 py-2.5 text-center"><LaneCell lane={displayLane} /></td>
-              <td className="py-2.5">
-                <img
-                  src={`https://cdn.communitydragon.org/latest/champion/${c.name.toLowerCase().replace(/[^a-z]/g, '')}/square`}
-                  className="w-8 h-8 rounded border border-slate-200 dark:border-white/10 group-hover:border-blue-400/40 transition-all"
-                  alt="" onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
-                />
-              </td>
-              <td className="pl-2 pr-4 py-2.5">
-                <span className="text-[13px] font-semibold capitalize text-slate-800 dark:text-white/90 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{c.name}</span>
+              <td className="px-4 py-2.5">
+                <div className="flex items-center gap-3">
+                  <img
+                    src={`https://cdn.communitydragon.org/latest/champion/${c.name.toLowerCase().replace(/[^a-z]/g, '')}/square`}
+                    className="w-8 h-8 rounded border border-slate-200 dark:border-white/10 group-hover:border-blue-400/40 transition-all"
+                    alt="" onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
+                  />
+                  <span className="text-[13px] font-semibold capitalize text-slate-800 dark:text-white/90 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{c.name}</span>
+                </div>
               </td>
               <td className="px-4 py-2.5 text-center">
                 <span className={`inline-flex items-center justify-center w-8 py-0.5 rounded text-[10px] font-black border ${tierStyle}`}>{c.tier || 'N/A'}</span>
@@ -109,7 +108,9 @@ export default function TierListTable({ processedChamps, sortConfig, requestSort
                       </div>
                     ))}
                     <button onClick={() => onChampClick(c.id)}
-                      className="ml-1 w-6 h-6 rounded border border-slate-200 dark:border-white/10 flex items-center justify-center text-slate-300 dark:text-white/20 hover:text-blue-500 hover:border-blue-400/50 transition-all text-xs font-bold">›</button>
+                      className="ml-1 w-6 h-6 rounded border border-slate-200 dark:border-white/10 flex items-center justify-center text-slate-400 dark:text-white/30 hover:text-blue-500 hover:border-blue-400/50 transition-all">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
                   </div>
                 ) : (
                   <button onClick={() => onChampClick(c.id)} className="text-[10px] font-bold uppercase tracking-wider text-blue-400/40 hover:text-blue-400 transition-all">View →</button>

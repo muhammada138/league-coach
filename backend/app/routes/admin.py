@@ -8,7 +8,8 @@ from ..state import DB_PATH, ADMIN_API_KEY
 from ..services import db, win_predictor
 from ..services.meta_scraper import (
     get_meta_data, _CHAMP_ID_MAP, is_sync_active, is_sync_paused, get_sync_mode,
-    sync_meta, cancel_sync, toggle_pause, get_available_patches, list_saved_patches
+    sync_meta, cancel_sync, toggle_pause, get_available_patches, list_saved_patches,
+    load_patch_snapshot
 )
 
 router = APIRouter(tags=["Admin & Ingestion"])
@@ -38,11 +39,17 @@ async def admin_retrain():
     return win_predictor.retrain_on_real_data()
 
 @router.get("/admin/data-summary")
-async def admin_data_summary():
+async def admin_data_summary(patch: str = None):
     from ..services.meta_scraper import _ensure_champ_ids
     await _ensure_champ_ids()
     ingest = await db.get_ingestion_status()
-    meta = get_meta_data()
+    
+    if patch:
+        meta = load_patch_snapshot(patch)
+        if not meta:
+            meta = {}
+    else:
+        meta = get_meta_data()
     
     champ_names = {str(v): k.capitalize() for k, v in _CHAMP_ID_MAP.items()}
 
