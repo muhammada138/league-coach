@@ -17,7 +17,7 @@ VERSION_CACHE_DURATION = 12 * 3600  # 12 hours
 TIERLIST_REFRESH_THRESHOLD = 43200  # 12 hours
 MATCHUP_STALE_THRESHOLD = 86400      # 24 hours
 SCRAPE_DELAY_LANE_SEC = 0.05
-SCRAPE_DELAY_MATCHUP_SEC = 0.35
+SCRAPE_DELAY_MATCHUP_SEC = 0.15
 SYNC_PAUSE_POLL_SEC = 1.0
 SAVE_PROBABILITY = 0.03
 
@@ -420,7 +420,7 @@ async def sync_meta(mode="full", tierlist_patch: str = None, matchup_patch: str 
         # --- PHASE 2: MATCHUPS (DEEP) ---
         if mode in ("full", "matchups") and not sync_state["cancel_requested"]:
             import random
-            sem = asyncio.Semaphore(1)
+            sem = asyncio.Semaphore(3)
             now_ts = int(time.time())
 
             async def crawl_one(rank, cid_str, cdata):
