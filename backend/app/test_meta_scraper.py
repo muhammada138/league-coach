@@ -237,10 +237,11 @@ async def test_fetch_champion_matchups(mocker):
 @pytest.mark.asyncio
 async def test_sync_meta(mocker):
     # Mock all the heavy lifting functions
-    mocker.patch("app.services.meta_scraper.get_patch_at_offset", side_effect=["14.8", "14.7"])
+    mocker.patch("app.services.meta_scraper.get_patch_at_offset", side_effect=["14.8", "14.7", "14.8"])
 
     mock_get_meta = mocker.patch("app.services.meta_scraper.get_meta_data", return_value={"data": {}})
     mock_save = mocker.patch("app.services.meta_scraper.save_meta_data")
+    mocker.patch("app.services.meta_scraper.save_patch_snapshot")
 
     # Mocking sleep to avoid actual waiting
     mocker.patch("asyncio.sleep", return_value=None)
@@ -277,9 +278,10 @@ async def test_sync_meta_already_active(mocker):
 @pytest.mark.asyncio
 async def test_sync_meta_cancel(mocker):
     # Mock to sleep which we'll interrupt
-    mocker.patch("app.services.meta_scraper.get_patch_at_offset", side_effect=["14.8", "14.7"])
+    mocker.patch("app.services.meta_scraper.get_patch_at_offset", side_effect=["14.8", "14.7", "14.8"])
     mocker.patch("app.services.meta_scraper.get_meta_data", return_value={"data": {}})
     mock_save = mocker.patch("app.services.meta_scraper.save_meta_data")
+    mocker.patch("app.services.meta_scraper.save_patch_snapshot")
 
     async def mock_fetch_rank_meta(*args, **kwargs):
         # Request cancel during fetch
