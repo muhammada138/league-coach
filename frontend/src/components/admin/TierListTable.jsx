@@ -72,7 +72,7 @@ export default function TierListTable({ processedChamps, sortConfig, requestSort
           const displayLane = c.display_lane || c.lane || 'all';
 
           return (
-            <tr key={i} className="group border-b border-slate-100 dark:border-white/[0.025] hover:bg-blue-50/40 dark:hover:bg-[#141c33]/60 transition-all duration-150">
+            <tr key={c.id} className="group border-b border-slate-100 dark:border-white/[0.025] hover:bg-blue-50/40 dark:hover:bg-[#141c33]/60 transition-all duration-150">
               <td className="pl-5 pr-2 py-2.5 tabular-nums text-slate-300 dark:text-white/15 font-black text-xs">{c.rank_num === 999 ? '—' : c.rank_num}</td>
               <td className="px-2 py-2.5 text-center"><LaneCell lane={displayLane} /></td>
               <td className="px-4 py-2.5">
@@ -80,7 +80,7 @@ export default function TierListTable({ processedChamps, sortConfig, requestSort
                   <img
                     src={`https://cdn.communitydragon.org/latest/champion/${c.name.toLowerCase().replace(/[^a-z]/g, '')}/square`}
                     className="w-8 h-8 rounded border border-slate-200 dark:border-white/10 group-hover:border-blue-400/40 transition-all"
-                    alt="" onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
+                    alt="" loading="lazy" onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
                   />
                   <span className="text-[13px] font-semibold capitalize text-slate-800 dark:text-white/90 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{c.name}</span>
                 </div>
@@ -100,7 +100,7 @@ export default function TierListTable({ processedChamps, sortConfig, requestSort
                         <img
                           src={`https://cdn.communitydragon.org/latest/champion/${name.toLowerCase().replace(/[^a-z]/g, '')}/square`}
                           className="w-6 h-6 rounded border border-slate-200 dark:border-white/10 hover:border-rose-400/60 transition-all hover:scale-110"
-                          alt={name} onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
+                          alt={name} loading="lazy" onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
                         />
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 bg-slate-900 text-white text-[9px] font-bold rounded shadow-xl whitespace-nowrap opacity-0 group-hover/tip:opacity-100 pointer-events-none z-20 transition-opacity">
                           {name} · {wr.toFixed(1)}%

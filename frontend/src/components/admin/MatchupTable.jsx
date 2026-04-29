@@ -27,21 +27,21 @@ export default function MatchupTable({ matchupData, selectedChampName, requestSo
       </thead>
       <tbody>
         {matchupData.map((c, i) => (
-          <tr key={i} className="group border-b border-slate-100 dark:border-white/[0.025] hover:bg-blue-50/50 dark:hover:bg-[#1a2040]/50 transition-all duration-150">
+          <tr key={c.id} className="group border-b border-slate-100 dark:border-white/[0.025] hover:bg-blue-50/50 dark:hover:bg-[#1a2040]/50 transition-all duration-150">
             <td className="px-6 py-3.5 tabular-nums text-slate-300 dark:text-white/15 font-black text-xs">#{i + 1}</td>
             <td className="px-4 py-3">
               <div className="flex items-center gap-2">
                 <img
                   src={`https://cdn.communitydragon.org/latest/champion/${selectedChampName.toLowerCase().replace(/[^a-z]/g, '')}/square`}
                   className="w-8 h-8 rounded border border-slate-200 dark:border-white/10"
-                  alt=""
+                  alt="" loading="lazy"
                   onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
                 />
                 <span className="text-slate-300 dark:text-white/15 text-[10px] font-black">VS</span>
                 <img
                   src={`https://cdn.communitydragon.org/latest/champion/${c.name.toLowerCase().replace(/[^a-z]/g, '')}/square`}
                   className="w-8 h-8 rounded border border-slate-200 dark:border-white/10 group-hover:border-blue-400/40 transition-all"
-                  alt=""
+                  alt="" loading="lazy"
                   onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
                 />
                 <span className="text-sm font-semibold capitalize ml-1 text-slate-800 dark:text-white/90 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{c.name}</span>
