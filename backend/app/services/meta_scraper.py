@@ -435,13 +435,13 @@ async def sync_meta(mode="full", tierlist_patch: str = None, matchup_patch: str 
                     if sync_state["cancel_requested"]: return
                     while sync_state["paused"] and not sync_state["cancel_requested"]: await asyncio.sleep(SYNC_PAUSE_POLL_SEC)
                     
-                    # Force re-crawl on explicit matchups mode; otherwise skip if fresh (<24h)
+                    # Force re-crawl on explicit matchups mode or if human explicitly set matchup_patch; otherwise skip if fresh (<24h)
                     stale = (now_ts - cdata.get("last_checked", 0)) > MATCHUP_STALE_THRESHOLD
                     name, lane = cdata["name"], cdata["lane"]
                     
                     if lane == "all": return # Skip "all" lane to save massive time; we only need specific lane matchups
 
-                    if mode == "matchups" or stale:
+                    if mode == "matchups" or matchup_patch is not None or stale:
                         try:
                             logger.info("  -> Crawling matchups: %s (%s) in %s (Patch %s)", name, lane, rank, mu_patch)
                             matchups = await fetch_champion_matchups(rank, name, lane, patch=mu_patch)
