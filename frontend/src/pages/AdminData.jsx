@@ -137,7 +137,9 @@ export default function AdminData() {
 
   const [sortConfig, setSortConfig] = useState({ key: 'rank_num', direction: 'asc' });
 
+  const [loading, setLoading] = useState(false);
   const fetchData = async () => {
+    setLoading(true);
     try {
       const s = await getAdminDataSummary(viewPatch || null);
       setData(s); setError("");
@@ -146,6 +148,7 @@ export default function AdminData() {
       if (s?.meta?.ranks?.length > 0 && !s.meta.ranks.includes(selectedRank))
         setSelectedRank(s.meta.ranks.includes("emerald") ? "emerald" : s.meta.ranks[0]);
     } catch { setError("Backend unreachable."); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => {
@@ -344,10 +347,17 @@ export default function AdminData() {
                 <div>
                   <h2 className="text-lg font-black uppercase tracking-tight text-slate-900 dark:text-white inline-flex items-center gap-2">
                     {selectedChamp ? selectedChampName : "Meta Explorer"}
-                    <button onClick={isAdmin ? handleLogout : handleLogin}
-                      className={`text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border transition-all ${isAdmin ? "border-emerald-500/30 text-emerald-500 bg-emerald-500/5 hover:text-rose-500 hover:border-rose-500/30" : "border-slate-300 dark:border-white/20 text-slate-400 dark:text-white/40 hover:text-blue-500"}`}>
-                      {isAdmin ? "Admin ✓" : "Login"}
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={isAdmin ? handleLogout : handleLogin}
+                        className={`text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border transition-all ${isAdmin ? "border-emerald-500/30 text-emerald-500 bg-emerald-500/5 hover:text-rose-500 hover:border-rose-500/30" : "border-slate-300 dark:border-white/20 text-slate-400 dark:text-white/40 hover:text-blue-500"}`}>
+                        {isAdmin ? "Admin ✓" : "Login"}
+                      </button>
+                      <button onClick={fetchData} className={`p-1 hover:bg-slate-100 dark:hover:bg-white/5 rounded transition-all text-slate-400 dark:text-white/20 hover:text-blue-500 ${loading ? 'animate-spin text-blue-500' : ''}`} title="Refresh Data">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                    </div>
                   </h2>
                   <p className="text-slate-400 dark:text-white/20 text-[10px] font-medium uppercase tracking-wider">{selectedChamp ? "Lane Matchups" : "Performance across tiers"}</p>
                 </div>

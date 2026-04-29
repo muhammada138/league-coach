@@ -413,23 +413,26 @@ async def sync_meta(mode="full", tierlist_patch: str = None, matchup_patch: str 
                     new_champs = rank_data["champions"]
                     old_champs = full_meta[rank].get("champions", {})
                     
-                    # 1. Prune existing 'fluff' from memory (Legacy dirty data)
-                    for k in list(old_champs.keys()):
-                        info = old_champs[k]
-                        # If a champion was saved to the wrong lane tab in the past, purge it.
-                        if info.get("lane") and info.get("real_lane") and info["lane"] != info["real_lane"]:
-                            del old_champs[k]
-
-                    # 2. Preserve expensive matchup data from existing entries
+                    # 1. Reconciliation: Only keep champions that are either in the fresh tierlist 
+                    # OR have expensive deep-synced matchup data we want to preserve.
+                    merged_champs = {}
+                    
+                    # First, carry over anyone who has matchups (to avoid losing deep sync progress)
+                    for cid, cdata in old_champs.items():
+                        if cdata.get("matchups") and len(cdata["matchups"]) > 0:
+                            merged_champs[cid] = cdata
+                    
+                    # Then, overwrite or add champions from the fresh tierlist fetch.
+                    # This ensures winrates, match counts, and tiers are perfectly up-to-date.
                     for cid, cdata in new_champs.items():
-                        if cid in old_champs:
-                            old_data = old_champs[cid]
-                            cdata["matchups"] = old_data.get("matchups", {})
-                            cdata["last_checked"] = old_data.get("last_checked", 0)
-                        old_champs[cid] = cdata
+                        if cid in merged_champs:
+                            # Preserve the deep-synced matchups while updating the tierlist stats
+                            cdata["matchups"] = merged_champs[cid].get("matchups", {})
+                            cdata["last_checked"] = merged_champs[cid].get("last_checked", 0)
+                        merged_champs[cid] = cdata
                     
                     full_meta[rank]["tier_avg"] = rank_data["tier_avg"]
-                    full_meta[rank]["champions"] = old_champs
+                    full_meta[rank]["champions"] = merged_champs
 
             # Save Tierlist immediately
             existing["tierlist_updated"] = int(time.time())
