@@ -298,9 +298,10 @@ async def fetch_rank_meta(rank: str, patch: str = None) -> dict:
                             if wr_float > 0 and games_int > 0:
                                 real_lane = str(_res(stats_raw.get("lane", "")) or "")
                                 
-                                # If we are in a specific lane pass, only keep champions whose primary role matches.
-                                # This prevents 'fluff' (e.g. Mid laners with 5 games Top) from polluting the Top tierlist.
-                                if lane and real_lane and real_lane != lane:
+                                # If we are in a specific lane pass, only skip champions who are in the wrong lane 
+                                # AND are not officially ranked by Lolalytics for this lane (N/A).
+                                # This allows legitimate flexes (like Heimer Top) while still removing 'fluff' (like Ahri Top).
+                                if lane and real_lane and real_lane != lane and rank_label == "N/A":
                                     continue
 
                                 if not real_lane:
