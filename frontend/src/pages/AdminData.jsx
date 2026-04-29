@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { getAdminDataSummary, syncMeta, cancelSync, toggleSyncPause, cleanupData, retrainModel, toggleIngest, getAvailablePatches } from "../api/riot";
 import StatCard from "../components/admin/StatCard";
 import MatchupTable from "../components/admin/MatchupTable";
@@ -81,27 +81,59 @@ export default function AdminData() {
   const [cleaning, setCleaning] = useState(false);
   const [retraining, setRetraining] = useState(false);
   const [error, setError] = useState("");
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedRank, setSelectedRank] = useState(searchParams.get("rank") || "emerald");
-  const [selectedRole, setSelectedRole] = useState(searchParams.get("role") || "all");
+  const { rank, role, champ, patch } = useParams();
+  const navigate = useNavigate();
+
+  const [selectedRank, setSelectedRank] = useState(rank || "emerald");
+  const [selectedRole, setSelectedRole] = useState(role || "all");
   const [isAdmin, setIsAdmin] = useState(!!localStorage.getItem("admin_token"));
   const [search, setSearch] = useState("");
-  const [selectedChamp, setSelectedChamp] = useState(searchParams.get("champ") || null);
+  const [selectedChamp, setSelectedChamp] = useState(null);
   const [showAll, setShowAll] = useState(false);
   const [availablePatches, setAvailablePatches] = useState([]);
   const [savedPatches, setSavedPatches] = useState([]);
   const [tierlistPatch, setTierlistPatch] = useState("");
   const [matchupPatch, setMatchupPatch] = useState("");
-  const [viewPatch, setViewPatch] = useState(searchParams.get("patch") || "");
+  const [viewPatch, setViewPatch] = useState(patch || "");
 
+  // Sync state to URL segments
   useEffect(() => {
-    const p = {};
-    if (selectedRank !== "emerald") p.rank = selectedRank;
-    if (selectedRole !== "all") p.role = selectedRole;
-    if (selectedChamp) p.champ = selectedChamp;
-    if (viewPatch) p.patch = viewPatch;
-    setSearchParams(p, { replace: true });
-  }, [selectedRank, selectedRole, selectedChamp, viewPatch]);
+    if (!data) return;
+    const r = selectedRank || "emerald";
+    const l = selectedRole || "all";
+    const p = viewPatch || "latest";
+    
+    let c = "none";
+    if (selectedChamp) {
+      const baseId = selectedChamp.split(":")[0];
+      const name = data.champ_names?.[baseId];
+      c = name ? name.toLowerCase().replace(/\s+/g, '-') : selectedChamp;
+    }
+    
+    const newPath = `/admin/data/${r}/${l}/${c}/${p}`;
+    if (window.location.pathname !== newPath) {
+      navigate(newPath, { replace: true });
+    }
+  }, [selectedRank, selectedRole, selectedChamp, viewPatch, data, navigate]);
+
+  // Handle incoming path segments to set state
+  useEffect(() => {
+    if (rank && rank !== selectedRank) setSelectedRank(rank);
+    if (role && role !== selectedRole) setSelectedRole(role);
+    if (patch && patch !== "latest" && patch !== viewPatch) setViewPatch(patch);
+    
+    if (champ && champ !== "none" && data?.champ_names) {
+      const champLower = champ.toLowerCase();
+      const foundId = Object.entries(data.champ_names).find(([id, name]) => 
+        name.toLowerCase().replace(/\s+/g, '-') === champLower
+      )?.[0];
+      
+      if (foundId) {
+        const key = selectedRole === "all" ? foundId : `${foundId}:${selectedRole}`;
+        if (selectedChamp !== key) setSelectedChamp(key);
+      }
+    }
+  }, [rank, role, champ, patch, data]);
 
   const [sortConfig, setSortConfig] = useState({ key: 'rank_num', direction: 'asc' });
 
@@ -189,7 +221,26 @@ export default function AdminData() {
     });
   }, [champions, search, sortConfig, showAll]);
 
-  const selectedChampData = selectedChamp ? rankData.champions[selectedChamp] : null;
+  const selectedChampData = useMemo(() => {
+    if (!selectedChamp) return null;
+    const baseCid = selectedChamp.split(":")[0];
+    // Prefer the entry matching the current selectedRole tab
+    const roleKey = selectedRole === "all" ? "" : selectedRole;
+    const entries = Object.values(rankData.champions).filter(c => c.cid === baseCid);
+    
+    // 1. Try exact role match
+    const exactMatch = entries.find(c => c.lane === selectedRole);
+    if (exactMatch) return exactMatch;
+    
+    // 2. Try the strict/global entry if role is 'all'
+    if (selectedRole === "all") {
+      const strict = entries.find(c => c.is_strict || c.lane === "all");
+      if (strict) return strict;
+    }
+
+    // 3. Final fallback to whatever was originally selected or the first available
+    return rankData.champions[selectedChamp] || entries[0] || null;
+  }, [selectedChamp, selectedRole, rankData]);
   const selectedChampName = selectedChampData?.name || data?.champ_names?.[selectedChampData?.cid || selectedChamp] || "Champion";
   const matchupData = useMemo(() => {
     if (!selectedChampData?.matchups) return [];

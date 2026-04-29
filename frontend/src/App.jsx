@@ -19,7 +19,7 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/player/:region/:gameName/:tagLine" element={<Dashboard />} />
             <Route path="/admin/ingest" element={<IngestDashboard />} />
-            <Route path="/admin/data" element={<AdminData />} />
+            <Route path="/admin/data/:rank?/:role?/:champ?/:patch?" element={<AdminData />} />
             <Route path="/terms" element={<TermsOfService />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
           </Routes>
