@@ -372,11 +372,13 @@ async def sync_meta(mode="full", tierlist_patch: str = None, matchup_patch: str 
         last_synced_patch = existing.get("synced_patch", None)
         
         # --- PATCH TRANSITION DETECTION ---
-        # If the live patch changed since our last sync, snapshot the outgoing data
-        live_patch = await get_patch_at_offset(0)
-        if last_synced_patch and last_synced_patch != live_patch and full_meta:
-            logger.info("Patch transition detected: %s -> %s. Snapshotting outgoing data.", last_synced_patch, live_patch)
-            save_patch_snapshot(last_synced_patch, full_meta)
+        # If the targeted patch is different from the last synced patch, snapshot the old data
+        if last_synced_patch and last_synced_patch != current_patch:
+            if full_meta:
+                logger.info("Patch transition detected: %s -> %s. Snapshotting outgoing data.", last_synced_patch, current_patch)
+                save_patch_snapshot(last_synced_patch, full_meta)
+            # We are syncing a brand new patch, we MUST clear old data to prevent bleeding 16.8 into 16.9
+            full_meta = {}
         
         # Ensure we have tierlist data before doing matchups
         needs_tierlist = not full_meta or mode in ("full", "tierlist")
