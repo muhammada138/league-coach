@@ -297,6 +297,12 @@ async def fetch_rank_meta(rank: str, patch: str = None) -> dict:
 
                             if wr_float > 0 and games_int > 0:
                                 real_lane = str(_res(stats_raw.get("lane", "")) or "")
+                                
+                                # If we are in a specific lane pass, only keep champions whose primary role matches.
+                                # This prevents 'fluff' (e.g. Mid laners with 5 games Top) from polluting the Top tierlist.
+                                if lane and real_lane and real_lane != lane:
+                                    continue
+
                                 if not real_lane:
                                     real_lane = lane if lane else "all"
                                     
