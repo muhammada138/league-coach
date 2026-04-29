@@ -413,7 +413,14 @@ async def sync_meta(mode="full", tierlist_patch: str = None, matchup_patch: str 
                     new_champs = rank_data["champions"]
                     old_champs = full_meta[rank].get("champions", {})
                     
-                    # Preserve expensive matchup data from existing entries
+                    # 1. Prune existing 'fluff' from memory (Legacy dirty data)
+                    for k in list(old_champs.keys()):
+                        info = old_champs[k]
+                        # If a champion was saved to the wrong lane tab in the past, purge it.
+                        if info.get("lane") and info.get("real_lane") and info["lane"] != info["real_lane"]:
+                            del old_champs[k]
+
+                    # 2. Preserve expensive matchup data from existing entries
                     for cid, cdata in new_champs.items():
                         if cid in old_champs:
                             old_data = old_champs[cid]
