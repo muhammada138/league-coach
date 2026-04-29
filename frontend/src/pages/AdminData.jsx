@@ -156,7 +156,10 @@ export default function AdminData() {
   const rankData = useMemo(() => data?.meta?.details?.[selectedRank] || { champions: {}, tier_avg: 50 }, [data, selectedRank]);
   const champions = useMemo(() => {
     return Object.entries(rankData.champions)
-      .filter(([, info]) => { const lane = info.lane || "all"; return selectedRole === "all" ? lane === "all" : lane === selectedRole; })
+      .filter(([, info]) => {
+        if (selectedRole === "all") return info.is_strict || info.lane === "all";
+        return (info.lane || "all") === selectedRole;
+      })
       .map(([key, info]) => ({
         id: key, cid: info.cid, ...info,
         name: info.name || data?.champ_names?.[info.cid] || "Unknown",

@@ -296,19 +296,23 @@ async def fetch_rank_meta(rank: str, patch: str = None) -> dict:
                             games_int = int(str(games_val).replace(",", ""))
 
                             if wr_float > 0 and games_int > 0:
-                                lane_key = lane if lane else "all"
-                                entry_key = f"{cid}:{lane_key}"
-                                
                                 real_lane = str(_res(stats_raw.get("lane", "")) or "")
                                 if not real_lane:
                                     real_lane = lane if lane else "all"
+                                    
+                                lane_key = real_lane
+                                entry_key = f"{cid}:{lane_key}"
+                                is_strict = (lane is None)
 
-                                # Deduplication: keep entry with more games or a real rank
+                                # Deduplication: prefer strict (global pass) to avoid fluff games.
+                                # If we already have a strict entry, do not overwrite it with the relaxed lane-specific query.
                                 if entry_key in results["champions"]:
                                     existing = results["champions"][entry_key]
-                                    if not (games_int > existing["games"] or
-                                            (existing["rank_label"] == "N/A" and rank_label != "N/A")):
+                                    if existing.get("is_strict") and not is_strict:
                                         continue
+                                    if not existing.get("is_strict") and not is_strict:
+                                        if not (games_int > existing["games"] or (existing["rank_label"] == "N/A" and rank_label != "N/A")):
+                                            continue
 
                                 results["champions"][entry_key] = {
                                     "cid": str(cid),
@@ -321,7 +325,8 @@ async def fetch_rank_meta(rank: str, patch: str = None) -> dict:
                                     "rank_label": rank_label,
                                     "delta": round(wr_float - results["tier_avg"], 2),
                                     "matchups": {},
-                                    "last_checked": 0
+                                    "last_checked": 0,
+                                    "is_strict": is_strict
                                 }
                                 found_count += 1
                         except Exception:
