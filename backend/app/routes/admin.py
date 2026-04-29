@@ -6,7 +6,10 @@ from fastapi.security.api_key import APIKeyHeader
 from starlette.status import HTTP_403_FORBIDDEN
 from ..state import DB_PATH, ADMIN_API_KEY
 from ..services import db, win_predictor
-from ..services.meta_scraper import get_meta_data, _CHAMP_ID_MAP, is_sync_active, is_sync_paused, get_sync_mode, sync_meta, cancel_sync, toggle_pause
+from ..services.meta_scraper import (
+    get_meta_data, _CHAMP_ID_MAP, is_sync_active, is_sync_paused, get_sync_mode,
+    sync_meta, cancel_sync, toggle_pause, get_available_patches, list_saved_patches
+)
 
 router = APIRouter(tags=["Admin & Ingestion"])
 
@@ -76,9 +79,16 @@ async def admin_data_summary():
     }
 
 @router.post("/admin/sync-meta", dependencies=[Depends(verify_admin)])
-async def admin_sync_meta(mode: str = "full"):
-    asyncio.create_task(sync_meta(mode))
-    return {"ok": True, "message": f"Meta sync ({mode}) started in background"}
+async def admin_sync_meta(mode: str = "full", tierlist_patch: str = None, matchup_patch: str = None):
+    asyncio.create_task(sync_meta(mode, tierlist_patch=tierlist_patch, matchup_patch=matchup_patch))
+    return {"ok": True, "message": f"Meta sync ({mode}) started in background", "tierlist_patch": tierlist_patch, "matchup_patch": matchup_patch}
+
+@router.get("/admin/available-patches")
+async def admin_available_patches():
+    """Returns recent patches from Data Dragon and locally saved snapshots."""
+    ddragon_patches = await get_available_patches()
+    saved = list_saved_patches()
+    return {"ddragon": ddragon_patches, "saved": saved}
 
 @router.post("/admin/cancel-sync", dependencies=[Depends(verify_admin)])
 async def admin_cancel_sync():

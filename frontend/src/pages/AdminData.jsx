@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getAdminDataSummary, syncMeta, cancelSync, toggleSyncPause, cleanupData, retrainModel, toggleIngest } from "../api/riot";
+import { getAdminDataSummary, syncMeta, cancelSync, toggleSyncPause, cleanupData, retrainModel, toggleIngest, getAvailablePatches } from "../api/riot";
 import StatCard from "../components/admin/StatCard";
 import MatchupTable from "../components/admin/MatchupTable";
 import TierListTable from "../components/admin/TierListTable";
@@ -41,6 +41,12 @@ export default function AdminData() {
   const [search, setSearch] = useState("");
   const [selectedChamp, setSelectedChamp] = useState(searchParams.get("champ") || null);
 
+  // Patch selector state
+  const [availablePatches, setAvailablePatches] = useState([]);
+  const [savedPatches, setSavedPatches] = useState([]);
+  const [tierlistPatch, setTierlistPatch] = useState("");
+  const [matchupPatch, setMatchupPatch] = useState("");
+
   useEffect(() => {
     const params = {};
     if (selectedRank !== "emerald") params.rank = selectedRank;
@@ -72,6 +78,15 @@ export default function AdminData() {
 
   useEffect(() => {
     fetchData();
+    getAvailablePatches().then(res => {
+      setAvailablePatches(res.ddragon || []);
+      setSavedPatches(res.saved || []);
+      // Default: tierlist = current patch (first), matchup = previous (second)
+      if (res.ddragon?.length >= 2) {
+        setTierlistPatch(res.ddragon[0]);
+        setMatchupPatch(res.ddragon[1]);
+      }
+    }).catch(() => {});
     const interval = setInterval(fetchData, 5000); 
     return () => clearInterval(interval);
   }, []);
@@ -81,7 +96,7 @@ export default function AdminData() {
     setSyncing(true);
     setError("");
     try {
-      await syncMeta(mode);
+      await syncMeta(mode, tierlistPatch || null, matchupPatch || null);
     } catch (err) {
       setError("Sync failed: " + (err.response?.data?.detail || err.message));
       setSyncing(false);
@@ -161,6 +176,7 @@ export default function AdminData() {
         cid: info.cid,
         ...info,
         name: info.name || data?.champ_names?.[info.cid] || "Unknown",
+        display_lane: info.real_lane || info.lane || "unknown",
         tier_val: TIER_ORDER[info.tier] ?? 15,
         rank_num: info.rank_label && info.rank_label !== "N/A" ? parseInt(info.rank_label) : 999
       }));
@@ -276,27 +292,62 @@ export default function AdminData() {
         </div>
 
         {!selectedChamp && (
-          <div className="mb-8 flex items-center justify-between bg-white/[0.03] border border-white/[0.07] p-6 rounded-3xl">
-            <div>
-              <h3 className="text-sm font-black uppercase tracking-widest text-[#c89b3c]">Control Panel</h3>
-              <p className="text-[10px] text-white/30 uppercase font-bold">Update Tierlist (Fast) or Matchups (Deep)</p>
+          <div className="mb-8 bg-white/[0.03] border border-white/[0.07] p-6 rounded-3xl">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-[#c89b3c]">Control Panel</h3>
+                <p className="text-[10px] text-white/30 uppercase font-bold">Update Tierlist (Fast) or Matchups (Deep)</p>
+              </div>
+              <div className="flex gap-3">
+                {syncing && (
+                  <button
+                    onClick={handleTogglePause}
+                    className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border border-amber-500/20 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-all"
+                  >
+                    {paused ? "Resume Sync" : "Pause Sync"}
+                  </button>
+                )}
+                {!syncing ? (
+                  <>
+                    <button onClick={() => handleSyncMeta("tierlist")} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-blue-600/20 text-blue-400 border border-blue-600/20 hover:bg-blue-600/30">Update Tierlist</button>
+                    <button onClick={() => handleSyncMeta("full")} className="px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-[#c89b3c] text-black hover:bg-[#a67c2e]">Start Deep Sync</button>
+                  </>
+                ) : (
+                  <button onClick={handleCancelSync} className="px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-rose-500/20 text-rose-500 border border-rose-500/20 hover:bg-rose-500/30">Stop {data?.meta?.mode === 'tierlist' ? 'Tierlist Sync' : 'Deep Crawl'}</button>
+                )}
+              </div>
             </div>
-            <div className="flex gap-3">
-              {syncing && (
-                <button
-                  onClick={handleTogglePause}
-                  className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border border-amber-500/20 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-all"
+
+            {/* Patch Selectors */}
+            <div className="flex items-center gap-6 pt-4 border-t border-white/[0.05]">
+              <div className="flex items-center gap-3">
+                <label className="text-[9px] font-black uppercase tracking-widest text-white/30">Tierlist Patch</label>
+                <select
+                  value={tierlistPatch}
+                  onChange={e => setTierlistPatch(e.target.value)}
+                  className="bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#c89b3c]/50 transition-all"
                 >
-                  {paused ? "Resume Sync" : "Pause Sync"}
-                </button>
-              )}
-              {!syncing ? (
-                <>
-                  <button onClick={() => handleSyncMeta("tierlist")} className="px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-blue-600/20 text-blue-400 border border-blue-600/20 hover:bg-blue-600/30">Update Tierlist</button>
-                  <button onClick={() => handleSyncMeta("full")} className="px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-[#c89b3c] text-black hover:bg-[#a67c2e]">Start Deep Sync</button>
-                </>
-              ) : (
-                <button onClick={handleCancelSync} className="px-8 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all bg-rose-500/20 text-rose-500 border border-rose-500/20 hover:bg-rose-500/30">Stop {data?.meta?.mode === 'tierlist' ? 'Tierlist Sync' : 'Deep Crawl'}</button>
+                  {availablePatches.map(p => (
+                    <option key={p} value={p}>{p}{savedPatches.includes(p) ? ' ✓' : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-[9px] font-black uppercase tracking-widest text-white/30">Matchup Patch</label>
+                <select
+                  value={matchupPatch}
+                  onChange={e => setMatchupPatch(e.target.value)}
+                  className="bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#c89b3c]/50 transition-all"
+                >
+                  {availablePatches.map(p => (
+                    <option key={p} value={p}>{p}{savedPatches.includes(p) ? ' ✓' : ''}</option>
+                  ))}
+                </select>
+              </div>
+              {savedPatches.length > 0 && (
+                <div className="text-[9px] font-bold text-white/15 uppercase">
+                  Snapshots: {savedPatches.join(", ")}
+                </div>
               )}
             </div>
           </div>
@@ -338,7 +389,21 @@ export default function AdminData() {
                   <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[#c89b3c] w-12 text-right">Role</span>
                   <div className="flex flex-wrap gap-2">
                     {["all", "top", "jungle", "middle", "bottom", "support"].map(role => (
-                      <button key={role} onClick={() => setSelectedRole(role)} className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${selectedRole === role ? "bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-600/20" : "bg-white/5 border-white/5 text-white/30 hover:text-white/60"}`}>{role}</button>
+                      <button 
+                        key={role} 
+                        onClick={() => setSelectedRole(role)} 
+                        className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${selectedRole === role ? "bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-600/20" : "bg-white/5 border-white/5 text-white/30 hover:text-white/60"}`}
+                      >
+                        {role !== "all" && (
+                          <img 
+                            src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-${role === 'support' ? 'utility' : role}.svg`} 
+                            alt={role} 
+                            className={`w-4 h-4 ${selectedRole === role ? 'opacity-100' : 'opacity-50'}`}
+                            onError={e => e.target.style.display = 'none'}
+                          />
+                        )}
+                        {role === "middle" ? "mid" : role === "bottom" ? "bot" : role === "support" ? "sup" : role}
+                      </button>
                     ))}
                   </div>
                 </div>

@@ -2,13 +2,9 @@ import httpx
 import asyncio
 import json
 import logging
-import time
-import re
-from pathlib import Path
-from ..state import META_FILE_PATH, sync_state
-
-import re
 import os
+import re
+import time
 from pathlib import Path
 from ..state import META_FILE_PATH, sync_state, DATA_DIR
 
@@ -24,6 +20,15 @@ SCRAPE_DELAY_LANE_SEC = 0.05
 SCRAPE_DELAY_MATCHUP_SEC = 0.35
 SYNC_PAUSE_POLL_SEC = 1.0
 SAVE_PROBABILITY = 0.03
+
+# Per-champion game threshold before new-patch WR is trusted
+MIN_GAMES_TRUSTED = 200
+# Lower bar for niche/off-meta champions
+MIN_GAMES_NICHE = 30
+
+# Patch snapshot directory
+PATCH_SNAPSHOT_DIR = DATA_DIR / "patch_snapshots"
+PATCH_SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
 async def _get_latest_version_full() -> str:
     """Fetch the latest full LoL version from Data Dragon with caching."""
@@ -293,6 +298,10 @@ async def fetch_rank_meta(rank: str, patch: str = None) -> dict:
                             if wr_float > 0 and games_int > 0:
                                 lane_key = lane if lane else "all"
                                 entry_key = f"{cid}:{lane_key}"
+                                
+                                real_lane = str(_res(stats_raw.get("lane", "")) or "")
+                                if not real_lane:
+                                    real_lane = lane if lane else "all"
 
                                 # Deduplication: keep entry with more games or a real rank
                                 if entry_key in results["champions"]:
@@ -308,6 +317,7 @@ async def fetch_rank_meta(rank: str, patch: str = None) -> dict:
                                     "tier": tier,
                                     "games": games_int,
                                     "lane": lane_key,
+                                    "real_lane": real_lane,
                                     "rank_label": rank_label,
                                     "delta": round(wr_float - results["tier_avg"], 2),
                                     "matchups": {},
@@ -345,20 +355,28 @@ def cancel_sync():
         return True
     return False
 
-async def sync_meta(mode="full"):
+async def sync_meta(mode="full", tierlist_patch: str = None, matchup_patch: str = None):
     if sync_state["active"]: return False
     sync_state["active"] = True
     sync_state["cancel_requested"] = False
     sync_state["paused"] = False
     sync_state["mode"] = mode
     
-    logger.info("Starting Meta Sync (Mode: %s)...", mode)
+    logger.info("Starting Meta Sync (Mode: %s, tierlist_patch=%s, matchup_patch=%s)...", mode, tierlist_patch, matchup_patch)
     try:
-        current_patch  = await get_patch_at_offset(0)
-        previous_patch = await get_patch_at_offset(1)
+        current_patch  = tierlist_patch or await get_patch_at_offset(0)
+        mu_patch = matchup_patch or await get_patch_at_offset(1)
         
         existing = get_meta_data()
         full_meta = existing.get("data", {})
+        last_synced_patch = existing.get("synced_patch", None)
+        
+        # --- PATCH TRANSITION DETECTION ---
+        # If the live patch changed since our last sync, snapshot the outgoing data
+        live_patch = await get_patch_at_offset(0)
+        if last_synced_patch and last_synced_patch != live_patch and full_meta:
+            logger.info("Patch transition detected: %s -> %s. Snapshotting outgoing data.", last_synced_patch, live_patch)
+            save_patch_snapshot(last_synced_patch, full_meta)
         
         # Ensure we have tierlist data before doing matchups
         needs_tierlist = not full_meta or mode in ("full", "tierlist")
@@ -382,19 +400,21 @@ async def sync_meta(mode="full"):
                     new_champs = rank_data["champions"]
                     old_champs = full_meta[rank].get("champions", {})
                     
-                    # 1. Preserve expensive matchup data for champions that still exist
+                    # Preserve expensive matchup data from existing entries
                     for cid, cdata in new_champs.items():
                         if cid in old_champs:
-                            cdata["matchups"] = old_champs[cid].get("matchups", {})
-                            cdata["last_checked"] = old_champs[cid].get("last_checked", 0)
+                            old_data = old_champs[cid]
+                            cdata["matchups"] = old_data.get("matchups", {})
+                            cdata["last_checked"] = old_data.get("last_checked", 0)
+                        old_champs[cid] = cdata
                     
-                    # 2. Replace the entire collection to auto-purge stale/ghost entries
                     full_meta[rank]["tier_avg"] = rank_data["tier_avg"]
-                    full_meta[rank]["champions"] = new_champs
+                    full_meta[rank]["champions"] = old_champs
 
             # Save Tierlist immediately
             existing["tierlist_updated"] = int(time.time())
-            save_meta_data({"tierlist_updated": existing["tierlist_updated"], "updated_at": time.time(), "data": full_meta, "is_partial": True})
+            existing["synced_patch"] = current_patch
+            save_meta_data({"tierlist_updated": existing["tierlist_updated"], "synced_patch": current_patch, "updated_at": time.time(), "data": full_meta, "is_partial": True})
             logger.info("Tierlist Phase Complete.")
             
         # --- PHASE 2: MATCHUPS (DEEP) ---
@@ -416,19 +436,17 @@ async def sync_meta(mode="full"):
 
                     if mode == "matchups" or stale:
                         try:
-                            # PHASE 2: Matchups (use previous patch for better sample size, as requested)
-                            logger.info("  -> Crawling matchups: %s (%s) in %s (Patch %s)", name, lane, rank, previous_patch)
-                            matchups = await fetch_champion_matchups(rank, name, lane, patch=previous_patch)
+                            logger.info("  -> Crawling matchups: %s (%s) in %s (Patch %s)", name, lane, rank, mu_patch)
+                            matchups = await fetch_champion_matchups(rank, name, lane, patch=mu_patch)
                             
                             full_meta[rank]["champions"][cid_str]["last_checked"] = now_ts
                             if matchups:
                                 full_meta[rank]["champions"][cid_str]["matchups"] = matchups
                             
-                            # 0.35s delay + HTTP time natively hits ~1-1.5 total hours
                             await asyncio.sleep(SCRAPE_DELAY_MATCHUP_SEC)
                             
-                            if random.random() < SAVE_PROBABILITY: # 3% chance to save to reduce disk thrashing
-                                save_meta_data({"tierlist_updated": existing.get("tierlist_updated", 0), "updated_at": time.time(), "data": full_meta, "is_partial": True})
+                            if random.random() < SAVE_PROBABILITY:
+                                save_meta_data({"tierlist_updated": existing.get("tierlist_updated", 0), "synced_patch": current_patch, "updated_at": time.time(), "data": full_meta, "is_partial": True})
                         except Exception as e:
                             logger.error("  -> Failed to crawl %s (%s) in %s: %s", name, lane, rank, e)
 
@@ -445,7 +463,10 @@ async def sync_meta(mode="full"):
             logger.info("Matchup Phase Complete.")
 
         if not sync_state["cancel_requested"]:
-            save_meta_data({"tierlist_updated": existing.get("tierlist_updated", 0), "updated_at": time.time(), "data": full_meta, "is_partial": False})
+            save_meta_data({"tierlist_updated": existing.get("tierlist_updated", 0), "synced_patch": current_patch, "updated_at": time.time(), "data": full_meta, "is_partial": False})
+            
+            # Auto-snapshot completed data for the patch we just synced
+            save_patch_snapshot(current_patch, full_meta)
             
             # Write completion marker so scheduler knows the daily sync finished successfully
             if mode == "full":
@@ -497,3 +518,104 @@ def get_meta_data() -> dict:
     except Exception as e:
         logger.error("Failed to load meta data: %s", e)
         return _META_CACHE if _META_CACHE is not None else {}
+
+
+# ---------------------------------------------------------------------------
+# Patch Snapshot System
+# ---------------------------------------------------------------------------
+
+def save_patch_snapshot(patch: str, rank_data: dict) -> None:
+    """Save a snapshot of tierlist data for a specific patch version."""
+    snapshot_path = PATCH_SNAPSHOT_DIR / f"{patch}.json"
+    tmp_path = str(snapshot_path) + ".tmp"
+    try:
+        with open(tmp_path, "w") as f:
+            json.dump({"patch": patch, "saved_at": time.time(), "data": rank_data}, f)
+        os.replace(tmp_path, snapshot_path)
+        logger.info("Saved patch snapshot: %s", patch)
+    except Exception as e:
+        logger.error("Failed to save patch snapshot %s: %s", patch, e)
+
+
+def load_patch_snapshot(patch: str) -> dict:
+    """Load a previously saved patch snapshot. Returns empty dict if not found."""
+    snapshot_path = PATCH_SNAPSHOT_DIR / f"{patch}.json"
+    if not snapshot_path.exists():
+        return {}
+    try:
+        with open(snapshot_path, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error("Failed to load patch snapshot %s: %s", patch, e)
+        return {}
+
+
+def list_saved_patches() -> list[str]:
+    """List all patch versions that have saved snapshots, sorted newest-first."""
+    patches = []
+    for f in PATCH_SNAPSHOT_DIR.glob("*.json"):
+        patches.append(f.stem)
+    # Sort by major.minor numerically
+    def _sort_key(p):
+        try:
+            parts = p.split(".")
+            return (int(parts[0]), int(parts[1]))
+        except (ValueError, IndexError):
+            return (0, 0)
+    return sorted(patches, key=_sort_key, reverse=True)
+
+
+async def get_available_patches() -> list[str]:
+    """Return a list of recent patch versions from Data Dragon (last 6)."""
+    patches = []
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get("https://ddragon.leagueoflegends.com/api/versions.json")
+            if resp.status_code == 200:
+                versions = resp.json()
+                seen = set()
+                for v in versions:
+                    parts = v.split(".")
+                    if len(parts) >= 2:
+                        patch = f"{parts[0]}.{parts[1]}"
+                        if patch not in seen:
+                            seen.add(patch)
+                            patches.append(patch)
+                        if len(patches) >= 6:
+                            break
+    except Exception as e:
+        logger.error("Failed to fetch available patches: %s", e)
+    return patches
+
+
+def get_stable_champ_wr(champ_key: str, rank_key: str, current_meta: dict) -> tuple[float, int, str]:
+    """
+    Resolve the most reliable WR for a champion using a fallback chain:
+    1. Current meta data with enough games (>= MIN_GAMES_TRUSTED)
+    2. Most recent patch snapshot with data
+    3. Current meta data with ANY data (niche fallback)
+    4. Ultimate fallback: 50.0
+    
+    Returns (wr, games, source_label).
+    """
+    # 1. Check current live meta
+    current_champs = current_meta.get("data", {}).get(rank_key, {}).get("champions", {})
+    current = current_champs.get(champ_key)
+    if current and current.get("games", 0) >= MIN_GAMES_TRUSTED:
+        return current["wr"], current["games"], "live"
+
+    # 2. Check patch snapshots (newest first)
+    saved = list_saved_patches()
+    for patch in saved:
+        snap = load_patch_snapshot(patch)
+        snap_champs = snap.get("data", {}).get(rank_key, {}).get("champions", {})
+        snap_entry = snap_champs.get(champ_key)
+        if snap_entry and snap_entry.get("games", 0) >= MIN_GAMES_NICHE:
+            return snap_entry["wr"], snap_entry["games"], f"snapshot:{patch}"
+
+    # 3. Niche fallback: use current data even if low games
+    if current and current.get("games", 0) > 0:
+        return current["wr"], current["games"], "live:niche"
+
+    # 4. Ultimate fallback
+    return 50.0, 0, "fallback"

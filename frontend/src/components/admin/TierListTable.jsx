@@ -68,7 +68,17 @@ export default function TierListTable({ processedChamps, sortConfig, requestSort
                 </span>
               </td>
               <td className="px-8 py-4">
-                <span className="text-[10px] font-black uppercase text-white/30">{c.lane || 'unknown'}</span>
+                <div className="flex items-center gap-2">
+                  {c.display_lane && c.display_lane !== 'all' && c.display_lane !== 'unknown' ? (
+                    <img 
+                      src={`https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/svg/position-${c.display_lane === 'support' ? 'utility' : c.display_lane}.svg`} 
+                      alt={c.display_lane} 
+                      className="w-5 h-5 opacity-50"
+                      onError={e => e.target.style.display = 'none'}
+                    />
+                  ) : null}
+                  <span className="text-[10px] font-black uppercase text-white/40">{c.display_lane || 'unknown'}</span>
+                </div>
               </td>
               <td className="px-8 py-4 tabular-nums">
                 <span className={`text-sm font-black ${c.wr >= 52 ? 'text-emerald-400' : c.wr <= 48 ? 'text-rose-400' : 'text-white'}`}>

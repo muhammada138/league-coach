@@ -40,7 +40,7 @@ except ImportError:
 
 # Local services and state
 from ..services import db
-from .meta_scraper import get_meta_data
+from .meta_scraper import get_meta_data, get_stable_champ_wr
 from .role_identifier import assign_team_roles
 
 # --- Configuration & Setup ---
@@ -254,9 +254,10 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
     streak      = max(-5, min(5, streak_val))
     streak_norm = streak / 5.0
 
-    # 8. Meta WR (Lolalytics) — scale to 0-1 (champ_meta already resolved above)
+    # 8. Meta WR (Lolalytics) — uses stable fallback chain (snapshot system)
     meta_wr_val = champ_meta.get("wr", 50.0) if champ_meta else 50.0
     meta_wr = meta_wr_val / 100.0
+    meta_wr_source = champ_meta.get("_wr_source", "live") if champ_meta else "fallback"
 
     details = {
         "is_hidden": False,
@@ -267,7 +268,7 @@ def _player_features(stats: dict, champion_id: int, champ_dict: dict, opponent_c
         "champ_wr": {"wins": champ_wins, "total": champ_total, "wr": round(float(raw_champ_wr), 3), "conf": round(float(champ_conf), 2)},
         "mastery": {"is_main": is_main, "score": round(float(mastery_score), 3)},
         "streak": {"value": streak_val, "norm": round(float(streak_norm), 2)},
-        "meta_wr": {"wr": round(float(meta_wr), 3)},
+        "meta_wr": {"wr": round(float(meta_wr), 3), "source": meta_wr_source},
         "matchup": matchup_detail
     }
 
@@ -351,7 +352,7 @@ def _get_team_features(team_players: list[dict], roles: dict, opp_role_map: dict
     return [x[0] for x in feats_with_roles], [x[1] for x in feats_with_roles]
 
 
-def _impute_team_hidden_players(feats: list, details: list) -> None:
+def _impute_team_hidden_players(feats: list, details: list, lobby_mean_rank_score: float) -> None:
     # Instead of hardcoded 0.5 neutral, hidden players inherit mean of known teammates.
     known_indices = [i for i, d in enumerate(details) if not d.get("is_hidden", False)]
     if not known_indices:
@@ -370,7 +371,9 @@ def _impute_team_hidden_players(feats: list, details: list) -> None:
             feats[i][:8] = team_mean[:8]
 
             # Update details for the "Math" UI to be transparent
-            d["rank"]["score"] = round(float(feats[i][0]), 3)
+            # Calculate what their raw rank would have been given their delta
+            raw_rank = lobby_mean_rank_score - (feats[i][0] - 0.5) / 2.0
+            d["rank"]["score"] = round(float(raw_rank), 3)
             d["rank"]["tier"] = "Hidden (Estimated)"
 
             # Season WR
@@ -501,13 +504,21 @@ async def predict(participants: list[dict], live_stats: dict) -> dict:
     # Load meta data once per prediction
     meta = get_meta_data()
     rank_key = _RANK_TO_META.get(lobby_rank.lower(), "emerald")
-    champ_dict = meta.get("data", {}).get(rank_key, {}).get("champions", {})
+    champ_dict = dict(meta.get("data", {}).get(rank_key, {}).get("champions", {}))
+    
+    # Resolve stable WR for each champion using the snapshot fallback chain.
+    # This prevents early-patch volatility from corrupting predictions.
+    for ckey in list(champ_dict.keys()):
+        stable_wr, stable_games, source = get_stable_champ_wr(ckey, rank_key, meta)
+        champ_dict[ckey] = dict(champ_dict[ckey])  # shallow copy to avoid mutating cache
+        champ_dict[ckey]["wr"] = stable_wr
+        champ_dict[ckey]["_wr_source"] = source
 
     blue_feats, blue_details = _get_team_features(blue_raw, blue_roles, red_role_map, live_stats, champ_dict, lobby_mean_rank_score)
     red_feats, red_details  = _get_team_features(red_raw, red_roles, blue_role_map, live_stats, champ_dict, lobby_mean_rank_score)
 
-    _impute_team_hidden_players(blue_feats, blue_details)
-    _impute_team_hidden_players(red_feats, red_details)
+    _impute_team_hidden_players(blue_feats, blue_details, lobby_mean_rank_score)
+    _impute_team_hidden_players(red_feats, red_details, lobby_mean_rank_score)
 
     # All players now have a representative vector.
     confidence = (sum(not d.get("is_hidden", False) for d in blue_details) +

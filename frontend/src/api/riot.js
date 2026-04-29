@@ -128,8 +128,12 @@ export const getAdminDataSummary = () =>
 /**
  * Triggers a manual metadata sync from public sources.
  */
-export const syncMeta = (mode = "full") =>
-  api.post("/admin/sync-meta", null, { params: { mode } }).then((r) => r.data);
+export const syncMeta = (mode = "full", tierlistPatch = null, matchupPatch = null) => {
+  const params = { mode };
+  if (tierlistPatch) params.tierlist_patch = tierlistPatch;
+  if (matchupPatch) params.matchup_patch = matchupPatch;
+  return api.post("/admin/sync-meta", null, { params }).then((r) => r.data);
+};
 
 export const cancelSync = () =>
   api.post("/admin/cancel-sync").then((r) => r.data);
@@ -139,6 +143,9 @@ export const getSyncStatus = () =>
 
 export const toggleSyncPause = () =>
   api.post("/admin/toggle-sync-pause").then((r) => r.data);
+
+export const getAvailablePatches = () =>
+  api.get("/admin/available-patches").then((r) => r.data);
 
 export const cleanupData = () =>
   api.post("/admin/cleanup").then((r) => r.data);

@@ -12,6 +12,39 @@ export default function IngestDashboard() {
   const [error, setError]     = useState("");
   const intervalRef = useRef(null);
   const [isAdmin, setIsAdmin] = useState(!!localStorage.getItem("admin_token"));
+  const [autoResume, setAutoResume] = useState(() => localStorage.getItem("ingest_auto_resume") === "true");
+
+  useEffect(() => {
+    localStorage.setItem("ingest_auto_resume", autoResume);
+  }, [autoResume]);
+
+  useEffect(() => {
+    if (!autoResume || !status?.is_paused) return;
+    let timeout;
+    const resetTimer = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        if (status?.is_paused && isAdmin) {
+          toggleIngest().then(data => {
+            setStatus(data);
+            if (!data.is_paused) {
+              setHistory([{ processed: data.processed_count, time: Date.now() }]);
+            }
+          }).catch(() => {});
+        }
+      }, 30 * 60 * 1000);
+    };
+    window.addEventListener("mousemove", resetTimer);
+    window.addEventListener("keydown", resetTimer);
+    window.addEventListener("click", resetTimer);
+    resetTimer();
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener("mousemove", resetTimer);
+      window.removeEventListener("keydown", resetTimer);
+      window.removeEventListener("click", resetTimer);
+    };
+  }, [autoResume, status?.is_paused, isAdmin]);
 
   const handleLogin = () => {
     const pass = prompt("Enter Admin API Key:");
@@ -64,6 +97,9 @@ export default function IngestDashboard() {
     try {
       const data = await toggleIngest();
       setStatus(data);
+      if (!data.is_paused) {
+        setHistory([{ processed: data.processed_count, time: Date.now() }]);
+      }
     } catch {
       setError("Toggle failed.");
     } finally {
@@ -112,8 +148,15 @@ export default function IngestDashboard() {
 
   // Calculate actual speed and ETA
   const { matchesPerMin, etaText } = (() => {
-    if (isPaused || processed === 0 || history.length < 2) {
+    if (isPaused || processed === 0) {
       return { matchesPerMin: 0, etaText: isPaused ? null : "Calculating speed..." };
+    }
+
+    if (history.length < 2) {
+      const remaining = target - processed;
+      const minsLeft = Math.round(remaining / 48);
+      let text = minsLeft > 60 ? `~${(minsLeft / 60).toFixed(1)}h remaining` : `~${minsLeft}m remaining`;
+      return { matchesPerMin: 48, etaText: text };
     }
 
     const first = history[0];
@@ -121,19 +164,22 @@ export default function IngestDashboard() {
     const deltaMatches = last.processed - first.processed;
     const deltaMins    = (last.time - first.time) / 60000;
 
-    // Wait for at least 15s of data for a meaningful trend
+    let mpm = deltaMatches / deltaMins;
+
+    // Default to max (48) if we don't have enough time elapsed yet
     if (deltaMins < 0.25) { 
-      return { matchesPerMin: 0, etaText: isPaused ? null : "Calculating speed..." };
+      mpm = 48; 
     }
 
     // If matches haven't moved, but we have recent history, keep showing the old speed
     // unless we've been stalled for a really long time (e.g. 5 minutes)
-    const mpm = deltaMatches / deltaMins;
-    
-    if (deltaMatches <= 0) {
+    if (deltaMatches <= 0 && deltaMins >= 0.25) {
       const lastMovementTime = last.time - first.time;
       if (lastMovementTime > 300000) { // 5 mins of zero progress
-        return { matchesPerMin: 0, etaText: "Ingestion Idle" };
+        mpm = 0; // We are running but not making progress, show 0 instead of faking max
+      } else {
+        // Fallback to calculating speed from a smaller window if possible
+        mpm = Math.max(mpm, 0); 
       }
     }
 
@@ -325,11 +371,27 @@ export default function IngestDashboard() {
               </>
             )}
           </button>
+
+          {/* Auto Resume Toggle */}
+          <div className="mt-5 flex items-center justify-between px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-white uppercase tracking-wider">Auto-Resume</span>
+              <span className="text-[10px] text-white/40">Resumes after 30m of inactivity</span>
+            </div>
+            <button
+              onClick={() => setAutoResume(!autoResume)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${autoResume ? 'bg-[#c89b3c]' : 'bg-white/10'}`}
+            >
+              <span
+                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${autoResume ? 'translate-x-5' : 'translate-x-1'}`}
+              />
+            </button>
+          </div>
         </div>
 
         {/* Footer note */}
         <p className="text-center text-white/20 text-xs mt-6 leading-relaxed">
-          Dev key: ~48 req/min · Semaphore(1) · 1.25s between calls · 9→43 matches/min (rank cache warming)
+          Dev key: 100 req / 2m · Rank caching limits calls · 5 → 48 matches/min (warming up)
           <br />
           Cycling BRONZE → SILVER → GOLD → PLATINUM → EMERALD → DIAMOND → MASTER
         </p>
