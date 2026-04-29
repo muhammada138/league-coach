@@ -52,14 +52,14 @@ export default function TierListTable({ processedChamps, sortConfig, requestSort
     <table className="w-full text-left border-collapse">
       <thead>
         <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-white/30 border-b border-slate-200 dark:border-white/[0.06] bg-slate-50/50 dark:bg-white/[0.015]">
-          <th className="pl-5 pr-1 py-3.5 w-12 cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('rank_num')}>Rank<Arrow col="rank_num" /></th>
-          <th className="px-2 py-3.5 w-8 text-center">Role</th>
-          <th className="w-10 py-3.5"></th>
-          <th className="px-2 py-3.5 cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('name')}>Champion<Arrow col="name" /></th>
-          <th className="px-3 py-3.5 w-14 text-center cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('tier_val')}>Tier<Arrow col="tier_val" /></th>
-          <th className="px-3 py-3.5 cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('wr')}>Win Rate<Arrow col="wr" /></th>
-          <th className="px-3 py-3.5 cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('games')}>Matches<Arrow col="games" /></th>
-          <th className="px-3 py-3.5 pr-5">Counter Picks</th>
+          <th className="pl-5 pr-2 py-3.5 w-[60px] cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('rank_num')}>Rank<Arrow col="rank_num" /></th>
+          <th className="px-2 py-3.5 w-[44px] text-center">Role</th>
+          <th className="w-[44px] py-3.5"></th>
+          <th className="pl-2 pr-4 py-3.5 cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('name')}>Champion<Arrow col="name" /></th>
+          <th className="px-4 py-3.5 w-[56px] text-center cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('tier_val')}>Tier<Arrow col="tier_val" /></th>
+          <th className="px-4 py-3.5 w-[100px] cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('wr')}>Win Rate<Arrow col="wr" /></th>
+          <th className="px-4 py-3.5 w-[90px] cursor-pointer hover:text-slate-700 dark:hover:text-white/70 transition-colors" onClick={() => requestSort('games')}>Matches<Arrow col="games" /></th>
+          <th className="px-4 py-3.5 pr-5">Counter Picks</th>
         </tr>
       </thead>
       <tbody>
@@ -74,26 +74,26 @@ export default function TierListTable({ processedChamps, sortConfig, requestSort
 
           return (
             <tr key={i} className="group border-b border-slate-100 dark:border-white/[0.025] hover:bg-blue-50/40 dark:hover:bg-[#141c33]/60 transition-all duration-150">
-              <td className="pl-5 pr-1 py-2.5 tabular-nums text-slate-300 dark:text-white/15 font-black text-xs">{c.rank_num === 999 ? '—' : c.rank_num}</td>
+              <td className="pl-5 pr-2 py-2.5 tabular-nums text-slate-300 dark:text-white/15 font-black text-xs">{c.rank_num === 999 ? '—' : c.rank_num}</td>
               <td className="px-2 py-2.5 text-center"><LaneCell lane={displayLane} /></td>
-              <td className="py-2.5 pl-1 pr-2">
+              <td className="py-2.5">
                 <img
                   src={`https://cdn.communitydragon.org/latest/champion/${c.name.toLowerCase().replace(/[^a-z]/g, '')}/square`}
                   className="w-8 h-8 rounded border border-slate-200 dark:border-white/10 group-hover:border-blue-400/40 transition-all"
                   alt="" onError={e => e.target.src = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/-1.png'}
                 />
               </td>
-              <td className="px-2 py-2.5">
+              <td className="pl-2 pr-4 py-2.5">
                 <span className="text-[13px] font-semibold capitalize text-slate-800 dark:text-white/90 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{c.name}</span>
               </td>
-              <td className="px-3 py-2.5 text-center">
-                <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black border ${tierStyle}`}>{c.tier || 'N/A'}</span>
+              <td className="px-4 py-2.5 text-center">
+                <span className={`inline-flex items-center justify-center w-8 py-0.5 rounded text-[10px] font-black border ${tierStyle}`}>{c.tier || 'N/A'}</span>
               </td>
-              <td className="px-3 py-2.5 tabular-nums">
+              <td className="px-4 py-2.5 tabular-nums">
                 <span className={`text-sm font-black ${c.wr >= 52 ? 'text-emerald-500' : c.wr <= 48 ? 'text-rose-500' : 'text-slate-600 dark:text-white/80'}`}>{c.wr.toFixed(2)}%</span>
               </td>
-              <td className="px-3 py-2.5 tabular-nums text-xs text-slate-400 dark:text-white/25 font-medium">{fmt(c.games)}</td>
-              <td className="px-3 py-2.5 pr-5">
+              <td className="px-4 py-2.5 tabular-nums text-xs text-slate-400 dark:text-white/25 font-medium">{fmt(c.games)}</td>
+              <td className="px-4 py-2.5 pr-5">
                 {counters ? (
                   <div className="flex items-center gap-1">
                     {counters.map(({ cid, wr, name }) => (
