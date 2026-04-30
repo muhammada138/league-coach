@@ -133,7 +133,10 @@ function SavedDropdown() {
     <div ref={wrapperRef} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-1.5 h-9 px-3 rounded-xl border text-[11px] font-bold tracking-tight transition-all duration-200
+        aria-expanded={open}
+        aria-haspopup="true"
+        aria-label="Saved Profiles"
+        className={`flex items-center gap-1.5 h-9 px-3 rounded-xl border text-[11px] font-bold tracking-tight transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c89b3c]/50
           ${open
             ? "bg-[#c89b3c]/10 border-[#c89b3c]/40 text-[#c89b3c] shadow-lg shadow-[#c89b3c]/5"
             : "bg-white dark:bg-white/[0.04] border-slate-200 dark:border-white/10 text-slate-500 dark:text-white/40 hover:text-[#c89b3c] hover:border-[#c89b3c]/30"

@@ -14,6 +14,7 @@ export default function ThemeToggle() {
         border border-slate-200/80 dark:border-white/[0.08]
         hover:bg-slate-200 dark:hover:bg-white/[0.1]
         active:scale-95 transition-all duration-200
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c89b3c]/50
         group"
       aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
       title={dark ? "Switch to light mode" : "Switch to dark mode"}
