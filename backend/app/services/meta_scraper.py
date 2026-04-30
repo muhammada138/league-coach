@@ -550,7 +550,9 @@ def get_meta_data() -> dict:
 
 def save_patch_snapshot(patch: str, rank_data: dict) -> None:
     """Save a snapshot of tierlist data for a specific patch version."""
-    snapshot_path = PATCH_SNAPSHOT_DIR / f"{patch}.json"
+    # Prevent path traversal by extracting the base name
+    safe_patch = os.path.basename(patch)
+    snapshot_path = PATCH_SNAPSHOT_DIR / f"{safe_patch}.json"
     tmp_path = str(snapshot_path) + ".tmp"
     try:
         with open(tmp_path, "w") as f:
@@ -563,7 +565,9 @@ def save_patch_snapshot(patch: str, rank_data: dict) -> None:
 
 def load_patch_snapshot(patch: str) -> dict:
     """Load a previously saved patch snapshot. Returns empty dict if not found."""
-    snapshot_path = PATCH_SNAPSHOT_DIR / f"{patch}.json"
+    # Prevent path traversal by extracting the base name
+    safe_patch = os.path.basename(patch)
+    snapshot_path = PATCH_SNAPSHOT_DIR / f"{safe_patch}.json"
     if not snapshot_path.exists():
         return {}
     try:
