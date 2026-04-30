@@ -135,7 +135,7 @@ function SavedDropdown() {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="true"
-        aria-label="Saved Profiles"
+        aria-label="Saved profiles"
         className={`flex items-center gap-1.5 h-9 px-3 rounded-xl border text-[11px] font-bold tracking-tight transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c89b3c]/50
           ${open
             ? "bg-[#c89b3c]/10 border-[#c89b3c]/40 text-[#c89b3c] shadow-lg shadow-[#c89b3c]/5"

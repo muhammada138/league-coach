@@ -64,8 +64,10 @@ export default function RegionSelector({ value, onChange, compact = false, pill 
       <button
         key={r.id}
         type="button"
+        role="option"
+        aria-selected={isActive}
         onClick={() => handleSelect(r)}
-        className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-left transition-all duration-150
+        className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c89b3c]/50
           ${isActive 
             ? `${r.bg} ${r.border} border shadow-sm` 
             : "border border-transparent hover:bg-slate-100/80 dark:hover:bg-white/[0.04]"
@@ -100,9 +102,13 @@ export default function RegionSelector({ value, onChange, compact = false, pill 
         <button
           type="button"
           onClick={toggleDropdown}
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          aria-label="Select Region"
           className={`flex items-center gap-1.5 pl-3.5 pr-2.5 h-full transition-all rounded-l-xl
             border-r border-slate-200 dark:border-white/10
             bg-slate-50 dark:bg-white/[0.04] hover:bg-slate-100 dark:hover:bg-white/[0.08]
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c89b3c]/50
             group select-none`}
         >
           <span className={`text-[10px] font-black tracking-widest px-1.5 py-0.5 rounded border 
@@ -122,7 +128,10 @@ export default function RegionSelector({ value, onChange, compact = false, pill 
         <button
           type="button"
           onClick={toggleDropdown}
-          className={`flex items-center gap-2 group transition-all duration-200 outline-none
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          aria-label="Select Region"
+          className={`flex items-center gap-2 group transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#c89b3c]/50
             ${compact 
               ? "h-full px-2" 
               : "w-full min-w-[120px] px-4 py-3 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/[0.04] hover:bg-slate-50 dark:hover:bg-white/[0.06] shadow-sm active:scale-[0.98]"
