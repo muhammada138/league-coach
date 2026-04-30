@@ -159,7 +159,7 @@ export default function SearchInput({
           type="submit"
           disabled={loading}
           aria-label="Search"
-          className={`flex items-center justify-center transition-all
+          className={`flex items-center justify-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c89b3c]/50 focus-visible:rounded-r-xl
             ${navbar ? "w-10 text-slate-400 hover:text-[#c89b3c]" : "px-6 text-[#c89b3c] hover:bg-[#c89b3c]/5"}
             disabled:opacity-50`}
         >
