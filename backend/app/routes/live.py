@@ -97,9 +97,10 @@ async def _enrich_player(puuid: str, body: LiveEnrichRequest, rank_type: str, is
         db_cached = db.get_enriched_profile(puuid)
         if db_cached:
             data, ts = db_cached
-            # Only use DB cache if it has full enrichment data (last5, avg_score).
-            # Basic profiles saved by /profile only have rank/LP and lack match history.
-            if data.get("last5") and len(data["last5"]) > 0:
+            # Only use DB cache if it has full enrichment data (last5, avg_score)
+            # AND it's less than 15 minutes old (for live game accuracy).
+            import time
+            if data.get("last5") and len(data["last5"]) > 0 and (time.time() - ts) < 900:
                 data["puuid"] = puuid
                 data["last_updated"] = ts
                 return data
@@ -123,7 +124,8 @@ async def _enrich_player(puuid: str, body: LiveEnrichRequest, rank_type: str, is
 
             tasks = [
                 riot_get(client, f"https://{region}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"),
-                riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=5&queue={match_queue_filter}"),
+                # Fetch 10 match IDs instead of 5 to account for remakes/skipped games
+                riot_get(client, f"https://{routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=10&queue={match_queue_filter}"),
                 riot_get(client, f"https://{region}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/{puuid}/top?count=20"),
             ]
 

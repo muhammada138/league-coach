@@ -75,7 +75,8 @@ async def get_profile(puuid: str, region: str = RIOT_REGION, force: bool = False
         cached = db.get_enriched_profile(puuid)
         if cached:
             data, ts = cached
-            if data.get("profileIconId"):
+            # Use DB cache if it's less than 15 minutes old
+            if data.get("profileIconId") and (time.time() - ts) < 900:
                 data["last_updated"] = ts
                 return data
 

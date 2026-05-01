@@ -95,7 +95,7 @@ class TTLCache:
 rank_cache = TTLCache(ttl_seconds=3600)  # 1 hour
 timeline_cache = TTLCache(ttl_seconds=86400)  # 24 hours
 route_cache = TTLCache(ttl_seconds=3600)   # 1 hour for analyze/history results
-enriched_cache = TTLCache(ttl_seconds=3600)  # 1 hour for enriched player stats
+enriched_cache = TTLCache(ttl_seconds=900)  # 15 minutes for enriched player stats (live game form)
 match_cache = TTLCache(ttl_seconds=86400)  # 24 hours
 match_ids_cache = TTLCache(ttl_seconds=600)  # 10 minutes - IDs don't change that fast
 summoner_cache = TTLCache(ttl_seconds=86400) # 24 hours - Levels don't change fast
