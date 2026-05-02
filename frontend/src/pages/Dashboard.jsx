@@ -66,7 +66,9 @@ const SUMMONER_SPELL_NAMES = {
 function timeAgo(ms) {
   if (!ms) return "";
   const diff = Date.now() - ms;
-  const mins = Math.max(1, Math.floor(diff / 60000));
+  if (diff < 0) return "just now";
+  const secs = Math.floor(diff / 1000);
+  const mins = Math.floor(secs / 60);
   const hrs = Math.floor(mins / 60);
   const days = Math.floor(hrs / 24);
   const months = Math.floor(days / 30);
@@ -74,7 +76,22 @@ function timeAgo(ms) {
   if (months > 0) return `${months}mo ago`;
   if (days > 0) return `${days}d ago`;
   if (hrs > 0) return `${hrs}h ago`;
-  return `${mins}m ago`;
+  if (mins > 0) return `${mins}m ago`;
+  return "just now";
+}
+
+/** Self-refreshing "X ago" label — ticks every 30 seconds */
+function TimeAgoLabel({ timestamp }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className="text-[10px] text-slate-400 dark:text-white/20 whitespace-nowrap hidden sm:inline">
+      {timeAgo(timestamp)}
+    </span>
+  );
 }
 
 // Runtime cache for Data Dragon runes
@@ -903,15 +920,38 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
   }, []);
 
   // Fetch enrichment data for all participants in background
+  // Auto-retries on failure (e.g. rate limiting) with exponential backoff
   useEffect(() => {
     const puuids = liveGame.participants.map((p) => p.puuid).filter(Boolean);
-    if (puuids.length > 0) {
-      getLiveEnrich(puuids, liveGame.queueId ?? 420, region)
-        .then((stats) => { setLiveStats(stats); onReady?.(); })
-        .catch(() => { onReady?.(); });
-    } else {
-      onReady?.();
-    }
+    if (puuids.length === 0) { onReady?.(); return; }
+
+    let cancelled = false;
+    let retryTimer = null;
+    const MAX_RETRIES = 4;
+    const BASE_DELAY = 15000; // 15s initial delay for rate-limit recovery
+
+    const fetchEnrich = (attempt = 0, force = false) => {
+      getLiveEnrich(puuids, liveGame.queueId ?? 420, region, force)
+        .then((stats) => {
+          if (!cancelled) { setLiveStats(stats); onReady?.(); }
+        })
+        .catch(() => {
+          if (cancelled) return;
+          if (attempt < MAX_RETRIES) {
+            const delay = BASE_DELAY * Math.pow(1.5, attempt);
+            retryTimer = setTimeout(() => fetchEnrich(attempt + 1, force), delay);
+          } else {
+            onReady?.(); // give up after max retries
+          }
+        });
+    };
+
+    fetchEnrich(0, false);
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveGame, region]);
 
@@ -1196,8 +1236,8 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
                   </span>
                 )}
                 {liveStatus === 'error' && (
-                  <span className="text-[10px] text-red-400/60 whitespace-nowrap animate-fadeIn">
-                    try again
+                  <span className="text-[10px] text-red-400/60 whitespace-nowrap animate-fadeIn animate-pulse">
+                    retrying…
                   </span>
                 )}
               </div>
@@ -1219,9 +1259,7 @@ function ProfileCard({ gameName, tagLine, puuid, profile, games, ddVersion, onLi
                 {refreshing ? "updating" : "update"}
               </button>
               {profile.last_updated && (
-                <span className="text-[10px] text-slate-400 dark:text-white/20 whitespace-nowrap hidden sm:inline">
-                   {timeAgo(profile.last_updated * 1000)}
-                </span>
+                <TimeAgoLabel timestamp={profile.last_updated * 1000} />
               )}
             </div>
           </div>
@@ -2774,8 +2812,11 @@ export default function Dashboard() {
     }
   };
 
+  const liveRetryRef = useRef(null);
+
   const handleLiveCheck = async () => {
     if (liveStatus === 'loading' || !resolvedPuuid) return;
+    if (liveRetryRef.current) { clearTimeout(liveRetryRef.current); liveRetryRef.current = null; }
     setLiveStatus('loading');
     try {
       const data = await getLiveGame(resolvedPuuid, region);
@@ -2788,8 +2829,18 @@ export default function Dashboard() {
       setTimeout(() => setLiveStatus('idle'), 3000);
     } catch (err) {
       console.error("Live game check failed:", err);
-      setLiveStatus('error');
-      setTimeout(() => setLiveStatus('idle'), 3000);
+      // Auto-retry on rate limit (429) after 15 seconds
+      if (err?.response?.status === 429 || err?.message?.includes('429')) {
+        setLiveStatus('error');
+        liveRetryRef.current = setTimeout(() => {
+          liveRetryRef.current = null;
+          setLiveStatus('idle');
+          handleLiveCheck();
+        }, 15000);
+      } else {
+        setLiveStatus('error');
+        setTimeout(() => setLiveStatus('idle'), 3000);
+      }
     }
   };
 

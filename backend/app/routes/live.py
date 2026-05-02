@@ -4,7 +4,7 @@ import itertools
 import httpx
 from fastapi import APIRouter, HTTPException
 
-from ..services import db
+
 from ..services.riot import riot_get, get_cached_rank, get_match_details, _compute_perf_score
 from ..state import (
     RIOT_REGION, get_routing, enriched_cache, MATCH_FETCH_SEM
@@ -92,18 +92,6 @@ async def get_live_game(puuid: str, region: str = RIOT_REGION):
 async def _enrich_player(puuid: str, body: LiveEnrichRequest, rank_type: str, is_ranked_queue: bool, match_queue_filter: int):
     region = getattr(body, 'region', RIOT_REGION)
     routing = get_routing(region)
-
-    if not body.force:
-        db_cached = db.get_enriched_profile(puuid)
-        if db_cached:
-            data, ts = db_cached
-            # Only use DB cache if it has full enrichment data (last5, avg_score)
-            # AND it's less than 15 minutes old (for live game accuracy).
-            import time
-            if data.get("last5") and len(data["last5"]) > 0 and (time.time() - ts) < 900:
-                data["puuid"] = puuid
-                data["last_updated"] = ts
-                return data
 
     cache_key = f"v7:{puuid}:{body.queue_id}:{region}"
     if not body.force:
@@ -266,7 +254,6 @@ async def _enrich_player(puuid: str, body: LiveEnrichRequest, rank_type: str, is
 
     if not api_failed:
         enriched_cache.set(cache_key, base)
-        db.save_enriched_profile(puuid, base)
     return base
 
 
