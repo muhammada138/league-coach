@@ -11,7 +11,7 @@ export default function IngestDashboard() {
   const [toggling, setToggling] = useState(false);
   const [error, setError]     = useState("");
   const intervalRef = useRef(null);
-  const [isAdmin, setIsAdmin] = useState(!!localStorage.getItem("admin_token"));
+  const [isAdmin, setIsAdmin] = useState(() => !!localStorage.getItem("admin_token"));
   const [autoResume, setAutoResume] = useState(() => localStorage.getItem("ingest_auto_resume") === "true");
 
   useEffect(() => {

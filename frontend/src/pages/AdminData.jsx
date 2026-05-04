@@ -86,7 +86,7 @@ export default function AdminData() {
 
   const [selectedRank, setSelectedRank] = useState(rank || "emerald");
   const [selectedRole, setSelectedRole] = useState(role || "all");
-  const [isAdmin, setIsAdmin] = useState(!!localStorage.getItem("admin_token"));
+  const [isAdmin, setIsAdmin] = useState(() => !!localStorage.getItem("admin_token"));
   const [search, setSearch] = useState("");
   const [selectedChamp, setSelectedChamp] = useState(null);
   const [showAll, setShowAll] = useState(false);

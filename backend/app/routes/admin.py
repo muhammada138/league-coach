@@ -90,7 +90,7 @@ async def admin_sync_meta(mode: str = "full", tierlist_patch: str = None, matchu
     asyncio.create_task(sync_meta(mode, tierlist_patch=tierlist_patch, matchup_patch=matchup_patch))
     return {"ok": True, "message": f"Meta sync ({mode}) started in background", "tierlist_patch": tierlist_patch, "matchup_patch": matchup_patch}
 
-@router.get("/admin/available-patches")
+@router.get("/admin/available-patches", dependencies=[Depends(verify_admin)])
 async def admin_available_patches():
     """Returns recent patches from Data Dragon and locally saved snapshots."""
     ddragon_patches = await get_available_patches()

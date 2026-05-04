@@ -28,7 +28,7 @@ const HOW_IT_WORKS = [
 export default function Home() {
   const [gameName, setGameName] = useState("");
   const [tagLine, setTagLine]   = useState("");
-  const [region, setRegion]     = useState(localStorage.getItem("lastRegion") || "na1");
+  const [region, setRegion]     = useState(() => localStorage.getItem("lastRegion") || "na1");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
   

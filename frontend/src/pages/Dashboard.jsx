@@ -602,10 +602,12 @@ function StarButton({ gameName, tagLine, puuid, profileIconId, region, tier, div
     <button
       onClick={handleToggle}
       title={isSaved ? "Remove from saved" : "Save profile"}
-      className={`ml-1 flex-shrink-0 text-lg leading-none transition-colors duration-150
+      aria-label={isSaved ? "Remove profile from saved" : "Save profile"}
+      aria-pressed={isSaved}
+      className={`ml-1 flex-shrink-0 text-lg leading-none transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c89b3c]/50 rounded-sm
         ${isSaved ? "text-[#c89b3c]" : "text-slate-300 dark:text-white/20 hover:text-[#c89b3c]"}`}
     >
-      {isSaved ? "★" : "☆"}
+      <span aria-hidden="true">{isSaved ? "★" : "☆"}</span>
     </button>
   );
 }
@@ -813,9 +815,10 @@ const PredictorCard = React.memo(({ predictor, ddVersion }) => {
         <button
           onClick={() => setShowBreakdown(v => !v)}
           aria-expanded={showBreakdown}
-          className="text-[10px] text-slate-400 dark:text-white/20 hover:text-white/50 transition-colors"
+          aria-label="Toggle win predictor breakdown"
+          className="text-[10px] text-slate-400 dark:text-white/20 hover:text-white/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/50 rounded-sm px-1"
         >
-          {showBreakdown ? "▲ hide breakdown" : "▼ show breakdown"}
+          <span aria-hidden="true">{showBreakdown ? "▲" : "▼"}</span> {showBreakdown ? "hide breakdown" : "show breakdown"}
         </button>
         <span className="text-[10px] text-red-300 dark:text-red-400/60 font-semibold">Red</span>
       </div>
@@ -1120,8 +1123,12 @@ function LiveGameBanner({ liveGame, ddVersion, puuid, onClose, onReady, region, 
           <span className="text-sm font-bold text-slate-800 dark:text-white tabular-nums">{mins}:{secs}</span>
           <span className="text-xs text-slate-400 dark:text-white/30">{queueLabel}</span>
         </div>
-        <button onClick={onClose} className="text-slate-400 dark:text-white/20 hover:text-slate-600 dark:hover:text-white/50 transition-colors">
-          <svg className="w-4 h-4" viewBox="0 0 12 12" fill="none">
+        <button
+          onClick={onClose}
+          aria-label="Close live game banner"
+          className="text-slate-400 dark:text-white/20 hover:text-slate-600 dark:hover:text-white/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/50 rounded-sm"
+        >
+          <svg aria-hidden="true" className="w-4 h-4" viewBox="0 0 12 12" fill="none">
             <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </button>
@@ -1862,7 +1869,7 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
     >
       {/* Clickable header */}
       <div
-        className={`flex items-center gap-3 px-4 py-3 cursor-pointer select-none transition-colors duration-200 ${bgClass}`}
+        className={`flex items-center gap-3 px-4 py-3 cursor-pointer select-none transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c89b3c]/50 rounded-xl ${bgClass}`}
         onClick={onToggle}
         tabIndex="0"
         role="button"
@@ -1960,7 +1967,7 @@ function GameRow({ game, isExpanded, onToggle, scoreboard, scoreboardLoading, ga
         {/* Expand toggle */}
         <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 ${isExpanded ? "bg-[#c89b3c]/20 text-[#c89b3c] rotate-0" : "text-slate-400 dark:text-white/20"
           }`}>
-          <span className="text-[10px] font-bold">{isExpanded ? "▲" : "▼"}</span>
+          <span aria-hidden="true" className="text-[10px] font-bold">{isExpanded ? "▲" : "▼"}</span>
         </div>
       </div>
 
@@ -2552,9 +2559,10 @@ function RightPanel({ coaching, playerAverages, lobbyAverages, deltas, playerCon
                   <button
                     type="submit"
                     disabled={!chatInput.trim() || chatLoading}
-                    className="flex-shrink-0 w-6 h-6 rounded-lg bg-[#c89b3c] disabled:opacity-30 flex items-center justify-center transition-opacity"
+                    aria-label="Send message to AI coach"
+                    className="flex-shrink-0 w-6 h-6 rounded-lg bg-[#c89b3c] disabled:opacity-30 flex items-center justify-center transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c89b3c] focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900"
                   >
-                    <svg className="w-3 h-3 text-[#1a1000]" viewBox="0 0 12 12" fill="none">
+                    <svg aria-hidden="true" className="w-3 h-3 text-[#1a1000]" viewBox="0 0 12 12" fill="none">
                       <path d="M1 6h10M6 1l5 5-5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </button>

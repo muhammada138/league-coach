@@ -60,7 +60,7 @@ function ProfileAvatar({ profile }) {
 function NavSearch() {
   const [gameName, setGameName] = useState("");
   const [tagLine, setTagLine] = useState("");
-  const [region, setRegion] = useState(localStorage.getItem("lastRegion") || "na1");
+  const [region, setRegion] = useState(() => localStorage.getItem("lastRegion") || "na1");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
